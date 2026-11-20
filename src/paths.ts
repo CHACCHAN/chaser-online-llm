@@ -20,7 +20,8 @@ export const AGENT_DIR = path.join(PROJECT_ROOT, "agent");
 export const POLICIES_DIR = path.join(AGENT_DIR, "policies");
 
 /** 実行時データ（.gitignore 対象） */
-export const VAR_DIR = path.join(PROJECT_ROOT, "var");
+// テスト（bun test）は src/test-setup.ts が一時ディレクトリを指定し、試合中の var/ を書き換えない
+export const VAR_DIR = Bun.env.CHASER_TEST_VAR_DIR ? path.resolve(Bun.env.CHASER_TEST_VAR_DIR) : path.join(PROJECT_ROOT, "var");
 export const RUNS_DIR = path.join(VAR_DIR, "runs");
 export const ROOM_PROFILES_PATH = path.join(VAR_DIR, "room-profiles.json");
 export const BEST_SOLVERS_DIR = path.join(VAR_DIR, "best-solvers");
