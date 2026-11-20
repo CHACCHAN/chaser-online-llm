@@ -5,14 +5,42 @@ import { PROJECT_ROOT } from "../paths";
 /**
  * 試合後の振り返りでメインエージェントが触ってよいのは
  * src/solver/active-solver.ts（とそのテスト）・knowledge/・agent/tools/ だけ。
- * それ以外の保護対象（ハーネス本体・プロンプト・設定）が変わっていたら元に戻す。
+ * それ以外の保護対象（ハーネス本体・プロンプト・ユーザーの作戦方針・設定・手順書）が変わっていたら元に戻す。
  */
-const PROTECTED_GLOBS = ["src/**/*", "agent/prompts/**/*", "CLAUDE.md", "package.json", "tsconfig.json", ".env.example"];
+const PROTECTED_GLOBS = [
+  "src/**/*",
+  "agent/prompts/**/*",
+  "agent/policies/**/*",
+  "agent/SETUP.md",
+  "agent/SELF_CHECK.md",
+  "CLAUDE.md",
+  "package.json",
+  "tsconfig.json",
+  ".env",
+  ".env.example",
+];
 const ALLOWED = new Set(["src/solver/active-solver.ts", "src/solver/active-solver.test.ts"]);
 
 export type ProtectedSnapshot = Map<string, string>;
 
-export function snapshotProtectedFiles(): ProtectedSnapshot {
+/** 振り返り中に取っているスナップショット（ユーザーの WebUI 編集を「正」として反映するため） */
+const activeSnapshots = new Set<ProtectedSnapshot>();
+
+/**
+ * ユーザーが WebUI から保護対象（.env・作戦方針）を書き換えた時に呼ぶ。
+ * 振り返り中なら、その内容を「元に戻す先」にして、ユーザーの編集が巻き戻されないようにする。
+ */
+export function noteUserEdit(absPath: string): void {
+  if (activeSnapshots.size === 0) return;
+  const rel = path.relative(PROJECT_ROOT, absPath);
+  const content = existsSync(absPath) ? readFileSync(absPath, "utf-8") : null;
+  for (const snap of activeSnapshots) {
+    if (content === null) snap.delete(rel);
+    else snap.set(rel, content);
+  }
+}
+
+function scanProtected(): ProtectedSnapshot {
   const snap: ProtectedSnapshot = new Map();
   for (const pattern of PROTECTED_GLOBS) {
     for (const rel of new Bun.Glob(pattern).scanSync({ cwd: PROJECT_ROOT, onlyFiles: true })) {
@@ -22,10 +50,18 @@ export function snapshotProtectedFiles(): ProtectedSnapshot {
   return snap;
 }
 
+/** 振り返りの前に呼ぶ。restoreProtectedFiles まで WebUI からの編集を追跡する */
+export function snapshotProtectedFiles(): ProtectedSnapshot {
+  const snap = scanProtected();
+  activeSnapshots.add(snap);
+  return snap;
+}
+
 /** 保護対象の変更・追加・削除を元に戻し、戻したファイルの一覧を返す */
 export function restoreProtectedFiles(before: ProtectedSnapshot): string[] {
+  activeSnapshots.delete(before);
   const reverted: string[] = [];
-  const after = snapshotProtectedFiles();
+  const after = scanProtected();
   for (const [rel, content] of before) {
     if (after.get(rel) !== content) {
       writeFileSync(path.join(PROJECT_ROOT, rel), content, "utf-8");

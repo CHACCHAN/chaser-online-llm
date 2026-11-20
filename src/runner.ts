@@ -1,13 +1,13 @@
-import { copyFileSync, existsSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { RUNS_DIR, SOLVER_PATH } from "./paths";
+import { BEST_SOLVERS_DIR, RUNS_DIR, SOLVER_PATH } from "./paths";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
 import type { AgentConfig } from "./config";
 import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
 import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
-import { getRoomProfile, reloadTilesKnowledge } from "./memory/knowledge-store";
+import { getRoomProfile, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
 import { WorldMap } from "./memory/world-map";
 import { WebMapRefresher } from "./perception/web-map-refresher";
 import { GameOver, logger } from "./tools";
@@ -472,9 +472,17 @@ export async function runAgentMatch(
   await Bun.write(path.join(runDir, "diagnosis.md"), diagnosis.markdownReport);
   mainAgent?.archiveFiles(runDir);
 
+  // この試合で使ったソルバー（試合後の改修前）を残す。最高記録ならルームの最良ソルバーとしても保存
   const solverPath = SOLVER_PATH;
   if (existsSync(solverPath)) {
     copyFileSync(solverPath, path.join(runDir, "solver-snapshot.ts"));
+    if (updatedProfile.bestRunId === runId) {
+      const bestSolverPath = path.join(BEST_SOLVERS_DIR, `room${config.room}.ts`);
+      mkdirSync(BEST_SOLVERS_DIR, { recursive: true });
+      copyFileSync(solverPath, bestSolverPath);
+      updatedProfile.bestSolverFile = bestSolverPath;
+      saveRoomProfile(updatedProfile);
+    }
   }
 
   return summary;

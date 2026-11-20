@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { noteUserEdit } from "../evolution/edit-guard";
 import path from "node:path";
 import { SETTINGS, type SettingGroup } from "../settings";
 
@@ -101,6 +102,7 @@ export function setProjectEnvValue(key: string, value: string): void {
     lines.push(line);
   }
   writeFileSync(ENV_PATH, lines.join("\n") + "\n", "utf-8");
+  noteUserEdit(ENV_PATH);
   process.env[key] = value;
   Bun.env[key] = value;
 }
@@ -129,6 +131,7 @@ export function saveProjectEnvEntries(
   }
 
   writeFileSync(ENV_PATH, lines.join("\n") + "\n", "utf-8");
+  noteUserEdit(ENV_PATH);
 
   return {
     updatedKeys: [...cleanMap.keys()],

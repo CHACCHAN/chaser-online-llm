@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import { ROOM_PROFILES_PATH, TILES_PATH } from "../paths";
 
 export interface StoredTileDefinition {

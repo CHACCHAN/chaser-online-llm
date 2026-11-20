@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { noteUserEdit } from "../evolution/edit-guard";
 import path from "node:path";
 import { POLICIES_DIR } from "../paths";
 import { getSetting } from "../settings";
@@ -36,7 +37,9 @@ export function readPolicy(name: string): string | null {
 export function writePolicy(name: string, text: string): void {
   if (!isValidPolicyName(name)) throw new Error(`方針名は英数字・_・- のみ（40字以内）: ${name}`);
   mkdirSync(POLICIES_DIR, { recursive: true });
-  writeFileSync(path.join(POLICIES_DIR, `${name}.md`), text.endsWith("\n") ? text : `${text}\n`, "utf-8");
+  const file = path.join(POLICIES_DIR, `${name}.md`);
+  writeFileSync(file, text.endsWith("\n") ? text : `${text}\n`, "utf-8");
+  noteUserEdit(file);
 }
 
 /** メインエージェントに渡す形（HTML コメントは除く）。方針ファイルが無ければ空文字 */

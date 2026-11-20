@@ -1,14 +1,13 @@
 import { numSetting } from "./settings";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { verifySolverWithReplay } from "./evolution/replay-verifier";
 import type { MainAgent } from "./agent/main-agent";
-import { getRoomProfile, saveRoomProfile } from "./memory/knowledge-store";
 import type { RunSummary } from "./runner";
 import { logger } from "./tools";
 import { uiBus } from "./ui/event-bus";
 
-import { BEST_SOLVERS_DIR, SOLVER_PATH } from "./paths";
+import { SOLVER_PATH } from "./paths";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "./evolution/edit-guard";
 
 export interface EvolutionOutcome {
@@ -98,14 +97,7 @@ export async function runPostMatchEvolution(
       content: `Turns tested: ${verification.turnsTested}, Improved CMD1: ${verification.changedCmd1Count}, Improved CMD2: ${verification.changedCmd2Count}`,
     });
 
-    const profile = getRoomProfile(summary.room);
-    if (profile.bestRunId === summary.runId && existsSync(SOLVER_PATH)) {
-      const bestSolverPath = path.join(BEST_SOLVERS_DIR, `room${summary.room}.ts`);
-      mkdirSync(BEST_SOLVERS_DIR, { recursive: true });
-      copyFileSync(SOLVER_PATH, bestSolverPath);
-      profile.bestSolverFile = bestSolverPath;
-      saveRoomProfile(profile);
-    }
+    // 最高記録のソルバーは試合直後に runner が保存済み（改修前の、実際に試合で使ったもの）
   }
 
   summary.evolution = { solverChanged, replayVerified: verification.ok, rolledBack };
