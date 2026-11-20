@@ -1104,6 +1104,7 @@ function renderUsage(u) {
     `合計 ${(u.totalTokens || 0).toLocaleString()} トークン（上限 ${u.limitTokens ? u.limitTokens.toLocaleString() : "なし"}）`,
     `メイン ${fmtTok(sumTok(u.main))}（${u.main?.calls ?? 0}回） / サブ ${fmtTok(sumTok(u.sub))}`,
     `メインの直近1回の入力 ${u.lastCallInputTokens == null ? "-" : u.lastCallInputTokens.toLocaleString()} トークン（毎回前の会話なしで聞くので一定）`,
+    u.estimatedTimeoutTokens ? `うち予算切れで止めた分の見積もり ${u.estimatedTimeoutTokens.toLocaleString()}` : "",
     u.total.costUsd ? `推定コスト ${u.total.costUsd.toFixed(2)}` : "",
   ].filter(Boolean).join("\n");
 }

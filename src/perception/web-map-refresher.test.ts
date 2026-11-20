@@ -60,3 +60,21 @@ test("取れない間は自作マップ、N ターンごとに再挑戦し、取
   delete Bun.env.CHASER_WEB_MAP_TIMEOUT_SEC;
   delete Bun.env.CHASER_WEB_MAP_REFRESH;
 });
+
+test("Web マップを取り直すと、自分の観測より新しいマスは更新される（他プレイヤーが拾ったアイテム等）", async () => {
+  const { WorldMap } = await import("../memory/world-map");
+  const wm = new WorldMap();
+  const g = Array.from({ length: 7 }, () => Array.from({ length: 7 }, () => 2));
+  g[3]![3] = 1001;
+  g[0]![6] = 77; // 遠くのアイテム
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1001, 2, 2, 2, 2], 1);
+  wm.setGlobalGrid(g, [3, 3], "t", 1, 1001, [0, 0]);
+  expect(wm.getTile(3, -3)?.value).toBe(77);
+  // T5 に取り直したら、アイテムは誰かに拾われて土になっていた
+  const g2 = g.map((r) => [...r]);
+  g2[0]![6] = 2;
+  wm.setGlobalGrid(g2, [3, 3], "t", 5, 1001, [0, 0]);
+  expect(wm.getTile(3, -3)?.value).toBe(2);
+  // 自分の観測（T1）は同じターンの Web マップより優先、後の Web マップでは更新される
+  expect(wm.getTile(1, 0)?.value).toBe(2);
+});

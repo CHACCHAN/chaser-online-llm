@@ -489,19 +489,22 @@ export class WorldMap {
         const lx = gx - ox;
         const ly = gy - oy;
         const key = coordKey(lx, ly);
-        if (!this.currentMap.has(key)) {
-          const info = getTileInfo(val);
-          if (!info.known) {
-            this.unknownTiles.add(val);
-          }
-          this.currentMap.set(key, {
-            value: val,
-            firstSeenTurn: this.lastTurn,
-            lastSeenTurn: this.lastTurn,
-            visitedCount: 0,
-            fromGlobalMap: true,
-          });
+        const existing = this.currentMap.get(key);
+        // 取り直した Web マップの方が新しければ更新する（他プレイヤーが拾ったアイテム等）。自分の観測の方が新しければそのまま
+        if (existing && !existing.fromGlobalMap && existing.lastSeenTurn >= this.globalGridTurn) continue;
+        if (existing && existing.value === val) continue;
+        const info = getTileInfo(val);
+        if (!info.known) {
+          this.unknownTiles.add(val);
         }
+        this.currentMap.set(key, {
+          value: val,
+          firstSeenTurn: existing?.firstSeenTurn ?? this.lastTurn,
+          lastSeenTurn: this.globalGridTurn,
+          visitedCount: existing?.visitedCount ?? 0,
+          // 自分で観測したマスは「自前観測」の印を残す（位置合わせは自前観測だけを使うため）
+          fromGlobalMap: existing ? (existing.fromGlobalMap ?? false) : true,
+        });
       }
     }
   }

@@ -136,3 +136,11 @@ test("サブへの依頼は TODO として次のフェーズ以降のメッセ�
   await agent.end();
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
+
+test("memo に { } が入っていても返答を読める", async () => {
+  const { parseMainReply } = await import("./main-agent");
+  const text = '北へ向かう\n{"turn": 3, "phase": "CMD1", "action": "plan", "target": [2, -1], "memo": "敵は {東} に逃げた"}';
+  expect(parseMainReply(text, 3, "CMD1", ["gr"])).toEqual({ action: "plan", target: [2, -1], note: undefined, delegate: undefined, memo: "敵は {東} に逃げた" });
+  // コードブロックで囲まれていても読む
+  expect(parseMainReply('```json\n{"turn": 3, "phase": "CMD1", "action": "continue"}\n```', 3, "CMD1", ["gr"])?.action).toBe("continue");
+});

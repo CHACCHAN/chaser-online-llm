@@ -37,6 +37,8 @@ export interface AgentUsageReport {
   limitReached: boolean;
   /** 直近のメイン問い合わせ1回の入力トークン（キャッシュ込み） */
   lastCallInputTokens: number | null;
+  /** main に含まれる、予算切れで止めた問い合わせの見積もり分 */
+  estimatedTimeoutTokens: number;
 }
 
 interface MainReply {
@@ -76,6 +78,8 @@ export class MainAgent {
   private next: ClaudeSession | null = null;
   private mainUsage: UsageTotals = emptyUsage();
   private lastCallInputTokens: number | null = null;
+  /** 予算切れで止めた問い合わせの見積もり分（実際の使用量は不明） */
+  private estimatedTimeoutTokens = 0;
   private limitNotified = false;
 
   constructor(
@@ -109,6 +113,7 @@ export class MainAgent {
       limitTokens,
       limitReached: limitTokens > 0 && totalTokens(total) >= limitTokens,
       lastCallInputTokens: this.lastCallInputTokens,
+      estimatedTimeoutTokens: this.estimatedTimeoutTokens,
     };
   }
 
@@ -250,8 +255,13 @@ export class MainAgent {
       this.lastCallInputTokens = u.inputTokens + u.cacheReadTokens + u.cacheCreationTokens;
       void call.stop();
     } else {
-      // 予算切れ・異常: 止めて捨てる（使用量は報告されないので数えられない）
+      // 予算切れ・異常: 止めて捨てる。使用量は報告されないが入力は送信済みなので、直近の入力量で見積もって上限の判定に含める
       call.kill();
+      if (res.status === "timeout") {
+        const est = this.lastCallInputTokens ?? Math.ceil((this.systemPrompt.length + message.length) / 2);
+        this.mainUsage = addUsage(this.mainUsage, { ...emptyUsage(), calls: 1, inputTokens: est });
+        this.estimatedTimeoutTokens += est;
+      }
     }
 
     if (res.status === "timeout") return fallback(`timeout ${res.durationMs}ms`, res.durationMs);
@@ -427,11 +437,15 @@ export function parseMainReply(
   phase: string,
   legal: readonly string[],
 ): MainReply | null {
-  // memo に { } を含めない前提で、最後の JSON オブジェクトを採用する
-  const matches = [...text.matchAll(/\{[^{}]*"action"\s*:\s*"[^"]+"[^{}]*\}/g)];
-  for (let i = matches.length - 1; i >= 0; i--) {
+  // 最後の行から JSON を探す（memo に { } が入っていても読めるよう、まず行全体を JSON として読む）
+  // 後ろから試すので、行全体の候補を最後に置いて優先する
+  const candidates = [
+    ...[...text.matchAll(/\{[^{}]*"action"\s*:\s*"[^"]+"[^{}]*\}/g)].map((m) => m[0]),
+    ...text.split("\n").map((l) => l.trim().replace(/^```(?:json)?|```$/g, "").trim()).filter((l) => l.startsWith("{") && l.endsWith("}")),
+  ];
+  for (let i = candidates.length - 1; i >= 0; i--) {
     try {
-      const obj = JSON.parse(matches[i]![0]) as {
+      const obj = JSON.parse(candidates[i]!) as {
         turn?: number; phase?: string; action?: string; command?: string;
         target?: unknown; note?: string; delegate?: string; memo?: unknown;
       };
