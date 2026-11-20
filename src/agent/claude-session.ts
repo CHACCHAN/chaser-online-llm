@@ -51,6 +51,8 @@ export class ClaudeSession {
   private readonly context: ClaudeContext;
   private usageTotals: UsageTotals = emptyUsage();
   private contextTokens: number | null = null;
+  /** この問い合わせ中に assistant イベントから会話の大きさが取れたか */
+  private contextFromAssistant = false;
 
   constructor(private readonly options: ClaudeSessionOptions) {
     this.context = options.context ?? "in_game";
@@ -150,7 +152,10 @@ export class ClaudeSession {
 
     if (ev.type === "assistant") {
       const size = contextSizeFromRaw(ev.message?.usage);
-      if (size !== null) this.contextTokens = size;
+      if (size !== null) {
+        this.contextTokens = size;
+        this.contextFromAssistant = true;
+      }
     }
     if (ev.type === "assistant" && Array.isArray(ev.message?.content)) {
       for (const b of ev.message.content) {
@@ -172,6 +177,13 @@ export class ClaudeSession {
     if (ev.type === "result") {
       if (ev.usage) this.usageTotals = addUsage(this.usageTotals, usageFromRaw(ev.usage, ev.total_cost_usd));
       else this.usageTotals = addUsage(this.usageTotals, { ...emptyUsage(), calls: 1 });
+      // ゲートウェイによっては assistant イベントに usage が無い。その場合は result の入力量（キャッシュ込み）を会話の大きさとみなす
+      // （ツールを使った問い合わせでは複数回分の合計になり大きめに出るが、要約を早めに始めるだけなので安全側）
+      if (!this.contextFromAssistant) {
+        const size = contextSizeFromRaw(ev.usage);
+        if (size !== null) this.contextTokens = size;
+      }
+      this.contextFromAssistant = false;
       const entry = this.pending;
       this.pending = null;
       this.busyFlag = false;
