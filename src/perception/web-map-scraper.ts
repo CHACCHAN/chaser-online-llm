@@ -21,6 +21,8 @@ export interface WebMapScrapeResult {
   dimensions: [number, number] | null;
   playerPos: [number, number] | null;
   liveScore: LiveMapScore | null;
+  /** Web マップ上の自機のタイル ID（1000, 2000 ...） */
+  selfTileId?: number | null;
   error?: string;
 }
 
@@ -37,6 +39,7 @@ export function parseGridFromHtml(
   stageName: string | null;
   turn: number | null;
   liveScore: LiveMapScore | null;
+  selfTileId: number | null;
 } {
   const stageName =
     html.match(/対戦マップビュー[\s\S]*?\[([^\]]+)\]/i)?.[1]?.trim() ??
@@ -170,6 +173,7 @@ export function parseGridFromHtml(
         stageName,
         turn,
         liveScore,
+        selfTileId: playerTileId,
       };
     }
   }
@@ -180,6 +184,7 @@ export function parseGridFromHtml(
     stageName,
     turn,
     liveScore,
+    selfTileId: null,
   };
 }
 
@@ -234,6 +239,7 @@ async function tryScrapeChaserServerHttp(
           dimensions: [parsed.grid[0]?.length ?? 0, parsed.grid.length],
           playerPos: parsed.playerPos,
           liveScore: parsed.liveScore,
+          selfTileId: parsed.selfTileId,
         };
       }
     } catch {
@@ -270,6 +276,7 @@ async function tryScrapeChaserServerHttp(
           dimensions: [parsed.grid[0]?.length ?? 0, parsed.grid.length],
           playerPos: parsed.playerPos,
           liveScore: parsed.liveScore,
+          selfTileId: parsed.selfTileId,
         };
       }
     } catch {
@@ -304,6 +311,7 @@ async function tryScrapeChaserServerHttp(
           dimensions: [parsed.grid[0]?.length ?? 0, parsed.grid.length],
           playerPos: parsed.playerPos,
           liveScore: parsed.liveScore,
+          selfTileId: parsed.selfTileId,
         };
       }
     } catch {

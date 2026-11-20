@@ -150,7 +150,7 @@ export async function runAgentMatch(
     webMapUrl: config.webMapUrl,
   });
   if (initialScrape.found && initialScrape.grid) {
-    worldMap.setGlobalGrid(initialScrape.grid, initialScrape.playerPos, initialScrape.stageName);
+    worldMap.setGlobalGrid(initialScrape.grid, initialScrape.playerPos, initialScrape.stageName, 0, initialScrape.selfTileId);
     logger.info(
       {
         method: initialScrape.method,
@@ -178,6 +178,23 @@ export async function runAgentMatch(
     hazardHits: 0,
   });
   uiBus.updateMap(worldMap.buildUiMapState(null));
+
+  /**
+   * Web マップがあるルームでは毎ターン取り直して盤面・敵位置・公式スコアを更新する。
+   * 無いルームでは何もしない（ReturnCode の観測から自前マップを毎フェーズ更新している）。
+   * 取得失敗はゲーム進行を止めない。
+   */
+  const refreshWebMap = async (turn: number): Promise<void> => {
+    if (!initialScrape.found) return;
+    try {
+      const r = await scrapeRoomWebMap({ room: config.room, webMapUrl: config.webMapUrl });
+      if (!r.found || !r.grid) return;
+      worldMap.setGlobalGrid(r.grid, r.playerPos, r.stageName, turn, r.selfTileId);
+      if (r.liveScore) uiBus.updateScores({ liveOfficial: r.liveScore });
+    } catch (err) {
+      logger.warn({ err: err instanceof Error ? err.message : String(err) }, "Web map refresh failed");
+    }
+  };
 
   const turnLogs: TurnRecord[] = [];
   const commandCounts: Record<string, number> = {};
@@ -275,7 +292,7 @@ export async function runAgentMatch(
         if (worldMap.getLastEventFlags().warped && initialScrape.found) {
           const rescraped = await scrapeRoomWebMap({ room: config.room, webMapUrl: config.webMapUrl });
           if (rescraped.found && rescraped.grid) {
-            worldMap.setGlobalGrid(rescraped.grid, rescraped.playerPos, rescraped.stageName);
+            worldMap.setGlobalGrid(rescraped.grid, rescraped.playerPos, rescraped.stageName, turn, rescraped.selfTileId);
             if (rescraped.liveScore) uiBus.updateScores({ liveOfficial: rescraped.liveScore });
           }
         }
@@ -295,7 +312,8 @@ export async function runAgentMatch(
           cmd2Reason = p2.reason;
           cmd2Values = p2.values;
           cmd2Source = p2.source;
-          await client.command3("#");
+          // ターン終了と並行して Web マップを取り直し、盤面（敵の位置を含む）を毎ターン最新にする
+          await Promise.all([client.command3("#"), refreshWebMap(turn)]);
           turnCompleted = true;
         }
       } catch (err) {
