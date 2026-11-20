@@ -223,7 +223,6 @@ export class ClaudeSession {
       if (ev.usage) this.usageTotals = addUsage(this.usageTotals, usageFromRaw(ev.usage, ev.total_cost_usd));
       else this.usageTotals = addUsage(this.usageTotals, { ...emptyUsage(), calls: 1 });
       // ゲートウェイによっては assistant イベントに usage が無い。その場合は result の入力量（キャッシュ込み）を会話の大きさとみなす
-      // （ツールを使った問い合わせでは複数回分の合計になり大きめに出るが、要約を早めに始めるだけなので安全側）
       if (!this.contextFromAssistant) {
         const size = contextSizeFromRaw(ev.usage);
         if (size !== null) this.contextTokens = size;

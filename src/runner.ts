@@ -34,7 +34,7 @@ export interface TurnRecord {
   mainActions: string[];
   /** サブへ依頼した仕事 */
   delegations: string[];
-  /** このターンにエージェント全体（メイン・サブ・要約）が使ったトークン */
+  /** このターンにエージェント全体（メイン・サブ）が使ったトークン */
   agentTokens?: number;
   /** このターン最後のメイン問い合わせ1回の入力トークン（キャッシュ込み） */
   mainInputTokens?: number | null;

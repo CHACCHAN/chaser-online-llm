@@ -20,9 +20,9 @@ flowchart LR
     Bus["uiBus + Bun.serve<br/>ui/"]
   end
 
-  subgraph Claude["Claude Code (隔離 HOME, 2 プロセス)"]
-    MainSess["メインの常駐セッション<br/>prompts/main.md"]
-    SubW["SubWorker<br/>agent/sub-worker.ts<br/>別の常駐セッション (prompts/sub.md)"]
+  subgraph Claude["Claude Code (隔離 HOME)"]
+    MainSess["メイン: 毎フェーズ使い捨ての claude -p<br/>ツールなし・prompts/main.md"]
+    SubW["SubWorker<br/>agent/sub-worker.ts<br/>依頼ごとに使い捨て (prompts/sub.md)"]
   end
 
   Tools[("agent/tools/<br/>臨時ツール @temporary")]
@@ -61,11 +61,11 @@ flowchart LR
 ## 試合のライフサイクル
 
 1. **待機**: `src/index.ts` が Web ダッシュボードを起動し、「開始」が押されるまで待つ。
-2. **準備**: 試合ごとに `MainAgent` を作り、`begin()` でメインとサブの常駐セッションを起動する。入室前に `strategy.md` と `tiles.json` を読ませて「READY」を待つ（入室後にサーバを待たせないため）。
+2. **準備**: 試合ごとに `MainAgent` を作り、`begin()` でメインのシステムプロンプト（main.md＋作戦方針＋strategy.md）を組み立て、最初の問い合わせ用プロセスを先に起動する。サブは保護ファイルのスナップショットを取る。
 3. **入室**: `Client` が `user/` にログインし、`RoomNumberCheck` で入室する。
 4. **試合**: `runner.ts` が `playPhase` を CMD1 → CMD2 の順に回す（後述）。
 5. **試合後**: `summary.json` と `diagnosis.md` を書き、`evolve.ts` がメインに `postMatch` で改修させ、リプレイ検証する。
-6. **終了**: `MainAgent.end()` でメインとサブのセッションを止める。自動継続なら数秒待って次の試合へ。
+6. **終了**: `MainAgent.end()` で先行起動したプロセスとサブを止める。自動継続なら数秒待って次の試合へ。
 
 `bun run play` は同じ流れを WebUI なしで 1 試合だけ行う（`src/play.ts`）。
 
@@ -96,7 +96,7 @@ flowchart LR
 | `src/verify.ts` | `bun run verify-solver` の本体（スモークテスト） |
 | `src/cli.ts` | Claude Code の Bash から使うツール群 |
 | `src/agent/claude-env.ts` | 隔離 env と起動引数（ゲートウェイ・モデル・effort） |
-| `src/agent/claude-session.ts` | `--input-format stream-json` の常駐セッション（`ask` は同時に 1 件） |
+| `src/agent/claude-session.ts` | `--input-format stream-json` で起動する Claude Code プロセス（使い捨て・常駐の両用。`ask` は同時に 1 件） |
 | `src/agent/main-agent.ts` | メインエージェント（`begin` / `decide` / `postMatch`）、応答 JSON の解析、作戦の追跡 |
 | `src/agent/sub-worker.ts` | サブエージェント（`SubWorker`）。依頼を順に裏で処理し、結果を保持する |
 | `src/agent/models.ts` | ゲートウェイの `/models` 一覧と effort の定義 |

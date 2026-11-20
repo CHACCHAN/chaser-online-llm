@@ -12,7 +12,7 @@
 
 ## 現状の要点
 
-- 試合は `src/index.ts` のループが回す。1試合ごとに `MainAgent` を作り、入室前の `begin()` でサブの常駐セッションと、メインの最初の問い合わせ用プロセスを起動する。
+- 試合は `src/index.ts` のループが回す。1試合ごとに `MainAgent` を作り、入室前の `begin()` でメインの最初の問い合わせ用プロセスを先に起動し、サブを準備する（サブは依頼ごとにセッションを起動）。
 - メインは毎フェーズ**前の会話を持たない使い捨ての `claude -p`**（`--no-session-persistence --tools "" --system-prompt …`）で聞く。Claude Code 既定のシステムプロンプトとツール定義を送らないので、1回あたり約3,600トークンで一定（gpt-6.2-astra, 2026-11-20 実測、応答 約5〜8秒）。引き継ぐのは、メインが返答の `memo` で書き換えるメモ（`AGENT_MEMO_MAX_CHARS`）・ハーネスが作る直近の経過（`AGENT_RECENT_PHASES`）・現在の状況だけ。次のフェーズ用のプロセスは裏で先に起動し、予算切れの問い合わせは kill する。会話の要約（旧 `AGENT_COMPACT_AT_TOKENS`）は廃止。
 - メモは `var/current/MEMO.md`、サブへの依頼と結果の全文は `var/current/ASK_SUB.md` に毎回書き出す（人とサブが読む用。編集しても試合には反映されない）。試合後は `var/runs/<runId>/` にコピー。メインへのメッセージには依頼の TODO（`AGENT_SUB_TODO_ITEMS` 件）を毎回付ける。
 - メインは「作戦係＋例外係」。毎フェーズ `continue`（作戦のまま、ソルバーが手を打つ）/ `plan`（目標マスへ向かう作戦に変更）/ `command`（手を直接指定）を JSON で返す。任意の `delegate` でサブに仕事を依頼できる。

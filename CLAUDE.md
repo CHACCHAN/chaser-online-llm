@@ -4,7 +4,7 @@ CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/
 モデルは `LLM_API_URL` のゲートウェイから選ぶ（`GET /api/models`）。通常の Claude Code の使い方（対話開発）はこのハーネスでは行わない。
 
 - **試合中（メイン）**: **メインエージェント（作戦係＋例外係）**が毎フェーズ（前の会話なし・ツールなしの使い捨て `claude -p`。引き継ぎはメモと直近の経過）盤面とソルバー候補を見て、`continue`（作戦のまま）/ `plan`（目標マスを変える）/ `command`（手を直接指定）を返す（手順は `agent/prompts/main.md`）。1手先の計算はソルバーが行う。
-- **試合中（サブ）**: メインの `delegate` で依頼された調査・ツール作成は、別の常駐セッション（SubWorker、`agent/prompts/sub.md`）が裏で処理する。結果は後のターンでメインに届き、メインは待たない。
+- **試合中（サブ）**: メインの `delegate` で依頼された調査・ツール作成は、依頼ごとに新しいセッション（SubWorker、`agent/prompts/sub.md`）が裏で処理する。結果は後のターンでメインに届き、メインは待たない。
 - **臨時ツール**: 試合中に作るツールは `@temporary` 付きで `agent/tools/` に置く。恒久化（ソルバー組込み・正式ツール化・削除）は試合後にメインが決める。
 - **時間切れ**: 思考予算（既定 20 秒）を超えた・応答が不正なフェーズは、ソルバー手が自動送信される。
 - **試合後**: メインエージェント（ツールありの新セッション）が振り返り、`src/solver/active-solver.ts` を改修する。リプレイ検証に失敗したら自動ロールバック。
@@ -19,7 +19,7 @@ CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/
 |---|---|
 | `src/` | コードのみ（パスは `src/paths.ts` に集約） |
 | `src/solver/active-solver.ts` | 進化対象のソルバー |
-| `src/agent/` | 常駐 Claude セッション・メインエージェント・モデル一覧 |
+| `src/agent/` | Claude Code セッション・メインエージェント・サブ・モデル一覧 |
 | `knowledge/` | 永続知識（tiles.json, strategy.md, research/） |
 | `agent/` | エージェント用手順書・プロンプト・`tools/`（エージェントが作るツール） |
 | `assets/` | 公式タイル GIF（`assets/tiles/manifest.json`） |
