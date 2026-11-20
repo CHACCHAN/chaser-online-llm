@@ -178,6 +178,7 @@ export class MainAgent {
         this.recent.join("\n") || "(なし)",
         "",
         diagnosisMarkdown,
+        this.formatSubTodo(),
         subResults ? `\n${subResults}` : "",
         policy ? `\n${policy}\n\nソルバーの改修もこの方針に沿わせること。` : "",
         "",
@@ -261,7 +262,7 @@ export class MainAgent {
     }
     let delegated: string | null = null;
     if (reply.delegate) {
-      const task = this.sub.enqueue(reply.delegate);
+      const task = this.sub.enqueue(reply.delegate, `T${ctx.turn} ${ctx.phase}`);
       delegated = `#${task.id} ${reply.delegate.slice(0, 80)}`;
     }
 
@@ -340,6 +341,18 @@ export class MainAgent {
       .join("\n");
   }
 
+  /** サブに頼んだ仕事の一覧（メインは前の会話を持たないので、同じ依頼の重複を防ぐために毎回渡す） */
+  private formatSubTodo(): string {
+    const tasks = this.sub.all();
+    if (tasks.length === 0) return "";
+    const label = { queued: "待機", running: "作業中", done: "完了", failed: "失敗" } as const;
+    const rows = tasks.slice(-numSetting("AGENT_SUB_TODO_ITEMS", { min: 1, integer: true })).map((t) => {
+      const elapsed = t.status === "running" && t.startedAt ? ` ${Math.round((Date.now() - t.startedAt) / 1000)}s経過` : "";
+      return `- #${t.id} [${label[t.status]}${elapsed}] ${t.requestedAt ? `${t.requestedAt}に依頼: ` : ""}${t.request.slice(0, 120)}`;
+    });
+    return ["## サブへの依頼（TODO）", ...rows].join("\n");
+  }
+
   private async writeSnapshot(worldMap: WorldMap): Promise<void> {
     mkdirSync(path.dirname(CURRENT_SNAPSHOT_PATH), { recursive: true });
     await Bun.write(CURRENT_SNAPSHOT_PATH, JSON.stringify(worldMap.toSnapshot()));
@@ -383,8 +396,8 @@ export class MainAgent {
     if (this.notices.length > 0) lines.push(...this.notices.splice(0));
     const subResults = this.formatSubResults();
     if (subResults) lines.push(subResults);
-    const pending = this.sub.pending();
-    if (pending.length > 0) lines.push(`サブ作業中: ${pending.map((t) => `#${t.id}`).join(", ")}`);
+    const todo = this.formatSubTodo();
+    if (todo) lines.push(todo);
     lines.push(`合法手: ${legal.join(",")}`);
     return lines.join("\n");
   }

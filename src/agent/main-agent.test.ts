@@ -105,3 +105,29 @@ test("1試合のトークン上限を超えたらソルバーのみで続ける"
   await agent.end();
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
+
+test("サブへの依頼は TODO として次のフェーズ以降のメッセージに必ず載る", async () => {
+  Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
+  sent.length = 0;
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
+  // 最初のフェーズで delegate を返させる
+  const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
+  let once = true;
+  proto.ask = async function (this: { options: ClaudeSessionOptions }, text: string): Promise<AskResult> {
+    if (once && this.options.label === "main") {
+      once = false;
+      sent.push({ label: "main", text, options: this.options });
+      return { status: "ok", text: '{"turn": 1, "phase": "CMD1", "action": "continue", "delegate": "タイル15の得点を調べる"}', durationMs: 1 };
+    }
+    return origAsk.call(this, text);
+  };
+  await playPhases(agent, 3);
+  proto.ask = origAsk;
+  const mains = sent.filter((s) => s.label === "main");
+  expect(mains[0]!.text).not.toContain("サブへの依頼（TODO）");
+  expect(mains[1]!.text).toContain("サブへの依頼（TODO）");
+  expect(mains[1]!.text).toMatch(/#1 \[(待機|作業中|完了)[^\]]*\] T1 CMD1に依頼: タイル15の得点を調べる/);
+  await agent.end();
+  delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
+});

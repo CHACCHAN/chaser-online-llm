@@ -13,6 +13,9 @@ export interface SubTask {
   status: "queued" | "running" | "done" | "failed";
   result: string | null;
   durationMs: number | null;
+  /** 依頼したフェーズ（メインへの TODO 表示用） */
+  requestedAt?: string;
+  startedAt?: number;
 }
 
 /**
@@ -46,8 +49,8 @@ export class SubWorker {
     uiBus.patchState({ subTasks: this.tasks.map((t) => ({ ...t })) });
   }
 
-  enqueue(request: string): SubTask {
-    const task: SubTask = { id: this.nextId++, request, status: "queued", result: null, durationMs: null };
+  enqueue(request: string, requestedAt?: string): SubTask {
+    const task: SubTask = { id: this.nextId++, request, status: "queued", result: null, durationMs: null, requestedAt };
     this.tasks.push(task);
     this.publish();
     void this.pump();
@@ -64,6 +67,11 @@ export class SubWorker {
     const done = this.tasks.filter((t) => (t.status === "done" || t.status === "failed") && !this.reported.has(t.id));
     for (const t of done) this.reported.add(t.id);
     return done;
+  }
+
+  /** 全ての仕事（TODO 表示用） */
+  all(): SubTask[] {
+    return this.tasks.map((t) => ({ ...t }));
   }
 
   /** 試合終了: 実行中の仕事は止め、待機中の仕事は流さない */
@@ -92,6 +100,7 @@ export class SubWorker {
     try {
       for (let task = this.tasks.find((t) => t.status === "queued"); task && !this.stopped; task = this.tasks.find((t) => t.status === "queued")) {
         task.status = "running";
+        task.startedAt = Date.now();
         this.publish();
         const session = this.newSession();
         this.current = session;
