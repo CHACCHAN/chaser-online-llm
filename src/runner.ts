@@ -245,9 +245,7 @@ export async function runAgentMatch(
         uiBus.patchState({ turn, phase: phase === "CMD1" ? "READY_CMD1" : "READY_CMD2" });
         const decideSolver = await loadActiveSolver();
         const solverDecision: SolverDecision =
-          phase === "CMD1" && turn === 1 && !worldMap.getLastGrid()
-            ? { command: "gr", reason: "Initial 3x3 observation on turn 1", confidence: 1.0 }
-            : decideSolver(worldMap, phase, turn, mainAgent?.currentPlan ?? null);
+          decideSolver(worldMap, phase, turn, mainAgent?.currentPlan ?? null);
         const events = evaluateBreakpoint({ turn, worldMap, solverDecision }).reasons;
         for (const r of events) if (!breakpointReasons.includes(r)) breakpointReasons.push(r);
         syncUiPredictionAndMap(worldMap, turn, phase, solverDecision, "solver", events);
@@ -261,10 +259,7 @@ export async function runAgentMatch(
             phase,
             worldMap,
             events,
-            solve: (plan) =>
-              phase === "CMD1" && turn === 1 && !worldMap.getLastGrid()
-                ? solverDecision
-                : decideSolver(worldMap, phase, turn, plan),
+            solve: (plan) => decideSolver(worldMap, phase, turn, plan),
           });
           if (res.action) mainActions.push(`${phase}:${res.action}`);
           if (res.delegated) delegations.push(res.delegated);

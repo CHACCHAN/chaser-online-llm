@@ -39,6 +39,16 @@ export function decideTurnAction(
   plan: AgentPlan | null = null,
 ): SolverDecision {
   const [x, y] = worldMap.getPosition();
+  // 初手も既知の安全マスがあれば通常の経路選択へ。地図がなければ移動せず観測する。
+  if (phase === "CMD1" && _turn === 1 && !worldMap.getLastGrid() && !DIRS.some(dir => {
+    const [dx, dy] = DIR_DELTA[dir];
+    const rec = worldMap.getTile(x + dx, y + dy);
+    if (!rec) return false;
+    const info = getTileInfo(rec.value);
+    return info.known && info.passable && !info.hazard;
+  })) {
+    return { command: "gr", reason: "Initial scan: no known safe neighbor", confidence: 1 };
+  }
   const planStepRaw = plan ? worldMap.firstStepTowards(plan.target[0], plan.target[1]) : null;
   const planStep = planStepRaw && planStepRaw !== "here" ? planStepRaw : null;
   const planTag = plan && planStep ? `plan(@${plan.target[0]},${plan.target[1]} d=${planStep.distance})` : null;
