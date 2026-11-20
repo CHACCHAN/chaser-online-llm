@@ -78,3 +78,28 @@ test("Web マップを取り直すと、自分の観測より新しいマスは�
   // 自分の観測（T1）は同じターンの Web マップより優先、後の Web マップでは更新される
   expect(wm.getTile(1, 0)?.value).toBe(2);
 });
+
+test("取得中に動いても、観測と食い違わない方の位置で Web マップを合わせる", async () => {
+  const { WorldMap } = await import("../memory/world-map");
+  // 左右非対称な盤面
+  const g = [
+    [10, 10, 10, 10, 10, 10, 10],
+    [10, 2, 3, 77, 2, 0, 10],
+    [10, 2, 1, 2, 3, 2, 10],
+    [10, 3, 2, 2, 77, 2, 10],
+    [10, 2, 0, 3, 2, 1, 10],
+    [10, 10, 10, 10, 10, 10, 10],
+  ];
+  const wm = new WorldMap();
+  // 自機は Web 座標 (2,2) から出発し、取得中に右へ1マス動いた。Web マップ上の自機は (3,2)（動いた後）
+  wm.applyObservation("CMD1", "gr", [2, 3, 77, 2, 1001, 2, 3, 2, 2], 1);
+  const capture = wm.getPosition();
+  wm.applyObservation("CMD1", "grr", [3, 77, 2, 1, 1001, 3, 2, 2, 77], 1);
+  const withPlayer = g.map((r) => [...r]);
+  withPlayer[2]![3] = 1001;
+  wm.setGlobalGrid(withPlayer, [3, 2], "t", 1, 1001, capture);
+  // 正しい合わせなら、ローカル (0,0)=出発点 は Web (2,2)
+  // 観測していないマスで確かめる。取得開始時の位置で合わせると1列ずれて壁(10)になる
+  expect(wm.getTile(3, -1)?.value).toBe(0); // Web (5,1)
+  expect(wm.getTile(3, 1)?.value).toBe(2); // Web (5,3)
+});

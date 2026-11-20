@@ -378,12 +378,42 @@ export class WorldMap {
     if (selfTileId) this.selfTileId = selfTileId;
     if (stageName !== undefined) this.stageName = stageName;
     if (knownPlayerPos) {
-      const [lx, ly] = localPosAtCapture ?? [this.x, this.y];
-      this.globalOffset = [knownPlayerPos[0] - lx, knownPlayerPos[1] - ly];
+      // 取得中に動いていると、Web マップの自機位置が「取得開始時」と「今」のどちらの時点か分からない。
+      // 候補（既存の位置合わせ・取得開始時・今）を自分で観測したマスとの食い違いの少なさで選ぶ
+      const candidates: [number, number][] = [];
+      if (this.globalOffset) candidates.push(this.globalOffset);
+      for (const [lx, ly] of [localPosAtCapture ?? [this.x, this.y], [this.x, this.y]] as [number, number][]) {
+        candidates.push([knownPlayerPos[0] - lx, knownPlayerPos[1] - ly]);
+      }
+      let best = candidates[0]!;
+      let bestMismatch = this.offsetMismatch(best);
+      for (const c of candidates.slice(1)) {
+        const m = this.offsetMismatch(c);
+        if (m < bestMismatch) {
+          best = c;
+          bestMismatch = m;
+        }
+      }
+      this.globalOffset = best;
       this.overlayGlobalGridToCurrentSegment();
     } else {
       this.tryLocalizeOnGlobalGrid();
     }
+  }
+
+  /** この位置合わせで、自分で観測したマスと Web マップが食い違う数（自分が踏んで穴にしたマス・プレイヤーは除く） */
+  private offsetMismatch([ox, oy]: [number, number]): number {
+    if (!this.globalGrid) return Infinity;
+    let mismatch = 0;
+    for (const [k, rec] of this.currentMap.entries()) {
+      if (rec.fromGlobalMap || rec.value >= 1000) continue;
+      if (rec.visitedCount > 0 && rec.value === 0) continue;
+      const [lx, ly] = parseCoordKey(k);
+      const g = this.globalGrid[ly + oy]?.[lx + ox];
+      if (g === undefined) mismatch += 1;
+      else if (g < 1000 && g !== rec.value) mismatch += 1;
+    }
+    return mismatch;
   }
 
   /** 自前の観測で見えた他プレイヤー（ローカル座標・最後に見たターン） */

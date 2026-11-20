@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from "node:fs";
+import { copyFileSync, existsSync, statSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { RUNS_DIR, SOLVER_PATH } from "./paths";
@@ -90,13 +90,19 @@ function makeRunId(room: number): string {
   return `${stamp}_room${room}`;
 }
 
+/** 読み込み済みのソルバー（ファイルの更新時刻が変わった時だけ読み直す。毎フェーズ読み直すとモジュールが溜まり続ける） */
+let solverCache: { mtimeMs: number; fn: typeof defaultDecideTurnAction } | null = null;
+
 async function loadActiveSolver(): Promise<typeof defaultDecideTurnAction> {
   const solverPath = SOLVER_PATH;
   try {
-    const mod = (await import(`${solverPath}?t=${Date.now()}`)) as {
+    const mtimeMs = statSync(solverPath).mtimeMs;
+    if (solverCache && solverCache.mtimeMs === mtimeMs) return solverCache.fn;
+    const mod = (await import(`${solverPath}?t=${mtimeMs}`)) as {
       decideTurnAction?: typeof defaultDecideTurnAction;
     };
     if (typeof mod.decideTurnAction === "function") {
+      solverCache = { mtimeMs, fn: mod.decideTurnAction };
       return mod.decideTurnAction;
     }
   } catch (err) {
