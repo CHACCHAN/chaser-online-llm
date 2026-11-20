@@ -5,7 +5,7 @@
  *   bun run play --room 3 --solver-only                # ソルバーのみ
  *   bun run play --room 3 --evolve                     # 試合後の振り返り・ソルバー改修まで行う
  *
- * --model / --sub-model / --effort / --turn-budget は .env より優先（src/config.ts）。
+ * --model / --sub-model / --effort / --sub-effort / --turn-budget は .env より優先（src/config.ts）。
  */
 import { parseArgs } from "node:util";
 import { MainAgent } from "./agent/main-agent";
@@ -24,7 +24,7 @@ const { values } = parseArgs({
 const loginWaitMs = Number(values["login-wait-min"] ?? "10") * 60_000;
 
 const mainAgent = config.useMainAgent
-  ? new MainAgent({ model: config.model, subModel: config.subModel, effort: config.effort }, config.turnBudgetSec * 1000)
+  ? new MainAgent({ model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort }, config.turnBudgetSec * 1000)
   : null;
 
 try {

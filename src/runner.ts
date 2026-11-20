@@ -12,7 +12,7 @@ import { WorldMap } from "./memory/world-map";
 import { scrapeRoomWebMap } from "./perception/web-map-scraper";
 import { GameOver, logger } from "./tools";
 import { decideTurnAction as defaultDecideTurnAction, type SolverDecision } from "./solver/active-solver";
-import { uiBus } from "./ui/event-bus";
+import { type UiPredictionState, uiBus } from "./ui/event-bus";
 
 export interface TurnRecord {
   turn: number;
@@ -67,6 +67,7 @@ export interface RunSummary {
     model: string | null;
     subModel: string | null;
     effort: string | null;
+    subEffort: string | null;
     turnBudgetSec: number;
     mainDecisionRate: number | null;
     avgLatencyMs: number | null;
@@ -108,6 +109,7 @@ function syncUiPredictionAndMap(
   decision: SolverDecision,
   source: "solver" | "main" | "fallback",
   breakpointReasons: string[],
+  agentInfo: Partial<Pick<UiPredictionState, "mainAction" | "mainNote" | "mainLatencyMs" | "plan" | "delegated">> = {},
 ): void {
   const evalSummary = worldMap.evaluateCandidates(phase);
   uiBus.updatePrediction({
@@ -121,6 +123,7 @@ function syncUiPredictionAndMap(
     topTargets: evalSummary.topValueTargets,
     nearestFrontiers: evalSummary.nearestFrontiers,
     candidates: evalSummary.candidates,
+    ...agentInfo,
   });
   uiBus.updateMap(worldMap.buildUiMapState(decision.command));
 }
@@ -257,7 +260,13 @@ export async function runAgentMatch(
           } else {
             decision = { ...decision, reason: `${decision.reason} [solver: ${res.note}]` };
           }
-          syncUiPredictionAndMap(worldMap, turn, phase, decision, source, events);
+          syncUiPredictionAndMap(worldMap, turn, phase, decision, source, events, {
+            mainAction: res.action,
+            mainNote: res.note,
+            mainLatencyMs: res.durationMs,
+            plan: mainAgent.currentPlan,
+            delegated: res.delegated,
+          });
           uiBus.patchState({ status: "playing", statusMessage: `Room ${config.room} 対戦中` });
         }
 
@@ -435,6 +444,7 @@ export async function runAgentMatch(
       model: config.model ?? null,
       subModel: config.subModel ?? null,
       effort: config.effort ?? null,
+      subEffort: config.subEffort ?? null,
       turnBudgetSec: config.turnBudgetSec,
       mainDecisionRate: phaseSources.length > 0 ? phaseSources.filter((s) => s === "main").length / phaseSources.length : null,
       avgLatencyMs: latencies.length > 0 ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null,

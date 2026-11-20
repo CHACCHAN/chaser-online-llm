@@ -37,6 +37,23 @@ export interface UiPredictionState {
   topTargets: PathTarget[];
   nearestFrontiers: PathTarget[];
   candidates: CandidateEvaluation[];
+  /** メインの返答種別 (continue / plan / command)。solver 単独なら null */
+  mainAction?: "continue" | "plan" | "command" | null;
+  /** main なら「作戦どおり」等、solver なら代行理由（時間切れ・多忙など） */
+  mainNote?: string | null;
+  mainLatencyMs?: number | null;
+  /** 現在の作戦目標（ローカル座標） */
+  plan?: { target: [number, number]; note?: string } | null;
+  /** このフェーズでサブに依頼した仕事 */
+  delegated?: string | null;
+}
+
+export interface UiSubTask {
+  id: number;
+  request: string;
+  status: "queued" | "running" | "done" | "failed";
+  result: string | null;
+  durationMs: number | null;
 }
 
 export interface UiClaudeEvent {
@@ -66,6 +83,7 @@ export interface UiDashboardState {
   model: string;
   subModel: string;
   effort: string;
+  subEffort: string;
   turnBudgetSec: number;
   maxTurns: number | null;
   matchIndex: number;
@@ -81,6 +99,8 @@ export interface UiDashboardState {
   prediction: UiPredictionState | null;
   scores: UiScoresState;
   claudeStream: UiClaudeEvent[];
+  /** サブエージェントの仕事一覧（今の試合） */
+  subTasks: UiSubTask[];
   recentTurns: TurnRecord[];
   diagnosisMarkdown: string;
   roomProfiles: Record<string, RoomProfile>;
@@ -93,6 +113,7 @@ export interface UiControlCommand {
   model?: string;
   subModel?: string;
   effort?: string;
+  subEffort?: string;
   turnBudgetSec?: number;
   maxTurns?: number | null;
   autoContinue?: boolean;
@@ -113,6 +134,7 @@ class UiEventBus {
     model: "",
     subModel: "",
     effort: "",
+    subEffort: "",
     turnBudgetSec: 20,
     maxTurns: null,
     matchIndex: 0,
@@ -137,6 +159,7 @@ class UiEventBus {
       hazardHits: 0,
     },
     claudeStream: [],
+    subTasks: [],
     recentTurns: [],
     diagnosisMarkdown: "",
     roomProfiles: {},
@@ -167,6 +190,7 @@ class UiEventBus {
       if (typeof cmd.model === "string") patch.model = cmd.model.trim();
       if (typeof cmd.subModel === "string") patch.subModel = cmd.subModel.trim();
       if (typeof cmd.effort === "string") patch.effort = cmd.effort.trim();
+      if (typeof cmd.subEffort === "string") patch.subEffort = cmd.subEffort.trim();
       if (typeof cmd.turnBudgetSec === "number" && cmd.turnBudgetSec >= 3) patch.turnBudgetSec = cmd.turnBudgetSec;
       if (cmd.maxTurns !== undefined) {
         patch.maxTurns =

@@ -8,6 +8,8 @@ export interface AgentConfig {
   subModel: string | undefined;
   /** Claude Code の effort (low/medium/high/xhigh/max) */
   effort: string | undefined;
+  /** サブエージェントの effort（未指定ならメインと同じ） */
+  subEffort: string | undefined;
   /** メインエージェントの1フェーズあたりの思考時間予算（秒）。超えたらソルバー手を送る */
   turnBudgetSec: number;
   /** false ならメインエージェントを使わずソルバーのみでプレイ */
@@ -30,6 +32,7 @@ export function loadAgentConfig(argv: string[] = Bun.argv.slice(2)): AgentConfig
       model: { type: "string" },
       "sub-model": { type: "string" },
       effort: { type: "string" },
+      "sub-effort": { type: "string" },
       "turn-budget": { type: "string" },
       "solver-only": { type: "boolean" },
       "web-map-url": { type: "string" },
@@ -92,6 +95,7 @@ export function loadAgentConfig(argv: string[] = Bun.argv.slice(2)): AgentConfig
     model,
     subModel: str(values["sub-model"]) ?? str(Bun.env.LLM_SUB_MODEL_NAME),
     effort: str(values.effort) ?? str(Bun.env.LLM_MODEL_EFFORT),
+    subEffort: str(values["sub-effort"]) ?? str(Bun.env.LLM_SUB_MODEL_EFFORT),
     turnBudgetSec,
     useMainAgent: values["solver-only"] !== true,
     retryMs,

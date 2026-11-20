@@ -11,6 +11,8 @@ export interface ClaudeModelSettings {
   subModel?: string;
   /** low | medium | high | xhigh | max */
   effort?: string;
+  /** サブエージェントの effort。未指定ならメインと同じ */
+  subEffort?: string;
 }
 
 /**

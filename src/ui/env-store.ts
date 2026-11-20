@@ -76,6 +76,12 @@ const KNOWN_ENV_META: Record<
     description: "effort: low | medium | high | xhigh | max",
     defaultValue: "medium",
   },
+  LLM_SUB_MODEL_EFFORT: {
+    group: "llm",
+    secret: false,
+    description: "サブエージェントの effort（空ならメインと同じ）",
+    defaultValue: "",
+  },
   AGENT_TURN_BUDGET_SEC: {
     group: "llm",
     secret: false,

@@ -16,6 +16,7 @@ async function main() {
     model: config.model ?? "",
     subModel: config.subModel ?? "",
     effort: config.effort ?? "",
+    subEffort: config.subEffort ?? "",
     turnBudgetSec: config.turnBudgetSec,
     maxTurns: config.maxTurns,
   });
@@ -56,6 +57,7 @@ async function main() {
     if (typeof cmd.model === "string") config.model = cmd.model.trim() || undefined;
     if (typeof cmd.subModel === "string") config.subModel = cmd.subModel.trim() || undefined;
     if (typeof cmd.effort === "string") config.effort = cmd.effort.trim() || undefined;
+    if (typeof cmd.subEffort === "string") config.subEffort = cmd.subEffort.trim() || undefined;
     if (typeof cmd.turnBudgetSec === "number" && cmd.turnBudgetSec >= 3) config.turnBudgetSec = cmd.turnBudgetSec;
     if (cmd.maxTurns !== undefined) {
       config.maxTurns =
@@ -177,7 +179,7 @@ async function main() {
       // メインエージェントは入室前に起動・準備させる（入室後にサーバを待たせない）
       const mainAgent = config.useMainAgent
         ? new MainAgent(
-            { model: config.model, subModel: config.subModel, effort: config.effort },
+            { model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort },
             config.turnBudgetSec * 1000,
           )
         : null;

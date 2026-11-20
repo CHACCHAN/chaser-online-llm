@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { AGENT_DIR } from "../paths";
 import type { ClaudeModelSettings } from "./claude-env";
+import { uiBus } from "../ui/event-bus";
 import { ClaudeSession } from "./claude-session";
 
 export interface SubTask {
@@ -29,7 +30,7 @@ export class SubWorker {
     this.session = new ClaudeSession({
       model: settings.subModel || settings.model,
       subModel: settings.subModel,
-      effort: settings.effort,
+      effort: settings.subEffort || settings.effort,
       context: "in_game",
       label: "sub",
       appendSystemPrompt: readFileSync(path.join(AGENT_DIR, "prompts/sub.md"), "utf-8"),
@@ -38,11 +39,17 @@ export class SubWorker {
 
   start(): void {
     this.session.start();
+    this.publish();
+  }
+
+  private publish(): void {
+    uiBus.patchState({ subTasks: this.tasks.map((t) => ({ ...t })) });
   }
 
   enqueue(request: string): SubTask {
     const task: SubTask = { id: this.nextId++, request, status: "queued", result: null, durationMs: null };
     this.tasks.push(task);
+    this.publish();
     void this.pump();
     return task;
   }
@@ -69,6 +76,7 @@ export class SubWorker {
     try {
       for (let task = this.tasks.find((t) => t.status === "queued"); task; task = this.tasks.find((t) => t.status === "queued")) {
         task.status = "running";
+        this.publish();
         const res = await this.session.ask(`[TASK #${task.id}] ${task.request}`, TASK_TIMEOUT_MS);
         if (res.status === "ok") {
           task.status = "done";
@@ -80,6 +88,7 @@ export class SubWorker {
           // タイムアウト時はセッションが処理を続けている可能性があるので、終わるまで次を流さない
           while (this.session.busy) await Bun.sleep(1000);
         }
+        this.publish();
       }
     } finally {
       this.running = false;

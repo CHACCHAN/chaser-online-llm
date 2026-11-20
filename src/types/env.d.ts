@@ -6,6 +6,7 @@ declare module "bun" {
     LLM_MODEL_NAME: string;
     LLM_MODEL_EFFORT?: string;
     LLM_SUB_MODEL_NAME?: string;
+    LLM_SUB_MODEL_EFFORT?: string;
     AGENT_TURN_BUDGET_SEC?: string;
     CHASER_USER: string;
     CHASER_PASS: string;
