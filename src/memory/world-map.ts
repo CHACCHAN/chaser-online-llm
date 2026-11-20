@@ -138,18 +138,18 @@ export const OPPOSITE_DIR: Record<Dir, Dir> = {
 export const DIRS: Dir[] = ["u", "r", "d", "l"];
 
 export const CMD1_SPECS: Record<Cmd1Command, CommandSpec> = {
-  gr: { category: "get_ready", move: [0, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false },
-  gru: { category: "get_ready", move: [0, -1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -15, highFatigue: false, walkDir: "u" },
-  grd: { category: "get_ready", move: [0, 1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -15, highFatigue: false, walkDir: "d" },
-  grl: { category: "get_ready", move: [-1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -15, highFatigue: false, walkDir: "l" },
-  grr: { category: "get_ready", move: [1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -15, highFatigue: false, walkDir: "r" },
+  gr: { category: "get_ready", move: [0, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -20, highFatigue: false },
+  gru: { category: "get_ready", move: [0, -1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "u" },
+  grd: { category: "get_ready", move: [0, 1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "d" },
+  grl: { category: "get_ready", move: [-1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "l" },
+  grr: { category: "get_ready", move: [1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "r" },
 };
 
 export const CMD2_SPECS: Record<Cmd2Command, CommandSpec> = {
-  wu: { category: "walk", move: [0, -1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -15, highFatigue: false, walkDir: "u" },
-  wd: { category: "walk", move: [0, 1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -15, highFatigue: false, walkDir: "d" },
-  wl: { category: "walk", move: [-1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -15, highFatigue: false, walkDir: "l" },
-  wr: { category: "walk", move: [1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -15, highFatigue: false, walkDir: "r" },
+  wu: { category: "walk", move: [0, -1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "u" },
+  wd: { category: "walk", move: [0, 1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "d" },
+  wl: { category: "walk", move: [-1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "l" },
+  wr: { category: "walk", move: [1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "r" },
 
   du: { category: "dig", move: [0, 0], obsOffset: [0, -2], obsShape: "3x3", estActionCost: -250, highFatigue: true },
   dd: { category: "dig", move: [0, 0], obsOffset: [0, 2], obsShape: "3x3", estActionCost: -250, highFatigue: true },

@@ -16,7 +16,12 @@ import { getRoomProfile } from "./memory/knowledge-store";
 import { runAgentMatch } from "./runner";
 
 const config = loadAgentConfig();
-const { values } = parseArgs({ args: Bun.argv.slice(2), options: { evolve: { type: "boolean" } }, strict: false });
+const { values } = parseArgs({
+  args: Bun.argv.slice(2),
+  options: { evolve: { type: "boolean" }, "login-wait-min": { type: "string" } },
+  strict: false,
+});
+const loginWaitMs = Number(values["login-wait-min"] ?? "10") * 60_000;
 
 const mainAgent = config.useMainAgent
   ? new MainAgent({ model: config.model, subModel: config.subModel, effort: config.effort }, config.turnBudgetSec * 1000)
@@ -35,8 +40,20 @@ try {
     console.log(JSON.stringify({ warmup: ready.status, ms: Date.now() - t0 }));
   }
 
+  // サーバは同一ユーザーの二重ログインを拒否する。途中退出した試合のセッションは数分で切れるので再試行する
   const client = new Client({ retryIntervalMs: config.retryMs });
-  await client.login();
+  const loginStart = Date.now();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await client.login();
+      console.log(JSON.stringify({ loginOk: new Date().toISOString(), waitedSec: Math.round((Date.now() - loginStart) / 1000) }));
+      break;
+    } catch (err) {
+      if (Date.now() - loginStart > loginWaitMs) throw err;
+      console.log(JSON.stringify({ loginRetry: attempt + 1, at: new Date().toISOString() }));
+      await Bun.sleep(45_000);
+    }
+  }
   await client.enterRoom(config.room);
   const summary = await runAgentMatch(client, config, 1, mainAgent);
 

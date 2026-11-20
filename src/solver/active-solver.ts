@@ -1,4 +1,5 @@
 import {
+  CMD1_SPECS,
   CMD2_SPECS,
   classifyTileSafety,
   DIR_DELTA,
@@ -47,7 +48,7 @@ export function decideTurnAction(
   if (phase === "CMD1") {
     let bestDir: Dir | null = null;
     // 静止 gr のコスト: 動作 -10 + 現在地(穴)への再着地 -20
-    const stayCost = -10 + getTileInfo(0).score;
+    const stayCost = CMD1_SPECS.gr.estActionCost + getTileInfo(0).score;
     let bestScore = stayCost;
 
     const preferredFirstStep =
@@ -67,7 +68,7 @@ export function decideTurnAction(
 
       // 正得点マス、または目的地方向の安全マス(穴含む)なら gr* で前進する
       if (info.score > 0 || preferredFirstStep === dir) {
-        let net = info.score - 15;
+        let net = info.score + CMD1_SPECS[`gr${dir}` as Cmd1Command].estActionCost;
         if (preferredFirstStep === dir) {
           net += 8;
         }

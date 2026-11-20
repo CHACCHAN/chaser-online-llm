@@ -13,7 +13,7 @@
 |---|---|---|---|
 | 1-1 | サーバのバージョン | トップ `CHaserOnline003/` の `ver XXXXXXXX` | `knowledge/server.json` の `version` と一致。違えば §4 へ |
 | 1-2 | 公開ルーム一覧 | `MeetingPlace/` の表 | 使用ルームが公開中・マップ表示の可否を `room-profiles` に反映 |
-| 1-3 | ログイン〜入室 | `bun src/cli.ts status --room <N>` | 入室成功 |
+| 1-3 | ログイン〜入室 | 実戦テスト（`bun run play --room <N> --max-turns 3`）で兼ねる。**ログインだけの確認はしない**（同一ユーザーの二重ログインは拒否され、入室しないセッションが長時間ロックを残す） | 入室成功 |
 | 1-3b | ゲートウェイとモデル | `curl -s localhost:3456/api/models`（または `src/agent/models.ts`） | 使用モデルが一覧にある |
 | 1-3c | 常駐セッション | メインエージェントに2往復させる（`src/agent/claude-session.ts`） | 2回とも応答し、2回目が1回目を覚えている。応答時間を記録 |
 | 1-4 | 1ターンの許容時間 | `bun agent/tools/measure-turn-timeout.ts --room <N> --delays 5,15,30,60,90,120` | 切断されない最大遅延を `knowledge/server.json` に記録（バージョンが変わった時だけ再計測） |
