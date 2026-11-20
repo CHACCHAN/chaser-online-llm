@@ -144,3 +144,29 @@ test("memo に { } が入っていても返答を読める", async () => {
   // コードブロックで囲まれていても読む
   expect(parseMainReply('```json\n{"turn": 3, "phase": "CMD1", "action": "continue"}\n```', 3, "CMD1", ["gr"])?.action).toBe("continue");
 });
+
+test("ワープで座標系が変わったら作戦目標を解除し、メッセージで知らせる", async () => {
+  Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
+  sent.length = 0;
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
+  const wm = new WorldMap();
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 2, 2, 2, 2], 1);
+  const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
+  proto.ask = async function (this: { options: ClaudeSessionOptions }, text: string): Promise<AskResult> {
+    sent.push({ label: this.options.label ?? "", text, options: this.options });
+    const m = text.match(/\[TURN (\d+) \/ (CMD[12])\]/)!;
+    return { status: "ok", text: `{"turn": ${m[1]}, "phase": "${m[2]}", "action": "${m[2] === "CMD1" ? "plan" : "continue"}", "target": [1, 1]}`, durationMs: 1 };
+  };
+  const step = (turn: number, phase: "CMD1" | "CMD2") =>
+    agent.decide({ turn, phase, worldMap: wm, events: [], solve: (plan) => decideTurnAction(wm, phase, turn, plan) });
+  await step(1, "CMD1");
+  expect(agent.currentPlan?.target).toEqual([1, 1]);
+  (wm as unknown as { frameVersionCount: number }).frameVersionCount += 1; // ワープ
+  await step(1, "CMD2");
+  proto.ask = origAsk;
+  expect(agent.currentPlan).toBeNull();
+  expect(sent[sent.length - 1]!.text).toContain("ワープで座標系が変わった");
+  await agent.end();
+  delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
+});

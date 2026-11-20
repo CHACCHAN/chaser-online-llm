@@ -81,6 +81,8 @@ export class MainAgent {
   /** 予算切れで止めた問い合わせの見積もり分（実際の使用量は不明） */
   private estimatedTimeoutTokens = 0;
   private limitNotified = false;
+  /** 前のフェーズの座標系（ワープで変わったら作戦目標・メモの座標が無効になる） */
+  private frameVersion: number | null = null;
 
   constructor(
     private readonly settings: ClaudeModelSettings,
@@ -125,6 +127,7 @@ export class MainAgent {
     this.memo = "";
     this.recent = [];
     this.lastEst = null;
+    this.frameVersion = null;
     this.matchInfo = `room=${info.room} stage=${info.stageName ?? "unknown"} webMap=${info.webMap} roomHighScore=${info.highScore}`;
     const policy = activePolicyPrompt();
     const strategy = existsSync(STRATEGY_PATH) ? readFileSync(STRATEGY_PATH, "utf-8") : "";
@@ -150,6 +153,7 @@ export class MainAgent {
     solve: (plan: AgentPlan | null) => SolverDecision;
     events: string[];
   }): Promise<MainDecision> {
+    this.checkFrameChange(ctx.worldMap);
     this.refreshPlanStatus(ctx.worldMap);
     const solverNow = ctx.solve(this.plan);
     const result = await this.ask(ctx, solverNow);
@@ -168,7 +172,8 @@ export class MainAgent {
       ...this.settings,
       context: "evolution",
       label: "main",
-      appendSystemPrompt: readPrompt("main.md"),
+      // main.md は試合中用（ツールなし・毎フェーズ新規）なので渡さない。役割とルールは下の依頼文に書く
+      appendSystemPrompt: "あなたは CHaserOnline003 攻略プロジェクトのメインエージェント。試合後の振り返りとソルバー改修を行う。ツールを使ってよい。プロジェクトの説明は CLAUDE.md、試合中の役割は agent/prompts/main.md にある。",
     });
     session.start();
     const subResults = this.formatSubResults();
@@ -246,7 +251,12 @@ export class MainAgent {
     const message = this.buildTurnMessage(ctx, solverNow, legal);
 
     // 先に起動しておいたプロセスで聞き、すぐ次のフェーズ用を起動する
-    const call = this.next ?? this.spawnCall();
+    // 先に起動したプロセスが待ち時間の間に終わっていたら（他プレイヤー待ちが長い等）新しく起動する
+    let call = this.next;
+    if (!call?.alive) {
+      call?.kill();
+      call = this.spawnCall();
+    }
     this.next = this.spawnCall();
     const res = await call.ask(message, this.turnBudgetMs);
     if (res.status === "ok") {
@@ -348,6 +358,19 @@ export class MainAgent {
         // ignore
       }
     }
+  }
+
+  /** ワープで座標系が変わったら、古い座標の作戦目標を解除し、メモの座標が古いことを知らせる */
+  private checkFrameChange(worldMap: WorldMap): void {
+    const v = worldMap.frameVersion;
+    if (this.frameVersion !== null && v !== this.frameVersion) {
+      if (this.plan) this.notices.push(`ワープで座標系が変わった。作戦目標 (${this.plan.target.join(",")}) は古い座標なので解除した`);
+      else this.notices.push("ワープで座標系が変わった");
+      this.notices.push("メモ・直近の経過に書かれた座標はワープ前の座標系（今の pos・マップとは対応しない）。必要ならメモを書き直すこと");
+      this.plan = null;
+      this.recent.push(`--- ワープ（ここより前の座標は古い座標系） ---`);
+    }
+    this.frameVersion = v;
   }
 
   /** 作戦目標への到達・到達不能を検知して作戦を解除し、次のメッセージで知らせる */

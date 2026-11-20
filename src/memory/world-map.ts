@@ -310,6 +310,12 @@ export class WorldMap {
   private selfTileId = 1000;
   /** 自前観測で見えた他プレイヤー（ローカル座標）。key = tileId */
   private enemySightings = new Map<number, { x: number; y: number; tileId: number; lastSeenTurn: number }>();
+  /** ローカル座標系が変わった回数（ワープで新しい区画に入る・既知の区画に戻る）。変わったら古い座標は使えない */
+  private frameVersionCount = 0;
+
+  public get frameVersion(): number {
+    return this.frameVersionCount;
+  }
   private globalOffset: [number, number] | null = null; // [globalOriginX, globalOriginY] so global = local + offset
   private trail: [number, number][] = [[0, 0]];
   private stageName: string | null = null;
@@ -595,6 +601,8 @@ export class WorldMap {
         this.segmentIndex = segIdx;
         this.x = matchedX;
         this.y = matchedY;
+        this.frameVersionCount += 1;
+        this.enemySightings.clear();
         return true;
       }
     }
@@ -674,6 +682,9 @@ export class WorldMap {
     this.trail = [[0, 0]];
     this.lastMoveDir = null;
     this.globalOffset = null;
+    this.frameVersionCount += 1;
+    // 敵の目撃位置は古い座標系なので捨てる（新しい座標系で見え直したら記録される）
+    this.enemySightings.clear();
     this.warpLinks.push({
       tileValue: warpTileValue ?? -1,
       fromSegment: prevSegment,
