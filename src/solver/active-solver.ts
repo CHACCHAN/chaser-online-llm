@@ -4,6 +4,8 @@ import {
   classifyTileSafety,
   DIR_DELTA,
   DIRS,
+  getHoleRevisitPenalty,
+  getPathUtility,
   getTileInfo,
   OPPOSITE_DIR,
   type Cmd1Command,
@@ -57,13 +59,14 @@ export function decideTurnAction(
 
   if (phase === "CMD1") {
     let bestDir: Dir | null = null;
-    // 静止 gr のコスト: 動作 -10 + 現在地(穴)への再着地 -20
+    // 静止 gr は -40。訪問罰は探索上の優先度であって、静止との得点比較には使わない。
     const stayCost = CMD1_SPECS.gr.estActionCost + getTileInfo(0).score;
-    let bestScore = stayCost;
+    let bestScore = -Infinity;
+    let bestIsRouted = false;
 
     const preferredFirstStep =
       planStep?.dir ??
-      (topValueTargets[0] && topValueTargets[0].estimatedNetGain > -35
+      (topValueTargets[0] && getPathUtility(topValueTargets[0]) > -35
         ? topValueTargets[0].firstStep
         : nearestFrontiers[0]?.firstStep ?? null);
 
@@ -77,33 +80,23 @@ export function decideTurnAction(
       const info = getTileInfo(rec.value);
       if (!info.passable || info.hazard || !info.known) continue;
 
-      // 正得点マス、または目的地方向の安全マス(穴含む)なら gr* で前進する
-      if (info.score > 0 || preferredFirstStep === dir) {
-        let net = info.score + CMD1_SPECS[`gr${dir}` as Cmd1Command].estActionCost;
-        if (preferredFirstStep === dir) {
-          net += 8;
-        }
-        let hasSafeContinuation = false;
-        for (const d2 of DIRS) {
-          const [dx2, dy2] = DIR_DELTA[d2];
-          if (nx + dx2 === x && ny + dy2 === y) continue;
-          const nextRec = worldMap.getTile(nx + dx2, ny + dy2);
-          if (!nextRec) {
-            hasSafeContinuation = true;
-            break;
-          }
-          const nextInfo = getTileInfo(nextRec.value);
-          if (nextInfo.passable && !nextInfo.hazard && nextRec.value !== 0) {
-            hasSafeContinuation = true;
-            break;
-          }
-        }
-        if (hasSafeContinuation) net += 12;
-
-        if (net > bestScore) {
-          bestScore = net;
-          bestDir = dir;
-        }
+      // 目標がなければ未踏の安全マスを優先。既訪の穴が唯一の出口でも静止しない。
+      const routed = info.score > 0 || preferredFirstStep === dir;
+      if (bestIsRouted && !routed) continue;
+      let score = info.score + CMD1_SPECS[`gr${dir}`].estActionCost - getHoleRevisitPenalty(rec);
+      if (preferredFirstStep === dir) score += 8;
+      if (DIRS.some((d2) => {
+        if (d2 === OPPOSITE_DIR[dir]) return false;
+        const [dx2, dy2] = DIR_DELTA[d2];
+        const next = worldMap.getTile(nx + dx2, ny + dy2);
+        if (!next) return true; // Observation opportunity, not permission to land there.
+        const nextInfo = getTileInfo(next.value);
+        return next.visitedCount === 0 && nextInfo.known && nextInfo.passable && !nextInfo.hazard;
+      })) score += 12;
+      if ((routed && !bestIsRouted) || score > bestScore) {
+        bestScore = score;
+        bestIsRouted = routed;
+        bestDir = dir;
       }
     }
 
@@ -111,7 +104,7 @@ export function decideTurnAction(
       const cmd = `gr${bestDir}` as Cmd1Command;
       return {
         command: cmd,
-        reason: `${planTag && preferredFirstStep === bestDir ? `${planTag} ` : ""}Forward ${cmd} (estNet=${bestScore})`,
+        reason: `${planTag && preferredFirstStep === bestDir ? `${planTag} ` : ""}Forward ${cmd} (priority=${bestScore})`,
         confidence: 0.92,
       };
     }
@@ -134,7 +127,7 @@ export function decideTurnAction(
     : DIRS;
 
   const bestTarget =
-    topValueTargets[0] && topValueTargets[0].estimatedNetGain > -80
+    topValueTargets[0] && getPathUtility(topValueTargets[0]) > -80
       ? topValueTargets[0]
       : null;
   const bestFrontier = nearestFrontiers[0] ?? null;
@@ -173,7 +166,7 @@ export function decideTurnAction(
     }
 
     // 訪問回数が多いマスへの再突入と直前の逆走を抑止して往復振動を防ぐ
-    const revisitPenalty = (rec?.visitedCount ?? 0) * 18;
+    const revisitPenalty = getHoleRevisitPenalty(rec);
     const reversePenalty = lastDir && dir === OPPOSITE_DIR[lastDir] ? 12 : 0;
     const inertiaBonus = (dirOrder.length - i) * 0.5;
     const total = immediateScore + routeBonus + inertiaBonus - revisitPenalty - reversePenalty;
