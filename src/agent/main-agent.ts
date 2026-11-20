@@ -393,8 +393,11 @@ export class MainAgent {
       this.recent.join("\n") || "(試合開始)",
       "## 現在の状況",
       `pos=(${ev.position.join(",")}) est=${stats.estimatedTotalScore} (action ${stats.estimatedActionScore}, item ${stats.estimatedItemScore}) holeRevisits=${stats.holeRevisits}`,
-      "map (@=自分, ?=未知):",
-      ctx.worldMap.renderAscii(6),
+      ctx.worldMap.renderAgentMap({
+        maxSide: numSetting("AGENT_MAP_MAX_SIDE", { min: 5, integer: true }),
+        enemies: ctx.worldMap.getEnemySightings().map((e) => ({ x: e.x, y: e.y, stale: e.lastSeenTurn < ctx.turn })),
+        planTarget: this.plan?.target ?? null,
+      }),
       `現在の作戦: ${this.plan ? `目標(${this.plan.target.join(",")})${this.plan.note ? ` ${this.plan.note}` : ""}` : "なし（ソルバーの貪欲探索）"}`,
       `continue した場合の手: ${solverNow.command} — ${solverNow.reason}`,
       `目標候補: ${targets.join(" / ") || "なし"}`,

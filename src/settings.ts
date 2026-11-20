@@ -88,6 +88,11 @@ export const SETTINGS = {
     defaultValue: "2000",
   },
   AGENT_RECENT_PHASES: { group: "llm", description: "メインに渡す「直近の経過」のフェーズ数", defaultValue: "20" },
+  AGENT_MAP_MAX_SIDE: {
+    group: "llm",
+    description: "メインに毎回渡すマップの1辺の上限（マス）。Webマップがあれば全体、なければ観測済みの範囲を渡し、これを超える分は自分を中心に切り出す",
+    defaultValue: "80",
+  },
   AGENT_SUB_TODO_ITEMS: { group: "llm", description: "メインに毎回渡す「サブへの依頼（TODO）」の件数（新しい順）", defaultValue: "10" },
   AGENT_SUB_TASK_TIMEOUT_MIN: { group: "llm", description: "サブの1仕事あたりの上限（分）", defaultValue: "10" },
   AGENT_POST_MATCH_TIMEOUT_MIN: { group: "llm", description: "試合後の振り返り・ソルバー改修の上限（分）", defaultValue: "15" },

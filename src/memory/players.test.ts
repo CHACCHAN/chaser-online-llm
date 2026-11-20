@@ -28,3 +28,19 @@ test("黄色の線は作戦目標までの実際の経路（罠を避ける）",
   const ui = wm.buildUiMapState(null, [1, 1]);
   expect(ui.plannedPath.length).toBe(route!.length);
 });
+
+test("メインに渡すマップは観測済み範囲すべて（目盛り・敵・作戦目標つき）", async () => {
+  const { WorldMap } = await import("./world-map");
+  const wm = new WorldMap();
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 12, 2, 2, 2], 1);
+  const m = wm.renderAgentMap({ maxSide: 80, enemies: [{ x: 5, y: 0, stale: true }], planTarget: [-4, 2] });
+  const rows = m.split("\n");
+  expect(rows[0]).toContain("自作マップ");
+  expect(m).toContain("@");
+  expect(m).toContain("e");
+  expect(m).toContain("P");
+  // x=-4..5 の10列（＋y目盛り）
+  expect(rows[2]!.trim()).toBe("4321012345");
+  // 上限を超えたら自分中心に切り出す
+  expect(wm.renderAgentMap({ maxSide: 5 }).split("\n")[2]!.trim()).toBe("101");
+});

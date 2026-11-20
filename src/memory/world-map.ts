@@ -1177,6 +1177,59 @@ export class WorldMap {
     return lines.join("\n");
   }
 
+  /**
+   * メインエージェントに渡すマップ。Web マップが位置合わせ済みなら全体（観測で上書き済み）、なければ自分で観測した範囲すべて。
+   * 座標はローカル座標（pos・目標候補・plan の target と同じ）。上に x、左に y の目盛りを付ける。
+   * @param maxSide 1辺の上限（超える場合は自分を中心に切り出す）
+   */
+  public renderAgentMap(opts: { maxSide: number; enemies?: { x: number; y: number; stale: boolean }[]; planTarget?: [number, number] | null }): string {
+    let minX = this.x, maxX = this.x, minY = this.y, maxY = this.y;
+    const extra: [number, number][] = [...(opts.enemies ?? []).map((e): [number, number] => [e.x, e.y]), ...(opts.planTarget ? [opts.planTarget] : [])];
+    for (const [kx, ky] of [...[...this.currentMap.keys()].map(parseCoordKey), ...extra]) {
+      if (kx < minX) minX = kx;
+      if (kx > maxX) maxX = kx;
+      if (ky < minY) minY = ky;
+      if (ky > maxY) maxY = ky;
+    }
+    const side = Math.max(5, opts.maxSide);
+    const clamp = (lo: number, hi: number, c: number): [number, number] => {
+      if (hi - lo + 1 <= side) return [lo, hi];
+      const half = Math.floor(side / 2);
+      const a = Math.min(Math.max(lo, c - half), hi - side + 1);
+      return [a, a + side - 1];
+    };
+    [minX, maxX] = clamp(minX, maxX, this.x);
+    [minY, maxY] = clamp(minY, maxY, this.y);
+    const enemyAt = new Map((opts.enemies ?? []).map((e) => [coordKey(e.x, e.y), e.stale ? "e" : "E"]));
+    const yw = Math.max(String(minY).length, String(maxY).length);
+    const pad = " ".repeat(yw + 1);
+    let tens = pad, units = pad;
+    for (let x = minX; x <= maxX; x++) {
+      units += String(Math.abs(x) % 10);
+      // 十の位は x が10の倍数の列にだけ書く。負の列は "-"
+      tens += x % 10 === 0 ? String(Math.floor(Math.abs(x) / 10) % 10) : x < 0 ? "-" : " ";
+    }
+    const lines = [tens, units];
+    for (let y = minY; y <= maxY; y++) {
+      let row = `${String(y).padStart(yw)} `;
+      for (let x = minX; x <= maxX; x++) {
+        const k = coordKey(x, y);
+        if (x === this.x && y === this.y) row += "@";
+        else if (enemyAt.has(k)) row += enemyAt.get(k);
+        else if (opts.planTarget && opts.planTarget[0] === x && opts.planTarget[1] === y) row += "P";
+        else {
+          const rec = this.currentMap.get(k);
+          row += !rec ? "?" : rec.value >= 1000 ? "E" : getTileInfo(rec.value).symbol;
+        }
+      }
+      lines.push(row);
+    }
+    const src = this.globalGrid && this.globalOffset ? "Webマップ全体（自分の観測で上書き済み）" : "自作マップ（これまでに観測した範囲）";
+    lines.unshift(`map: ${src} x=${minX}..${maxX} y=${minY}..${maxY}（上の2行が x の目盛り: 1行目は10の倍数の列に十の位・負の列に "-"、2行目は一の位。左が y。x は右へ、y は下へ増える）`);
+    lines.push("Legend: @=You E=敵 e=敵(古い目撃) P=作戦目標 .=0穴(-20) ,=2土(+10) *=3(+30) T=1(+50) A=9(+100) F=5-8(+125..200) G=70-79(+400) W=Warp B=BlackStar #=10岩盤(通行不可) !=4ジオード(-1000) X=12奈落(-600) ?=未知");
+    return lines.join("\n");
+  }
+
   public inspect(radius = 8): MapInspectResult {
     const knownTargets: MapInspectResult["knownTargets"] = [];
     for (const [k, rec] of this.currentMap.entries()) {
