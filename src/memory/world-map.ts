@@ -849,6 +849,51 @@ export class WorldMap {
     return null;
   }
 
+  /**
+   * 目標マスまでの経路（自分の位置〜目標、ローカル座標）。コストは firstStepTowards と同じ（穴・マイナスマスを避ける）。
+   * 表示用。到達できなければ null。
+   */
+  public routeTo(tx: number, ty: number, maxSteps = 60): [number, number][] | null {
+    const startKey = coordKey(this.x, this.y);
+    const targetKey = coordKey(tx, ty);
+    if (startKey === targetKey) return [[this.x, this.y]];
+    const walkCost = -CMD2_SPECS.wu.estActionCost;
+    const dist = new Map([[startKey, 0]]);
+    const parent = new Map<string, string>();
+    const queue: { x: number; y: number; cost: number; steps: number }[] = [{ x: this.x, y: this.y, cost: 0, steps: 0 }];
+    const build = (key: string): [number, number][] => {
+      const out: [number, number][] = [];
+      for (let k: string | undefined = key; k !== undefined; k = parent.get(k)) out.push(parseCoordKey(k));
+      return out.reverse();
+    };
+    while (queue.length > 0) {
+      queue.sort((a, b) => a.cost - b.cost || a.steps - b.steps);
+      const cur = queue.shift()!;
+      if (cur.steps >= maxSteps) continue;
+      const curKey = coordKey(cur.x, cur.y);
+      for (const dir of DIRS) {
+        const [dx, dy] = DIR_DELTA[dir];
+        const nx = cur.x + dx;
+        const ny = cur.y + dy;
+        const nKey = coordKey(nx, ny);
+        if (nKey === targetKey) {
+          parent.set(nKey, curKey);
+          return build(nKey);
+        }
+        const rec = this.currentMap.get(nKey);
+        if (!rec) continue;
+        const info = getTileInfo(rec.value);
+        if (!info.passable || info.hazard) continue;
+        const nextCost = cur.cost + walkCost + Math.max(0, -info.score) + getHoleRevisitPenalty(rec);
+        if (nextCost >= (dist.get(nKey) ?? Infinity)) continue;
+        dist.set(nKey, nextCost);
+        parent.set(nKey, curKey);
+        queue.push({ x: nx, y: ny, cost: nextCost, steps: cur.steps + 1 });
+      }
+    }
+    return null;
+  }
+
   public findPathTargets(maxSteps = 35): {
     topValueTargets: PathTarget[];
     nearestFrontiers: PathTarget[];
@@ -1236,12 +1281,13 @@ export class WorldMap {
         ? topValueTargets[0]
         : nearestFrontiers[0] ?? null;
 
-    const localPlannedPath: [number, number][] = [[this.x, this.y]];
-    if (nextLocal) {
+    // 黄色の線: メインの作戦目標があればそこへ、なければソルバーの当面の目標へ、実際に通る経路を描く
+    const goal: [number, number] | null = planTarget ?? (mainGoal ? [mainGoal.x, mainGoal.y] : null);
+    let localPlannedPath: [number, number][] = [[this.x, this.y]];
+    if (goal) {
+      localPlannedPath = this.routeTo(goal[0], goal[1]) ?? [[this.x, this.y], goal];
+    } else if (nextLocal) {
       localPlannedPath.push(nextLocal);
-    }
-    if (mainGoal) {
-      localPlannedPath.push([mainGoal.x, mainGoal.y]);
     }
 
     // 1. Web マップがあり自機の位置合わせも済んでいれば、全体マップをベースに最新観測を上書きして返す

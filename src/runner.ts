@@ -373,7 +373,7 @@ export async function runAgentMatch(
         holeRevisits: curStats.holeRevisits,
         hazardHits: curStats.hazardHits,
       });
-      uiBus.updateMap(worldMap.buildUiMapState(null));
+      uiBus.updateMap(worldMap.buildUiMapState(null, mainAgent?.currentPlan?.target ?? null));
       uiBus.pushTurnRecord(record);
 
       await Bun.write(

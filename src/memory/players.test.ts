@@ -15,3 +15,16 @@ test("自前マップ: 周囲に見えた他プレイヤーを敵として記録
   expect(wm.getTile(1, -1)).toBeUndefined();
   expect(ui.updatedTurn).toBe(1);
 });
+
+test("黄色の線は作戦目標までの実際の経路（罠を避ける）", async () => {
+  const { WorldMap } = await import("./world-map");
+  const wm = new WorldMap();
+  // 自分の右 (1,0) に奈落、上下は土。(2,0) へは回り込む必要がある
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 12, 2, 2, 2], 1);
+  const route = wm.routeTo(1, 1);
+  expect(route?.[0]).toEqual([0, 0]);
+  expect(route?.[route.length - 1]).toEqual([1, 1]);
+  expect(route?.some(([x, y]) => x === 1 && y === 0)).toBe(false);
+  const ui = wm.buildUiMapState(null, [1, 1]);
+  expect(ui.plannedPath.length).toBe(route!.length);
+});
