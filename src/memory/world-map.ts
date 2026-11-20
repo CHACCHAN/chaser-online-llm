@@ -1180,9 +1180,9 @@ export class WorldMap {
   /**
    * メインエージェントに渡すマップ。Web マップが位置合わせ済みなら全体（観測で上書き済み）、なければ自分で観測した範囲すべて。
    * 座標はローカル座標（pos・目標候補・plan の target と同じ）。上に x、左に y の目盛りを付ける。
-   * @param maxSide 1辺の上限（超える場合は自分を中心に切り出す）
+   * 切り出しはしない（常に全体を渡す）。
    */
-  public renderAgentMap(opts: { maxSide: number; enemies?: { x: number; y: number; stale: boolean }[]; planTarget?: [number, number] | null }): string {
+  public renderAgentMap(opts: { enemies?: { x: number; y: number; stale: boolean }[]; planTarget?: [number, number] | null }): string {
     let minX = this.x, maxX = this.x, minY = this.y, maxY = this.y;
     const extra: [number, number][] = [...(opts.enemies ?? []).map((e): [number, number] => [e.x, e.y]), ...(opts.planTarget ? [opts.planTarget] : [])];
     for (const [kx, ky] of [...[...this.currentMap.keys()].map(parseCoordKey), ...extra]) {
@@ -1191,15 +1191,6 @@ export class WorldMap {
       if (ky < minY) minY = ky;
       if (ky > maxY) maxY = ky;
     }
-    const side = Math.max(5, opts.maxSide);
-    const clamp = (lo: number, hi: number, c: number): [number, number] => {
-      if (hi - lo + 1 <= side) return [lo, hi];
-      const half = Math.floor(side / 2);
-      const a = Math.min(Math.max(lo, c - half), hi - side + 1);
-      return [a, a + side - 1];
-    };
-    [minX, maxX] = clamp(minX, maxX, this.x);
-    [minY, maxY] = clamp(minY, maxY, this.y);
     const enemyAt = new Map((opts.enemies ?? []).map((e) => [coordKey(e.x, e.y), e.stale ? "e" : "E"]));
     const yw = Math.max(String(minY).length, String(maxY).length);
     const pad = " ".repeat(yw + 1);

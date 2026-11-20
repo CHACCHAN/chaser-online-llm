@@ -394,7 +394,6 @@ export class MainAgent {
       "## 現在の状況",
       `pos=(${ev.position.join(",")}) est=${stats.estimatedTotalScore} (action ${stats.estimatedActionScore}, item ${stats.estimatedItemScore}) holeRevisits=${stats.holeRevisits}`,
       ctx.worldMap.renderAgentMap({
-        maxSide: numSetting("AGENT_MAP_MAX_SIDE", { min: 5, integer: true }),
         enemies: ctx.worldMap.getEnemySightings().map((e) => ({ x: e.x, y: e.y, stale: e.lastSeenTurn < ctx.turn })),
         planTarget: this.plan?.target ?? null,
       }),
