@@ -71,6 +71,11 @@ export const SETTINGS = {
   LLM_SUB_MODEL_NAME: { group: "llm", description: "サブエージェントのモデル（空ならメインと同じ）", defaultValue: "" },
   LLM_MODEL_EFFORT: { group: "llm", description: "メインの effort: low | medium | high | xhigh | max", defaultValue: "medium" },
   LLM_SUB_MODEL_EFFORT: { group: "llm", description: "サブの effort（空ならメインと同じ）", defaultValue: "" },
+  AGENT_POLICY: {
+    group: "llm",
+    description: "使う作戦方針の名前（agent/policies/<名前>.md。WebUI の設定から編集・切替できる）",
+    defaultValue: "default",
+  },
   AGENT_USE_MAIN: { group: "llm", description: "メインエージェントを使う（false でソルバーのみ）", defaultValue: "true" },
   AGENT_TURN_BUDGET_SEC: {
     group: "llm",

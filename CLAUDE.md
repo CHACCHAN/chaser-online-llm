@@ -9,6 +9,7 @@ CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/
 - **時間切れ**: 思考予算（既定 20 秒）を超えた・応答が不正なフェーズは、ソルバー手が自動送信される。
 - **試合後**: 同じメインエージェントが振り返り、`src/solver/active-solver.ts` を改修する。リプレイ検証に失敗したら自動ロールバック。
 - **起動**: `bun run start`（Web ダッシュボード）／ `bun run play --room N`（WebUI なしで1試合）。
+- **作戦方針**: ユーザーが `agent/policies/<名前>.md`（WebUI の設定からも編集可）に書き、`AGENT_POLICY` で選ぶ。メインはこれを最優先で守る。
 - **設定**: 全て `.env` から読む。項目・既定値・説明は `src/settings.ts` に一本化（コードに直書きしない）。追加したら `bun scripts/gen-env-example.ts`。
 - **セットアップ・自己レビュー**: `agent/SETUP.md` → `agent/SELF_CHECK.md`（実施後は両方を更新する）。
 - 詳細仕様: [docs/README.md](docs/README.md)

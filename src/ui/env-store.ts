@@ -89,6 +89,22 @@ export function loadProjectEnvEntries(): EnvEntry[] {
   return entries;
 }
 
+/** .env の1項目だけを書き換える（他の行・コメントはそのまま）。実行中の Bun.env にも即時反映 */
+export function setProjectEnvValue(key: string, value: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`invalid key: ${key}`);
+  const lines = existsSync(ENV_PATH) ? readFileSync(ENV_PATH, "utf-8").split(/\r?\n/) : [];
+  const idx = lines.findIndex((l) => l.trim().startsWith(`${key}=`));
+  const line = `${key}=${formatEnvValue(value)}`;
+  if (idx >= 0) lines[idx] = line;
+  else {
+    while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+    lines.push(line);
+  }
+  writeFileSync(ENV_PATH, lines.join("\n") + "\n", "utf-8");
+  process.env[key] = value;
+  Bun.env[key] = value;
+}
+
 /**
  * `.env` ファイルへ保存し、同時に現在実行中の `process.env` / `Bun.env` へも即時反映する。
  */

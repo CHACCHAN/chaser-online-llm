@@ -8,6 +8,7 @@ import { logger } from "../tools/logger";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
 import { type AskResult, ClaudeSession } from "./claude-session";
+import { activePolicyPrompt } from "./policy";
 import { SubWorker } from "./sub-worker";
 import { addUsage, diffUsage, emptyUsage, totalTokens, type UsageTotals } from "./usage";
 
@@ -91,6 +92,8 @@ export class MainAgent {
   private plan: AgentPlan | null = null;
   private notices: string[] = [];
   private matchInfo = "";
+  /** 試合開始時に読んだユーザー定義の作戦方針（試合中は固定） */
+  private policy = "";
   /** 今のメインセッションでのやり取り（次の要約の材料） */
   private history: Exchange[] = [];
   /** 入れ替えで終了したメインの使用量 */
@@ -146,8 +149,10 @@ export class MainAgent {
     this.notices = [];
     this.history = [];
     this.matchInfo = `room=${info.room} stage=${info.stageName ?? "unknown"} webMap=${info.webMap} roomHighScore=${info.highScore}`;
+    this.policy = activePolicyPrompt();
     const text = [
       `[MATCH START] ${this.matchInfo}`,
+      ...(this.policy ? ["", this.policy, ""] : []),
       "knowledge/strategy.md と knowledge/tiles.json に目を通して準備し、準備できたら「READY」とだけ返答せよ。",
     ].join("\n");
     const res = await this.session.ask(text, numSetting("AGENT_WARMUP_TIMEOUT_SEC", { min: 5 }) * 1000);
@@ -237,6 +242,7 @@ export class MainAgent {
         "",
         diagnosisMarkdown,
         subResults ? `\n${subResults}` : "",
+        this.policy ? `\n${this.policy}\n\nソルバーの改修もこの方針に沿わせること。` : "",
         "",
         "## やること",
         "1. 失点原因と、作戦（plan）が効いた/効かなかった場面を特定する（必要なら Agent ツールで調査を並行してよい）。",
@@ -350,6 +356,7 @@ export class MainAgent {
       "",
       summary.text.trim(),
       "",
+      ...(this.policy ? [this.policy, ""] : []),
       "準備できたら「READY」とだけ返答せよ。",
     ].join("\n");
     const ready = await standby.ask(resumeText, numSetting("AGENT_WARMUP_TIMEOUT_SEC", { min: 5 }) * 1000);
@@ -456,6 +463,15 @@ export class MainAgent {
       `continue した場合の手: ${solverNow.command} — ${solverNow.reason}`,
       `目標候補: ${targets.join(" / ") || "なし"}`,
     ];
+    const enemies = ctx.worldMap.getEnemySightings();
+    if (enemies.length > 0) {
+      const [px, py] = ev.position;
+      lines.push(
+        `敵: ${enemies
+          .map((e) => `P${e.tileId}(${e.x},${e.y}) 距離${Math.abs(e.x - px) + Math.abs(e.y - py)} T${e.lastSeenTurn}に目撃${e.lastSeenTurn < ctx.turn ? "（古い）" : ""}`)
+          .join(" / ")}`,
+      );
+    }
     if (ctx.events.length > 0) lines.push(`イベント: ${ctx.events.join(", ")}`);
     if (this.notices.length > 0) lines.push(...this.notices.splice(0));
     const subResults = this.formatSubResults();

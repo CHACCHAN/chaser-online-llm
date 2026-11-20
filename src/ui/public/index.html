@@ -314,6 +314,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .dlg-b { padding: 12px 16px; overflow-y: auto; max-height: calc(86vh - 120px); }
 .dlg-b h3 { font-size: 12px; margin: 14px 0 6px; color: var(--ink2); font-weight: 600; }
 .dlg-b h3:first-child { margin-top: 0; }
+.pol-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+.pol-row select, .pol-row input { font: inherit; padding: 4px 6px; border: 1px solid var(--line, #ccc); border-radius: 6px; background: var(--bg, #fff); color: inherit; }
+#polText { width: 100%; box-sizing: border-box; min-height: 180px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px; border: 1px solid var(--line, #ccc); border-radius: 6px; background: var(--bg, #fff); color: inherit; resize: vertical; }
 .envrow { display: grid; grid-template-columns: 200px 1fr auto; gap: 8px; align-items: center; padding: 3px 0; }
 .envrow input { background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 3px 7px; height: 26px; width: 100%; font-family: var(--mono); font-size: 12px; }
 .envrow .d { font-size: 11px; color: var(--ink3); grid-column: 1 / -1; margin-top: -2px; }
@@ -453,6 +456,16 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <button class="btn" id="btnModels" type="button">モデル一覧を再取得</button>
       <span class="hint" id="opMsg"></span>
     </div>
+    <h3>作戦方針（メインエージェントに最優先で渡す。次の試合から有効）</h3>
+    <div class="pol-row">
+      <select id="polSel" aria-label="方針"></select>
+      <span class="hint" id="polActive"></span>
+      <button class="btn" id="polUse" type="button">この方針を使う</button>
+      <input id="polNew" placeholder="新しい方針名 (英数字)" size="18" aria-label="新しい方針名">
+      <button class="btn" id="polCreate" type="button">複製して作成</button>
+    </div>
+    <textarea id="polText" spellcheck="false" aria-label="方針の内容"></textarea>
+    <div class="pol-row"><button class="btn primary" id="polSave" type="button">方針を保存</button><span class="hint" id="polMsg"></span></div>
     <h3>.env</h3>
     <div id="envBody" class="dim">読み込み中...</div>
   </div>
@@ -1279,7 +1292,44 @@ $("#logToggle").addEventListener("click", () => { S.logCollapsed = !S.logCollaps
 
 /* ============ 設定ダイアログ ============ */
 const dlg = $("#dlg"); let envRows = [];
-$("#btnSettings").addEventListener("click", () => { dlg.showModal(); loadEnv(); });
+$("#btnSettings").addEventListener("click", () => { dlg.showModal(); loadEnv(); loadPolicies(); });
+/* 作戦方針 (agent/policies/<name>.md) */
+let polActive = "default";
+async function loadPolicies(select) {
+  try {
+    const d = await jget("/api/policies"); polActive = d.active;
+    const names = d.names.length ? d.names : [d.active];
+    const cur = select || $("#polSel").value || d.active;
+    $("#polSel").innerHTML = names.map((n) => `<option value="${esc(n)}"${n === cur ? " selected" : ""}>${esc(n)}${n === d.active ? "（使用中）" : ""}</option>`).join("");
+    $("#polActive").textContent = `使用中: ${d.active}`;
+    await loadPolicyText($("#polSel").value);
+  } catch { $("#polMsg").textContent = "方針を取得できません"; }
+}
+async function loadPolicyText(name) {
+  try { const d = await jget(`/api/policies/${encodeURIComponent(name)}`); $("#polText").value = d.text || ""; $("#polMsg").textContent = ""; }
+  catch { $("#polText").value = ""; $("#polMsg").textContent = "まだ中身がありません"; }
+}
+async function polReq(url, method, body) {
+  const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({})); if (!r.ok || d.ok === false) throw new Error(d.error || r.status); return d;
+}
+$("#polSel").addEventListener("change", () => loadPolicyText($("#polSel").value));
+$("#polSave").addEventListener("click", async () => {
+  const name = $("#polSel").value;
+  try { await polReq(`/api/policies/${encodeURIComponent(name)}`, "PUT", { text: $("#polText").value }); $("#polMsg").textContent = `${name} を保存しました（次の試合から有効）`; }
+  catch (e) { $("#polMsg").textContent = `保存できません: ${e.message}`; }
+});
+$("#polUse").addEventListener("click", async () => {
+  const name = $("#polSel").value;
+  try { await polReq("/api/policies/active", "POST", { name }); $("#polMsg").textContent = `${name} を使います（次の試合から）`; loadPolicies(name); }
+  catch (e) { $("#polMsg").textContent = `切り替えできません: ${e.message}`; }
+});
+$("#polCreate").addEventListener("click", async () => {
+  const name = $("#polNew").value.trim();
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(name)) { $("#polMsg").textContent = "方針名は英数字・_・- のみ（40字以内）"; return; }
+  try { await polReq(`/api/policies/${encodeURIComponent(name)}`, "PUT", { text: $("#polText").value.replace(/^# 作戦方針: .*/m, `# 作戦方針: ${name}`) }); $("#polNew").value = ""; $("#polMsg").textContent = `${name} を作成しました`; loadPolicies(name); }
+  catch (e) { $("#polMsg").textContent = `作成できません: ${e.message}`; }
+});
 $("#dlgClose").addEventListener("click", () => dlg.close());
 async function loadEnv() {
   try { const d = await jget("/api/env"); envRows = d.entries || []; renderEnv(); } catch { $("#envBody").textContent = ".env を取得できません"; }

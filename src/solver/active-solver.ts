@@ -194,7 +194,7 @@ export function decideTurnAction(
       const kRec = worldMap.getTile(x + kdx, y + kdy);
       if (!kRec) continue; // 未知へは飛ばない（room556 で大損）
       const kInfo = getTileInfo(kRec.value);
-      if (kInfo.passable && !kInfo.hazard && kInfo.score >= 150) {
+      if (kInfo.passable && !kInfo.hazard && kInfo.score >= 400) {
         return {
           command: keiCmd,
           reason: `Knight jump ${keiCmd} over holes/traps onto high-value ${kInfo.label}(+${kInfo.score})`,

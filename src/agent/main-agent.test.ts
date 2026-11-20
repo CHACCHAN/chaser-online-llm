@@ -78,6 +78,9 @@ test("会話が閾値を超えると裏で要約し、試合を止めずにメ�
   // 新しいメインは要約入りの RESUME から始まり、会話は小さく保たれる
   expect(sent.some((s) => s.label === "main" && s.text.startsWith("[MATCH RESUME]") && s.text.includes("要約: 北の未探索域"))).toBe(true);
   expect(sent.some((s) => s.label === "compact")).toBe(true);
+  // ユーザー定義の作戦方針は開始時と入れ替え後の両方で渡る
+  expect(sent[0]?.text).toContain("ユーザー定義の作戦方針");
+  expect(sent.find((s) => s.text.startsWith("[MATCH RESUME]"))?.text).toContain("ユーザー定義の作戦方針");
   expect(u.mainContextTokens).toBeLessThan(12_000);
   // 使用量は入れ替え前のメイン・要約係も含めて数える
   expect(u.totalTokens).toBe(sent.length * 1000);

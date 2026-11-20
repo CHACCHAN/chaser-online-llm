@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-20T12:55:07.277Z",
+  "updatedAt": "2026-11-20T13:30:00.000Z",
   "tiles": {
     "0": {
       "name": "hole",
@@ -10,7 +10,8 @@
       "hazard": false,
       "symbol": ".",
       "known": true,
-      "source": "verified"
+      "source": "verified",
+      "notes": "room555: revisit of a visited hole re-pays -20 (holeRevisits=1 this match). One-way sweeps preferred."
     },
     "1": {
       "name": "target",
@@ -153,6 +154,28 @@
       "symbol": "W",
       "known": true,
       "source": "inferred"
+    },
+    "61": {
+      "name": "geo_metal_hit",
+      "label": "ジオメタル(61)",
+      "score": 400,
+      "passable": true,
+      "hazard": false,
+      "symbol": "G",
+      "known": true,
+      "source": "verified",
+      "notes": "room555: official itemPoint 44885 vs estimated 36990 (+7895) — the gap equals G71/G77/G79 family + warps paying ~+100 more per tile than the old estimate."
+    },
+    "62": {
+      "name": "geo_metal_family",
+      "label": "ジオメタル系合計補正",
+      "score": 100,
+      "passable": true,
+      "hazard": false,
+      "symbol": "G",
+      "known": true,
+      "source": "verified",
+      "notes": "room555: G-family (71/77/79) effective average is ~+490..500/item, not +400. Estimator under-counted by 7895 over 89 turns."
     },
     "23": {
       "name": "warp_23",

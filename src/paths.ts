@@ -16,6 +16,8 @@ export const ASSETS_DIR = path.join(PROJECT_ROOT, "assets");
 
 /** エージェント用手順書・プロンプト */
 export const AGENT_DIR = path.join(PROJECT_ROOT, "agent");
+/** ユーザー定義の作戦方針 (agent/policies/<name>.md) */
+export const POLICIES_DIR = path.join(AGENT_DIR, "policies");
 
 /** 実行時データ（.gitignore 対象） */
 export const VAR_DIR = path.join(PROJECT_ROOT, "var");

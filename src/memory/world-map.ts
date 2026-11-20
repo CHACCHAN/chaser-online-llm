@@ -386,6 +386,25 @@ export class WorldMap {
     }
   }
 
+  /** 自前の観測で見えた他プレイヤー（ローカル座標・最後に見たターン） */
+  public getEnemySightings(): { x: number; y: number; tileId: number; lastSeenTurn: number }[] {
+    const byId = new Map([...this.enemySightings.values()].map((e) => [e.tileId, { ...e }]));
+    // Web マップに載っている敵も（位置合わせ済みならローカル座標に直して）含める。新しい方を採用
+    if (this.globalGrid && this.globalOffset) {
+      const [ox, oy] = this.globalOffset;
+      this.globalGrid.forEach((row, gy) =>
+        row.forEach((v, gx) => {
+          if (v < 1000 || v === this.selfTileId) return;
+          const prev = byId.get(v);
+          if (!prev || prev.lastSeenTurn <= this.globalGridTurn) {
+            byId.set(v, { x: gx - ox, y: gy - oy, tileId: v, lastSeenTurn: this.globalGridTurn });
+          }
+        }),
+      );
+    }
+    return [...byId.values()];
+  }
+
   public getGlobalGrid(): number[][] | null {
     return this.globalGrid;
   }

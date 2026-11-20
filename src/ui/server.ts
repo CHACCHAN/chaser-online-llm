@@ -7,7 +7,8 @@ import { loadRoomProfiles } from "../memory/knowledge-store";
 import { WorldMap } from "../memory/world-map";
 import { scrapeRoomWebMap } from "../perception/web-map-scraper";
 import { logger } from "../tools";
-import { loadProjectEnvEntries, saveProjectEnvEntries } from "./env-store";
+import { loadProjectEnvEntries, saveProjectEnvEntries, setProjectEnvValue } from "./env-store";
+import { activePolicyName, isValidPolicyName, listPolicies, readPolicy, writePolicy } from "../agent/policy";
 import { uiBus, type UiControlCommand } from "./event-bus";
 
 const PUBLIC_INDEX_PATH = path.join(PUBLIC_DIR, "index.html");
@@ -103,6 +104,36 @@ export function startWebUiServer(port: number) {
         const profiles = loadRoomProfiles().rooms;
         uiBus.patchState({ roomProfiles: profiles });
         return Response.json(uiBus.getState());
+      }
+
+      // 作戦方針 (agent/policies/<name>.md): 一覧・読込・保存・使用中の切替
+      if (url.pathname === "/api/policies" && req.method === "GET") {
+        return Response.json({ ok: true, active: activePolicyName(), names: listPolicies() });
+      }
+      if (url.pathname === "/api/policies/active" && req.method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as { name?: string };
+        if (!body.name || !isValidPolicyName(body.name) || readPolicy(body.name) === null) {
+          return Response.json({ ok: false, error: "その方針はありません" }, { status: 400 });
+        }
+        setProjectEnvValue("AGENT_POLICY", body.name);
+        return Response.json({ ok: true, active: body.name });
+      }
+      {
+        const m = url.pathname.match(/^\/api\/policies\/([^/]+)$/);
+        if (m) {
+          const name = decodeURIComponent(m[1]!);
+          if (!isValidPolicyName(name)) return Response.json({ ok: false, error: "方針名は英数字・_・- のみ（40字以内）" }, { status: 400 });
+          if (req.method === "GET") {
+            const text = readPolicy(name);
+            return text === null ? Response.json({ ok: false, error: "not found" }, { status: 404 }) : Response.json({ ok: true, name, text });
+          }
+          if (req.method === "PUT") {
+            const body = (await req.json().catch(() => ({}))) as { text?: string };
+            if (typeof body.text !== "string") return Response.json({ ok: false, error: "text is required" }, { status: 400 });
+            writePolicy(name, body.text);
+            return Response.json({ ok: true, name });
+          }
+        }
       }
 
       if (url.pathname === "/api/env" && req.method === "GET") {
