@@ -313,3 +313,22 @@ describe("parseVsResultTable", () => {
     expect(parseVsResultTable(html, "other_user")).toBeNull();
   });
 });
+
+test("CHaser サーバが応答しない時は CHASER_HTTP_TIMEOUT_SEC で打ち切り、停止ボタンでも中断できる", async () => {
+  const { Base } = await import("./base");
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = ((_u: string, init?: RequestInit) =>
+    new Promise((_r, reject) => init?.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))))) as typeof fetch;
+  try {
+    const b = new Base();
+    const p = b.getReq("x", {});
+    setTimeout(() => b.abort(), 20);
+    await expect(p).rejects.toThrow("停止ボタン");
+    Bun.env.CHASER_HTTP_TIMEOUT_SEC = "0.05";
+    const b2 = new Base();
+    await expect(b2.getReq("x", {})).rejects.toThrow("応答しない");
+  } finally {
+    globalThis.fetch = origFetch;
+    delete Bun.env.CHASER_HTTP_TIMEOUT_SEC;
+  }
+});

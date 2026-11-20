@@ -43,6 +43,8 @@ async function main() {
 
   /** 試合中（入室〜振り返り）か。試合中のルーム変更は記録が混ざるので次の試合まで保留する */
   let inMatch = false;
+  /** 試合中のクライアント（停止ボタンで通信中のリクエストを打ち切る） */
+  let currentClient: Client | null = null;
   let pendingRoom: number | null = null;
 
   let wakeResolver: (() => void) | null = null;
@@ -88,6 +90,7 @@ async function main() {
     }
     if (cmd.action === "stop") {
       uiBus.patchState({ running: false, stopRequested: true, pauseRequested: false });
+      currentClient?.abort();
       wakeUp();
     }
   });
@@ -216,6 +219,7 @@ async function main() {
         }
 
         const client = new Client(waitAwareClientConfig(config.retryMs));
+        currentClient = client;
         await client.login();
         await client.enterRoom(config.room);
         await runMatchCycle(client, mainAgent);
@@ -242,6 +246,7 @@ async function main() {
       });
     } finally {
       inMatch = false;
+      currentClient = null;
     }
   }
 }

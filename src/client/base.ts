@@ -1,4 +1,4 @@
-import { hostUrl } from "../settings";
+import { hostUrl, numSetting } from "../settings";
 import { GameOver, HTTPError } from "../tools";
 import type { Status } from "../types/client";
 
@@ -18,6 +18,14 @@ export class Base {
       turn: 0,
     },
   };
+
+  /** 停止ボタンで通信中のリクエストを打ち切るため */
+  private readonly abortController = new AbortController();
+
+  /** 通信中・以降のリクエストを打ち切る（WebUI の停止） */
+  public abort(): void {
+    this.abortController.abort(new HTTPError("停止ボタンで通信を中断"));
+  }
 
   // 状態返却
   public get getStatus(): Status {
@@ -46,12 +54,21 @@ export class Base {
 
     // リダイレクトを最大10回まで追跡
     for (let hop = 0; hop < 10; hop++) {
-      const res = await fetch(targetUrl, {
-        redirect: "manual",
-        headers: this.status.webRelease.cookie
-          ? { Cookie: this.status.webRelease.cookie }
-          : {},
-      });
+      const timeoutSec = numSetting("CHASER_HTTP_TIMEOUT_SEC", { min: 0 });
+      const signal =
+        timeoutSec > 0
+          ? AbortSignal.any([this.abortController.signal, AbortSignal.timeout(timeoutSec * 1000)])
+          : this.abortController.signal;
+      let res: Response;
+      try {
+        res = await fetch(targetUrl, { redirect: "manual", signal, headers: this.status.webRelease.cookie ? { Cookie: this.status.webRelease.cookie } : {} });
+      } catch (err) {
+        if (this.abortController.signal.aborted) throw new HTTPError("停止ボタンで通信を中断");
+        if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+          throw new HTTPError(`CHaser サーバが ${timeoutSec} 秒応答しない (CHASER_HTTP_TIMEOUT_SEC): ${url.pathname}`);
+        }
+        throw err;
+      }
 
       // ヘッダからJava Servletの識別Cookieを抽出
       const m = res.headers.get("set-cookie")?.match(/JSESSIONID=([^;]+)/);

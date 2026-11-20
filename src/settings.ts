@@ -44,6 +44,11 @@ export const SETTINGS = {
     description: "Webマップ取得の通信1回あたりのタイムアウト（秒）。取得は裏で行うので試合は待たない",
     defaultValue: "10",
   },
+  CHASER_HTTP_TIMEOUT_SEC: {
+    group: "chaser",
+    description: "CHaser サーバへの通信1回あたりのタイムアウト（秒、0=無制限）。サーバが応答しないまま試合が止まり続けるのを防ぐ（他プレイヤー待ちは別の仕組みなので影響しない）",
+    defaultValue: "180",
+  },
   CHASER_MAX_TURNS: { group: "chaser", description: "1試合の最大ターン数（空=サーバが終えるまで）", defaultValue: "" },
   CHASER_MAX_MATCHES: { group: "chaser", description: "連続モードの最大試合数（空=無制限）", defaultValue: "" },
   CHASER_RETRY_MS: { group: "chaser", description: "コマンド再送間隔（ミリ秒、50以上）", defaultValue: "250" },
