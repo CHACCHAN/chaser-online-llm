@@ -44,7 +44,7 @@ export interface ClaudeSessionOptions extends ClaudeModelSettings {
 }
 
 /**
- * Claude Code を `--input-format stream-json` で常駐させるセッション。
+ * Claude Code を `--input-format stream-json` で起動するセッション（常駐にも、1回きりの使い捨てにも使う）。
  * 1プロセスで文脈を保ったまま、ターンごとにメッセージを流し込んで結果を受け取る。
  *
  * - ask() は同時に1つだけ。前の問い合わせが終わっていなければ "busy" を返す。

@@ -41,6 +41,10 @@ async function main() {
     roomHighScore: initialProfile.highScore,
   });
 
+  /** 試合中（入室〜振り返り）か。試合中のルーム変更は記録が混ざるので次の試合まで保留する */
+  let inMatch = false;
+  let pendingRoom: number | null = null;
+
   let wakeResolver: (() => void) | null = null;
   const wakeUp = () => {
     if (wakeResolver) {
@@ -52,9 +56,15 @@ async function main() {
 
   /** WebUI からの設定変更を config と画面状態に反映する（start/update_settings 共通） */
   const applySettings = (cmd: UiControlCommand) => {
-    if (typeof cmd.room === "number" && Number.isInteger(cmd.room) && cmd.room > 0) {
-      config.room = cmd.room;
-      uiBus.updateScores({ roomHighScore: getRoomProfile(config.room).highScore });
+    if (typeof cmd.room === "number" && Number.isInteger(cmd.room) && cmd.room > 0 && cmd.room !== config.room) {
+      if (inMatch) {
+        pendingRoom = cmd.room;
+        uiBus.pushClaudeEvent({ context: "system", kind: "system", title: "ルーム変更を保留", content: `試合中のため Room ${cmd.room} へは次の試合から切り替える（今の試合は Room ${config.room} のまま）` });
+      } else {
+        config.room = cmd.room;
+        pendingRoom = null;
+        uiBus.updateScores({ roomHighScore: getRoomProfile(config.room).highScore });
+      }
     }
     if (typeof cmd.model === "string") config.model = cmd.model.trim() || undefined;
     if (typeof cmd.subModel === "string") config.subModel = cmd.subModel.trim() || undefined;
@@ -121,6 +131,12 @@ async function main() {
       continue;
     }
 
+    if (pendingRoom !== null) {
+      config.room = pendingRoom;
+      pendingRoom = null;
+      uiBus.updateScores({ roomHighScore: getRoomProfile(config.room).highScore });
+      uiBus.patchState(settingsState());
+    }
     matchIndex += 1;
 
     const runMatchCycle = async (client: Client, mainAgent: MainAgent | null) => {
@@ -171,6 +187,7 @@ async function main() {
       await Bun.sleep(4000);
     };
 
+    inMatch = true;
     try {
       uiBus.patchState({
         status: "connecting",
@@ -206,6 +223,7 @@ async function main() {
         await mainAgent?.end();
       }
     } catch (err) {
+      inMatch = false; // エラー停止中はルーム変更をすぐ反映してよい
       const msg = err instanceof Error ? err.message : String(err);
       logger.error({ matchIndex, err: msg }, "Match cycle failed; returning to idle dashboard");
       uiBus.patchState({
@@ -222,6 +240,8 @@ async function main() {
       await new Promise<void>((resolve) => {
         wakeResolver = resolve;
       });
+    } finally {
+      inMatch = false;
     }
   }
 }

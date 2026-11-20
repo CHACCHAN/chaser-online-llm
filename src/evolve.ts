@@ -21,7 +21,7 @@ export interface EvolutionOutcome {
 
 
 /**
- * 試合後の自己進化。試合中ずっと常駐していたメインエージェント（試合の文脈を保持）に振り返りと改修をさせ、
+ * 試合後の自己進化。メインエージェント（ツールありの新しいセッションに、試合中のメモ・経過・サブへの依頼を渡す）に振り返りと改修をさせ、
  * リプレイ検証に失敗したら active-solver.ts を自動ロールバックする。
  */
 export async function runPostMatchEvolution(

@@ -59,7 +59,7 @@ function readPrompt(name: string): string {
  * --system-prompt で Claude Code 既定のシステムプロンプトとツール定義を外す）。1回あたりのトークンが一定で小さい。
  * 引き継ぐのは、メイン自身が書くメモ・ハーネスが作る直近の経過・現在の状況だけ。
  * 次のフェーズ用のプロセスは裏で先に起動しておく。予算を超えた問い合わせは止めて捨てる（次のフェーズを待たせない）。
- * 時間のかかる仕事は delegate でサブ (SubWorker、ツールあり・常駐) に投げ、結果は後のフェーズに届く。
+ * 時間のかかる仕事は delegate でサブ (SubWorker、ツールあり・仕事ごとに新しいセッション) に投げ、結果は後のフェーズに届く。
  */
 export class MainAgent {
   private readonly sub: SubWorker;
@@ -157,6 +157,8 @@ export class MainAgent {
   async postMatch(diagnosisMarkdown: string, runDir: string, timeoutMs: number): Promise<AskResult> {
     this.next?.kill();
     this.next = null;
+    // 振り返り中にサブが並行して同じファイル（ソルバー・knowledge・tools）を書き換えないよう、先に止める
+    await this.sub.stop();
     const session = new ClaudeSession({
       ...this.settings,
       context: "evolution",

@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { RUNS_DIR, SOLVER_PATH } from "./paths";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
@@ -147,6 +147,14 @@ export async function runAgentMatch(
   uiBus.clearMatchLogs(config.room, matchIndex, runId);
 
   const startedAt = new Date().toISOString();
+  // 試合中に WebUI で設定を変えても、この試合の記録は開始時の設定で残す（変更は次の試合から）
+  const agentSettings = {
+    model: config.model ?? null,
+    subModel: config.subModel ?? null,
+    effort: config.effort ?? null,
+    subEffort: config.subEffort ?? null,
+    turnBudgetSec: config.turnBudgetSec,
+  };
   const worldMap = new WorldMap();
   const roomProfileBefore = getRoomProfile(config.room);
 
@@ -376,10 +384,8 @@ export async function runAgentMatch(
       uiBus.updateMap(worldMap.buildUiMapState(null, mainAgent?.currentPlan?.target ?? null));
       uiBus.pushTurnRecord(record);
 
-      await Bun.write(
-        path.join(runDir, "turns.jsonl"),
-        turnLogs.map((r) => JSON.stringify(r)).join("\n") + "\n",
-      );
+      // 1行ずつ追記（毎ターン全件を書き直すと 1500 ターンで数百MBの書き込みになる）
+      await appendFile(path.join(runDir, "turns.jsonl"), `${JSON.stringify(record)}\n`);
 
       logger.info(
         {
@@ -419,7 +425,7 @@ export async function runAgentMatch(
     startedAt,
     finishedAt,
     room: config.room,
-    model: config.model ?? null,
+    model: agentSettings.model,
     webMapDetected: webMap.available,
     webMapUrl: webMap.sourceUrl,
     turns: turnLogs.length,
@@ -434,11 +440,7 @@ export async function runAgentMatch(
     harnessTurns,
     agent: {
       enabled: mainAgent !== null,
-      model: config.model ?? null,
-      subModel: config.subModel ?? null,
-      effort: config.effort ?? null,
-      subEffort: config.subEffort ?? null,
-      turnBudgetSec: config.turnBudgetSec,
+      ...agentSettings,
       mainDecisionRate: phaseSources.length > 0 ? phaseSources.filter((s) => s === "main").length / phaseSources.length : null,
       avgLatencyMs: latencies.length > 0 ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null,
       maxLatencyMs: latencies.length > 0 ? Math.max(...latencies) : null,

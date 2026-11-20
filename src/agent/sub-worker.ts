@@ -105,6 +105,15 @@ export class SubWorker {
   async stop(): Promise<void> {
     this.stopped = true;
     this.current?.kill();
+    let changed = false;
+    for (const t of this.tasks) {
+      if (t.status === "queued") {
+        t.status = "failed";
+        t.result = "試合終了のため未着手で中止";
+        changed = true;
+      }
+    }
+    if (changed) this.publish();
   }
 
   private newSession(): ClaudeSession {
@@ -140,7 +149,7 @@ export class SubWorker {
           await session.stop();
         } else {
           task.status = "failed";
-          task.result = res.status === "dead" ? res.error : res.status;
+          task.result = this.stopped ? "試合終了のため作業中に中止" : res.status === "dead" ? res.error : res.status;
           session.kill(); // 上限超過: 止めて以降の消費を断つ
         }
         this.usageTotals = addUsage(this.usageTotals, session.usage);
