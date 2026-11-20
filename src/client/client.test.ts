@@ -238,6 +238,33 @@ describe("Client", () => {
     expect(client.getStatus.game.phase).toBe("READY_CMD1");
     expect(client.getStatus.game.turn).toBe(2);
   });
+  test("他プレイヤー待ち: 待機を UI に通知し、停止要求で打ち切れる", async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const path = new URL(url).pathname.split("/").pop() ?? "";
+      if (path === "") return htmlResponse("<form></form>");
+      if (path === "UserCheck") return htmlResponse('<form action="RoomNumberCheck"><input name="roomNumber"></form>');
+      if (path === "RoomNumberCheck") return htmlResponse('<form action="GetReadyCheck">command1=<input name="command1"></form>');
+      // ずっと待機中（相手がまだ手を打っていない）
+      return htmlResponse('waiting... command1=<input name="command1">');
+    }) as unknown as typeof fetch;
+
+    const waits: number[] = [];
+    let stop = false;
+    const client = new Client({
+      retryIntervalMs: 5,
+      maxWaitMs: 60_000,
+      onWaiting: ({ elapsedMs }) => {
+        waits.push(elapsedMs);
+        if (waits.length >= 3) stop = true;
+      },
+      shouldAbortWait: () => stop,
+    });
+    await client.login();
+    await client.enterRoom(3);
+    await expect(client.command1("gr")).rejects.toThrow(/Stopped while waiting/);
+    expect(waits.length).toBe(3);
+  });
 });
 
 describe("parseVsResultTable", () => {

@@ -1,3 +1,4 @@
+import { numSetting } from "../settings";
 import type { OfficialResult } from "../client";
 import { getRoomProfile, saveRoomProfile, upsertTileDefinition } from "../memory/knowledge-store";
 import { CMD2_SPECS, type Cmd2Command, getTileInfo } from "../memory/world-map";
@@ -199,7 +200,9 @@ export function analyzeMatchRun(
   const profile = getRoomProfile(summary.room);
   profile.matchesPlayed += 1;
   const achievedScore = official?.totalScore ?? summary.estimatedScore.estimatedTotalScore;
-  if (profile.highScore === null || achievedScore > profile.highScore) {
+  // 試合になっていない（待機切れ等）回は最高記録として扱わない
+  const isRealMatch = summary.turns >= numSetting("AGENT_EVOLVE_MIN_TURNS", { min: 0, integer: true });
+  if (isRealMatch && (profile.highScore === null || achievedScore > profile.highScore)) {
     profile.highScore = achievedScore;
     profile.bestRunId = summary.runId;
   }

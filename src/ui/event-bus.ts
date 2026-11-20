@@ -7,6 +7,8 @@ export type AgentRunStatus =
   | "idle"
   | "connecting"
   | "playing"
+  /** 他プレイヤー待ち（複数人ルーム） */
+  | "waiting"
   | "claude_in_game"
   | "evolving"
   | "cooldown"

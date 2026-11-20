@@ -9,6 +9,7 @@ import { logger } from "./tools";
 import { uiBus } from "./ui/event-bus";
 
 import { BEST_SOLVERS_DIR, SOLVER_PATH } from "./paths";
+import { restoreProtectedFiles, snapshotProtectedFiles } from "./evolution/edit-guard";
 
 export interface EvolutionOutcome {
   invoked: boolean;
@@ -30,17 +31,35 @@ export async function runPostMatchEvolution(
   if (!mainAgent || !mainAgent.alive) {
     return { invoked: false, ok: false, replayVerified: true, rolledBack: false, summaryText: "main agent not running" };
   }
+  const minTurns = numSetting("AGENT_EVOLVE_MIN_TURNS", { min: 0, integer: true });
+  if (summary.turns < minTurns) {
+    // 待機切れ・接続失敗などで試合になっていない。ここから学ぶとソルバーを誤った方向に変えてしまう
+    const why = `${summary.turns} ターンで終了（${summary.gameOverReason ?? "理由不明"}）のため振り返りを省略（AGENT_EVOLVE_MIN_TURNS=${minTurns}）`;
+    uiBus.pushClaudeEvent({ context: "evolution", kind: "system", title: "振り返りを省略", content: why });
+    return { invoked: false, ok: true, replayVerified: true, rolledBack: false, summaryText: why };
+  }
   uiBus.patchState({
     status: "evolving",
     statusMessage: `Run ${summary.runId} の振り返り・ソルバー改修をメインエージェントが実行中...`,
   });
 
   const backupCode = existsSync(SOLVER_PATH) ? readFileSync(SOLVER_PATH, "utf-8") : null;
+  const protectedBefore = snapshotProtectedFiles();
   const res = await mainAgent.postMatch(
     summary.diagnosis?.markdownReport ?? "(no diagnosis)",
     summary.runDir,
     numSetting("AGENT_POST_MATCH_TIMEOUT_MIN", { min: 1 }) * 60_000,
   );
+  const reverted = restoreProtectedFiles(protectedBefore);
+  if (reverted.length > 0) {
+    logger.warn({ reverted }, "Post-match edits outside the allowed scope were reverted");
+    uiBus.pushClaudeEvent({
+      context: "evolution",
+      kind: "error",
+      title: "編集範囲外の変更を元に戻した",
+      content: `振り返りで変更できるのは active-solver.ts・knowledge/・agent/tools/ のみ:\n${reverted.join("\n")}`,
+    });
+  }
   const outputText = res.status === "ok" ? res.text : `(${res.status}${res.status === "dead" ? `: ${res.error}` : ""})`;
   const solverChanged = backupCode !== null && existsSync(SOLVER_PATH) && readFileSync(SOLVER_PATH, "utf-8") !== backupCode;
 
@@ -99,6 +118,7 @@ export async function runPostMatchEvolution(
       `- **Solver Changed**: ${solverChanged}`,
       `- **Replay Verified**: ${verification.ok} (Turns Tested: ${verification.turnsTested}, Changed CMD1: ${verification.changedCmd1Count}, Changed CMD2: ${verification.changedCmd2Count})`,
       `- **Rolled Back**: ${rolledBack}`,
+      reverted.length > 0 ? `- **Reverted (out of scope)**: ${reverted.join(", ")}` : "",
       verification.errors.length > 0 ? `- **Errors**: ${verification.errors.join("; ")}` : "",
       "",
       "## Claude Code Output",

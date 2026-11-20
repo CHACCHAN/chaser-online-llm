@@ -40,6 +40,8 @@ export function parseGridFromHtml(
   turn: number | null;
   liveScore: LiveMapScore | null;
   selfTileId: number | null;
+  /** ページ内に自分のユーザー名（スコア表示）が見つかったか */
+  selfFound: boolean;
 } {
   const stageName =
     html.match(/対戦マップビュー[\s\S]*?\[([^\]]+)\]/i)?.[1]?.trim() ??
@@ -51,6 +53,7 @@ export function parseGridFromHtml(
   // プレイヤーのタイル番号 (例: 1000) とリアルタイムスコア (A:... I:... P:... PD:... T:...) を抽出
   let playerTileId = 1000;
   let liveScore: LiveMapScore | null = null;
+  let selfFound = false;
 
   if (playerUser) {
     const escapedUser = playerUser.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -60,6 +63,7 @@ export function parseGridFromHtml(
     );
     const pm = html.match(playerBlockRegex);
     if (pm) {
+      selfFound = true;
       if (pm[1]) playerTileId = Number(pm[1]);
       const scoreBlock = pm[2] ?? "";
       const a = scoreBlock.match(/A:(-?\d+)/)?.[1];
@@ -174,6 +178,7 @@ export function parseGridFromHtml(
         turn,
         liveScore,
         selfTileId: playerTileId,
+        selfFound,
       };
     }
   }
@@ -185,6 +190,7 @@ export function parseGridFromHtml(
     turn,
     liveScore,
     selfTileId: null,
+    selfFound,
   };
 }
 
@@ -300,7 +306,8 @@ async function tryScrapeChaserServerHttp(
       const worldHtml = await fetchWithSession(listWorldUrl.toString());
 
       const parsed = parseGridFromHtml(worldHtml, playerUser);
-      if (parsed.grid && parsed.grid.length >= 5) {
+      // World 結果ページは別の対戦の盤面のことがある。自分が載っている時だけ今の盤面として使う
+      if (parsed.grid && parsed.grid.length >= 5 && parsed.selfFound) {
         return {
           found: true,
           sourceUrl: listWorldUrl.toString(),

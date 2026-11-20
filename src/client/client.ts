@@ -4,14 +4,33 @@ import { numSetting } from "../settings";
 import { Base } from "./base";
 import { buildStepResult, extractVisibleLines, inspectFormMarkers } from "./parser";
 
-
 export class Client extends Base {
   constructor(private readonly config: Config) {
     super();
   }
 
+  /** 他プレイヤー待ちの上限（ms）。null = 無制限 */
+  private waitLimitMs(override?: number): number | null {
+    if (override !== undefined) return override;
+    if (this.config.maxWaitMs !== undefined) return this.config.maxWaitMs;
+    const min = numSetting("CHASER_PLAYER_WAIT_MIN", { min: 0 });
+    return min === 0 ? null : min * 60_000;
+  }
+
+  /** 待機ループ1周ぶんの判定: 上限超過・停止要求なら例外、そうでなければ UI に経過を知らせて待つ */
+  private async waitTick(what: string, start: number, limitMs: number | null): Promise<void> {
+    const elapsedMs = Date.now() - start;
+    if (this.config.shouldAbortWait?.()) throw new GeneralError(`Stopped while waiting for ${what}`);
+    if (limitMs !== null && elapsedMs >= limitMs) {
+      throw new GeneralError(`Timeout waiting for ${what} (${Math.round(elapsedMs / 1000)}s, 他プレイヤー待ちの上限 CHASER_PLAYER_WAIT_MIN)`);
+    }
+    this.config.onWaiting?.({ what, elapsedMs, limitMs });
+    await Bun.sleep(this.config.retryIntervalMs);
+  }
+
   /**
    * waitingMarker がレスポンスから消えるまで retryIntervalMs 間隔でポーリングする。
+   * 複数人ルームでは他プレイヤーの手番が終わるまでここで待つ（上限は CHASER_PLAYER_WAIT_MIN）。
    */
   private async sendUntil(
     path: string,
@@ -20,7 +39,7 @@ export class Client extends Base {
     maxWaitMsOverride?: number,
   ): Promise<string> {
     const start = Date.now();
-    const maxWaitMs = maxWaitMsOverride ?? this.config.maxWaitMs ?? numSetting("CHASER_COMMAND_MAX_WAIT_SEC", { min: 1 }) * 1000;
+    const limitMs = this.waitLimitMs(maxWaitMsOverride);
 
     for (;;) {
       const body = await this.getReq(path, params);
@@ -31,10 +50,7 @@ export class Client extends Base {
       if (!body.includes(waitingMarker)) {
         return body;
       }
-      if (Date.now() - start >= maxWaitMs) {
-        throw new GeneralError(`Timeout waiting for ${path}`);
-      }
-      await Bun.sleep(this.config.retryIntervalMs);
+      await this.waitTick(path, start, limitMs);
     }
   }
 
@@ -65,7 +81,7 @@ export class Client extends Base {
     this.updateStatus({ game: { roomNumber } });
 
     const start = Date.now();
-    const maxWaitMs = this.config.maxWaitMs ?? numSetting("CHASER_COMMAND_MAX_WAIT_SEC", { min: 1 }) * 1000;
+    const limitMs = this.waitLimitMs();
 
     for (;;) {
       const body = await this.getReq("RoomNumberCheck", {
@@ -86,10 +102,7 @@ export class Client extends Base {
         return buildStepResult(body);
       }
 
-      if (Date.now() - start >= maxWaitMs) {
-        throw new GeneralError(`Timeout waiting for command1 in room ${roomNumber}`);
-      }
-      await Bun.sleep(this.config.retryIntervalMs);
+      await this.waitTick(`room ${roomNumber} の開始`, start, limitMs);
     }
   }
 

@@ -1,6 +1,7 @@
 import { Client } from "./client";
 import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
+import { waitAwareClientConfig } from "./client/wait-status";
 import { boolSetting } from "./settings";
 import { getRoomProfile, loadRoomProfiles } from "./memory/knowledge-store";
 import { MainAgent } from "./agent/main-agent";
@@ -197,7 +198,7 @@ async function main() {
           logger.info({ ready: ready.status }, "Main agent warm-up finished");
         }
 
-        const client = new Client({ retryIntervalMs: config.retryMs });
+        const client = new Client(waitAwareClientConfig(config.retryMs));
         await client.login();
         await client.enterRoom(config.room);
         await runMatchCycle(client, mainAgent);

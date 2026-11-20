@@ -37,10 +37,10 @@ export const SETTINGS = {
   CHASER_MAX_TURNS: { group: "chaser", description: "1試合の最大ターン数（空=サーバが終えるまで）", defaultValue: "" },
   CHASER_MAX_MATCHES: { group: "chaser", description: "連続モードの最大試合数（空=無制限）", defaultValue: "" },
   CHASER_RETRY_MS: { group: "chaser", description: "コマンド再送間隔（ミリ秒、50以上）", defaultValue: "250" },
-  CHASER_COMMAND_MAX_WAIT_SEC: {
+  CHASER_PLAYER_WAIT_MIN: {
     group: "chaser",
-    description: "1コマンドの応答待ち上限（秒）",
-    defaultValue: "120",
+    description: "入室後・各コマンド後に他プレイヤーを待つ上限（分、0=無制限）。複数人ルームでは相手の思考時間ぶん待たされる",
+    defaultValue: "30",
   },
   CHASER_LOGIN_WAIT_MIN: {
     group: "chaser",
@@ -70,6 +70,11 @@ export const SETTINGS = {
   AGENT_WARMUP_TIMEOUT_SEC: { group: "llm", description: "試合開始前のメイン準備の待ち上限（秒）", defaultValue: "90" },
   AGENT_SUB_TASK_TIMEOUT_MIN: { group: "llm", description: "サブの1仕事あたりの上限（分）", defaultValue: "10" },
   AGENT_POST_MATCH_TIMEOUT_MIN: { group: "llm", description: "試合後の振り返り・ソルバー改修の上限（分）", defaultValue: "15" },
+  AGENT_EVOLVE_MIN_TURNS: {
+    group: "llm",
+    description: "このターン数未満で終わった試合（待機切れ・接続失敗など）は振り返り・最高記録の更新をしない",
+    defaultValue: "3",
+  },
   AGENT_EVOLVE: {
     group: "llm",
     description: "WebUI 連続モードで試合後にソルバー改修（振り返り）を行う（bun run play は --evolve 指定時のみ）",

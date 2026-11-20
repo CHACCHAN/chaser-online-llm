@@ -472,7 +472,7 @@ const load = (k) => { try { return localStorage.getItem(k); } catch { return nul
 const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 const STATUS = {
-  idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], claude_in_game: ["メインが思考中", "think"],
+  idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], waiting: ["他プレイヤー待ち", "warn"], claude_in_game: ["メインが思考中", "think"],
   evolving: ["進化中(ソルバー改修)", "evo"], cooldown: ["次の試合を準備中", "warn"], paused: ["一時停止", "warn"], error: ["エラー", "err"],
 };
 const SERIES_VARS = ["--s1", "--s2", "--s3", "--s4", "--s5"];

@@ -155,7 +155,7 @@ export class MainAgent {
         "",
         "## やること",
         "1. 失点原因と、作戦（plan）が効いた/効かなかった場面を特定する（必要なら Agent ツールで調査を並行してよい）。",
-        "2. `src/solver/active-solver.ts` を改修する（`decideTurnAction(worldMap, phase, turn, plan)` のシグネチャは維持）。",
+        "2. `src/solver/active-solver.ts` を改修する（`decideTurnAction(worldMap, phase, turn, plan)` のシグネチャは維持）。編集してよいのは active-solver.ts（とそのテスト）・knowledge/・agent/tools/ だけ。それ以外（runner.ts 等のハーネス）を変えても自動で元に戻される。ハーネスの改善案は報告に書くこと。",
         "3. 判明したタイル得点・ルールは knowledge/ に残す。試合中に作った臨時ツール（`@temporary`）は、ソルバーへ組み込む／正式ツールにする（`@temporary` を外す）／削除する、のどれかに決める。",
         `4. \`bun src/cli.ts verify --run-dir ${runDir}\` と \`bun run typecheck\` が通るまで直す。`,
         "5. 最後に、何を変えたかを3行以内で報告する。",

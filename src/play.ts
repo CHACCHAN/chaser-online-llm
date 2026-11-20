@@ -43,7 +43,15 @@ try {
   }
 
   // サーバは同一ユーザーの二重ログインを拒否する。途中退出した試合のセッションは数分で切れるので再試行する
-  const client = new Client({ retryIntervalMs: config.retryMs });
+  let lastWaitLog = 0;
+  const client = new Client({
+    retryIntervalMs: config.retryMs,
+    onWaiting: ({ what, elapsedMs }) => {
+      if (elapsedMs < 3000 || Date.now() - lastWaitLog < 15_000) return;
+      lastWaitLog = Date.now();
+      console.log(JSON.stringify({ waiting: what, elapsedSec: Math.round(elapsedMs / 1000) }));
+    },
+  });
   const loginStart = Date.now();
   for (let attempt = 0; ; attempt++) {
     try {
