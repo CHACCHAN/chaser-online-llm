@@ -213,6 +213,7 @@ export class MainAgent {
       systemPrompt: this.systemPrompt,
       tools: "",
       noSessionPersistence: true,
+      quietLifecycle: true,
     });
     s.start();
     return s;

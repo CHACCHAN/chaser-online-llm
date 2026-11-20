@@ -116,6 +116,7 @@ export class SubWorker {
       label: "sub",
       appendSystemPrompt: readFileSync(path.join(AGENT_DIR, "prompts/sub.md"), "utf-8"),
       noSessionPersistence: true,
+      quietLifecycle: true,
     });
     s.start();
     return s;

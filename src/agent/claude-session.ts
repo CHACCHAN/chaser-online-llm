@@ -39,6 +39,8 @@ export interface ClaudeSessionOptions extends ClaudeModelSettings {
   context?: ClaudeContext;
   /** UI の思考ログに付ける名前 (main / sub) */
   label?: string;
+  /** 起動・正常終了を思考ログに出さない（毎フェーズ使い捨ての問い合わせ用） */
+  quietLifecycle?: boolean;
 }
 
 /**
@@ -49,6 +51,9 @@ export interface ClaudeSessionOptions extends ClaudeModelSettings {
  * - タイムアウトしても Claude 側の処理は止めない（調査・ツール作成を続けさせる）。
  *   遅れて届いた結果は破棄し、セッションは次の ask() から再び使える。
  */
+/** unrecognized_model を一度知らせたモデル（プロセスをまたいで共有） */
+const warnedModels = new Set<string>();
+
 export class ClaudeSession {
   private proc: Subprocess<"pipe", "pipe", "pipe"> | null = null;
   private pending: { resolve: (r: AskResult) => void; startedAt: number; timedOut: boolean } | null = null;
@@ -59,6 +64,8 @@ export class ClaudeSession {
   private contextTokens: number | null = null;
   /** この問い合わせ中に assistant イベントから会話の大きさが取れたか */
   private contextFromAssistant = false;
+  /** stop()/kill() で自分から止めた */
+  private stopping = false;
 
   constructor(private readonly options: ClaudeSessionOptions) {
     this.context = options.context ?? "in_game";
@@ -102,17 +109,29 @@ export class ClaudeSession {
     this.deadReason = null;
     void this.pump(this.proc.stdout, (line) => this.onStdout(line));
     void this.pump(this.proc.stderr, (line) => {
-      if (line.trim()) this.emit("error", "stderr", line.slice(0, 800));
+      if (!line.trim()) return;
+      // Claude Code が知らないモデル名（ゲートウェイの gpt/glm 等）への警告。動作には影響しないので1モデルにつき1回だけ出す
+      const m = line.match(/unrecognized_model\]\s*(\{.*\})/);
+      if (m) {
+        const model = (() => { try { return String((JSON.parse(m[1]!) as { model?: string }).model ?? ""); } catch { return ""; } })();
+        if (warnedModels.has(model)) return;
+        warnedModels.add(model);
+        this.emit("system", "Model Notice", `Claude Code が知らないモデル (${model || "?"}) です。動作には影響しません（推定コストは不正確）`);
+        return;
+      }
+      this.emit("error", "stderr", line.slice(0, 800));
     });
     void this.proc.exited.then((code) => {
       this.deadReason = `Claude process exited (code ${code})`;
       this.proc = null;
       this.busyFlag = false;
-      this.emit("error", "Session Ended", this.deadReason);
+      const expected = this.stopping || code === 0;
+      if (!expected) this.emit("error", "Session Ended", this.deadReason);
+      else if (!this.options.quietLifecycle) this.emit("system", "Session Ended", this.deadReason);
       if (this.pending && !this.pending.timedOut) this.pending.resolve({ status: "dead", error: this.deadReason });
       this.pending = null;
     });
-    this.emit("system", "Session Started", `model=${this.options.model ?? "default"} effort=${this.options.effort ?? "default"}`);
+    if (!this.options.quietLifecycle) this.emit("system", "Session Started", `model=${this.options.model ?? "default"} effort=${this.options.effort ?? "default"}`);
   }
 
   ask(text: string, timeoutMs: number): Promise<AskResult> {
@@ -137,11 +156,13 @@ export class ClaudeSession {
 
   /** 処理中でもすぐ止める（使い捨ての問い合わせが予算切れになった時など。以降のトークン消費を止める） */
   kill(): void {
+    this.stopping = true;
     this.proc?.kill();
   }
 
   async stop(): Promise<void> {
     if (!this.proc) return;
+    this.stopping = true;
     try {
       this.proc.stdin.end();
     } catch {
