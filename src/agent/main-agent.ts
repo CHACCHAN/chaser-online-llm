@@ -1,8 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CMD1_COMMANDS, CMD2_COMMANDS, type WorldMap } from "../memory/world-map";
-import { AGENT_DIR, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, STRATEGY_PATH, VAR_DIR } from "../paths";
-import { numSetting } from "../settings";
+import { getRoomProfile } from "../memory/knowledge-store";
+import { AGENT_DIR, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
+import { boolSetting, numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
@@ -138,9 +139,64 @@ export class MainAgent {
       strategy ? `\n## 戦略知識（knowledge/strategy.md）\n${strategy}` : "",
     ].join("\n");
     this.sub.start();
+    this.publish();
+    const prep: AskResult = boolSetting("AGENT_PREP") ? await this.prepare(info.room) : { status: "ok", text: "skip", durationMs: 0 };
     this.next = this.spawnCall();
     this.publish();
-    return { status: "ok", text: "ready", durationMs: 0 };
+    return prep;
+  }
+
+  /**
+   * 準備フェーズ（入室前）: ツール（読むだけ）ありの新しいセッションで、ルール・このルームの過去の試合・作戦方針を調べさせ、
+   * 試合開始時のメモを作らせる。試合中のメインは前の会話を持たないので、最初のメモの質がそのまま序盤の判断に効く。
+   */
+  private async prepare(room: number): Promise<AskResult> {
+    const timeoutSec = numSetting("AGENT_PREP_TIMEOUT_SEC", { min: 10 });
+    const memoMax = numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true });
+    uiBus.patchState({ status: "preparing", statusMessage: `準備フェーズ: メインがルール・Room ${room} の過去の試合を読んで最初のメモを作成中（上限 ${timeoutSec} 秒）` });
+    const pastRuns = existsSync(RUNS_DIR)
+      ? readdirSync(RUNS_DIR)
+          .filter((n) => n.endsWith(`_room${room}`))
+          .sort()
+          .reverse()
+          .slice(0, numSetting("AGENT_PREP_PAST_RUNS", { min: 0, integer: true }))
+          .map((n) => path.join(RUNS_DIR, n))
+      : [];
+    const profile = getRoomProfile(room);
+    const session = new ClaudeSession({
+      ...this.settings,
+      context: "in_game",
+      label: "prep",
+      appendSystemPrompt: readPrompt("prep.md").replaceAll("{{MEMO_MAX}}", String(memoMax)).replaceAll("{{TIMEOUT}}", String(timeoutSec)),
+      tools: "Read,Glob,Grep",
+      noSessionPersistence: true,
+    });
+    session.start();
+    const policy = activePolicyPrompt();
+    const res = await session.ask(
+      [
+        "[PREP] 試合開始前の準備フェーズ。資料を読み、試合開始時のメモを作れ。",
+        `試合: ${this.matchInfo}`,
+        "",
+        "## ルームの情報（var/room-profiles.json）",
+        JSON.stringify({ room: profile.room, highScore: profile.highScore, matchesPlayed: profile.matchesPlayed, webMapAvailable: profile.webMapAvailable, mapDimensions: profile.mapDimensions, discoveredTiles: profile.discoveredTiles, warpLinks: profile.warpLinks.length, tacticalNotes: profile.tacticalNotes }),
+        "",
+        "## このルームの過去の試合（新しい順）",
+        pastRuns.length > 0 ? pastRuns.join("\n") : "(まだない。初めてのルーム)",
+        "",
+        policy || "(ユーザー定義の作戦方針なし)",
+      ].join("\n"),
+      timeoutSec * 1000,
+    );
+    if (res.status === "ok") {
+      await session.stop();
+      this.memo = parsePrepMemo(res.text).slice(0, memoMax);
+    } else {
+      session.kill();
+      uiBus.pushClaudeEvent({ context: "in_game", kind: "error", title: "準備フェーズ未完了", content: `${res.status === "dead" ? res.error : res.status}。メモなしで試合を始める` });
+    }
+    this.mainUsage = addUsage(this.mainUsage, session.usage);
+    return res;
   }
 
   /**
@@ -452,6 +508,22 @@ export class MainAgent {
     lines.push(`合法手: ${legal.join(",")}`);
     return lines.join("\n");
   }
+}
+
+/** 準備フェーズの返答から最初のメモを取り出す（最後の JSON 行の memo。無ければ本文全体） */
+export function parsePrepMemo(text: string): string {
+  const lines = text.split("\n").map((l) => l.trim().replace(/^```(?:json)?|```$/g, "").trim());
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i]!;
+    if (!l.startsWith("{") || !l.endsWith("}")) continue;
+    try {
+      const obj = JSON.parse(l) as { memo?: unknown };
+      if (typeof obj.memo === "string" && obj.memo.trim()) return obj.memo.trim();
+    } catch {
+      // 次の行へ
+    }
+  }
+  return text.trim();
 }
 
 export function parseMainReply(

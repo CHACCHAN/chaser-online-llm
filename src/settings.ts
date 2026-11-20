@@ -87,6 +87,13 @@ export const SETTINGS = {
     description: "メインの1フェーズあたりの思考予算（秒、3以上）。超えたらソルバー手を送信",
     defaultValue: "20",
   },
+  AGENT_PREP: {
+    group: "llm",
+    description: "試合前の準備フェーズ（true/false）。入室前にメインがツール（読むだけ）でルール・ルームの過去の試合・作戦方針を調べ、最初のメモを作る",
+    defaultValue: "true",
+  },
+  AGENT_PREP_TIMEOUT_SEC: { group: "llm", description: "準備フェーズの上限（秒）。超えたらメモなしで試合を始める", defaultValue: "180" },
+  AGENT_PREP_PAST_RUNS: { group: "llm", description: "準備フェーズで読ませる、このルームの過去の試合の数（新しい順）", defaultValue: "5" },
   AGENT_MEMO_MAX_CHARS: {
     group: "llm",
     description: "メインが次のフェーズへ引き継ぐメモの上限（字）。メインは毎フェーズ前の会話なしで呼ばれ、メモ・直近の経過・現在の状況だけを受け取る",

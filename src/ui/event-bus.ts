@@ -10,6 +10,8 @@ export type AgentRunStatus =
   | "playing"
   /** 他プレイヤー待ち（複数人ルーム） */
   | "waiting"
+  /** 試合前の準備フェーズ（メインが資料を読んで最初のメモを作る） */
+  | "preparing"
   | "claude_in_game"
   | "evolving"
   | "cooldown"
