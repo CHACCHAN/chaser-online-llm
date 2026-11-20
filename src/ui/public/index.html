@@ -65,6 +65,13 @@
   }
 }
 * { box-sizing: border-box; }
+/* スクロールバーは細く控えめに（ホバー時だけ濃く） */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover { scrollbar-color: var(--line) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+*:hover::-webkit-scrollbar-thumb { background: var(--line); }
 html, body { height: 100%; margin: 0; }
 body {
   background: var(--bg); color: var(--ink); font: 13px/1.5 var(--font);
@@ -125,6 +132,10 @@ button { cursor: pointer; }
 #inMax { width: 76px; }
 .field.chk label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
 .sep { flex: 1; }
+.prep-info { font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+.prep-info.ok { color: var(--pos); }
+.prep-info.warn { color: var(--neg); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
 .hint { font-size: 11px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #modelHint { flex: 1 1 0; min-width: 0; text-align: right; }
 
@@ -133,8 +144,8 @@ button { cursor: pointer; }
 .col { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .col.rail { border-right: 1px solid var(--line); background: var(--panel); }
 .col.right { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
-.col.center { overflow-y: auto; }
-.tbl-wrap { overflow: auto; flex: 1 0 220px; min-height: 0; }
+.col.center { overflow: hidden; }
+.tbl-wrap { overflow: auto; flex: 1 1 0; min-height: 160px; }
 .sec-h { display: flex; align-items: center; gap: 10px; padding: 8px 14px; min-height: 36px; flex: none; }
 .sec-h h2 { margin: 0; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .sec-h { flex-wrap: wrap; }
@@ -236,7 +247,7 @@ table.turns { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .big.fallback { border-color: var(--neg); }
 .chip { font-weight: 600; font-size: 12px; }
 .chip.main { color: var(--main); } .chip.solver { color: var(--solver); } .chip.fallback { color: var(--neg); }
-.why { margin: 8px 0 0; color: var(--ink); max-height: 5.2em; overflow-y: auto; overflow-wrap: anywhere; }
+.why { margin: 8px 0 0; color: var(--ink); overflow-wrap: anywhere; }
 .meter { height: 4px; background: var(--sunk); margin: 5px 0 2px; position: relative; }
 .meter i { position: absolute; inset: 0 auto 0 0; background: var(--main); }
 .meter.over i { background: var(--solver); }
@@ -251,7 +262,7 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .mapinfo { font-size: 12px; color: var(--ink2); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 2px 14px; }
 .maptip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; padding: 2px 6px; border-radius: 3px; white-space: nowrap; z-index: 4; }
 .log-block { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 140px; border-bottom: 0; }
-.log { padding: 0 0 8px; overflow-y: auto; max-height: 360px; }
+.log { padding: 0 0 8px; }
 .log-block.collapsed .log { display: none; }
 .lg-ev { border-top: 1px solid var(--line2); }
 .lg-ev summary { list-style: none; padding: 4px 14px; display: grid; grid-template-columns: 52px 54px 1fr; gap: 6px; align-items: baseline; }
@@ -263,7 +274,7 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .lg-ev .k.error { color: var(--neg); } .lg-ev .k.text { color: var(--main); } .lg-ev .k.system { color: var(--ink3); }
 .lg-ev .c { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lg-ev .ctx { font-size: 11px; color: var(--ink3); }
-.lg-ev pre { margin: 0; padding: 4px 14px 8px 112px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); max-height: 260px; overflow-y: auto; }
+.lg-ev pre { margin: 0; padding: 4px 14px 8px 112px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); }
 .lg-ev.tool pre { font-family: var(--mono); font-size: 11px; }
 
 /* ---------- 作戦・サブ ---------- */
@@ -280,9 +291,9 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .dline .k { color: var(--ink3); margin-right: 6px; }
 .sub-block .sec-h { flex-wrap: nowrap; }
 .sub-block .sub-n { flex: 1; min-width: 0; flex-wrap: wrap; }
-.sub-block .sub-body { max-height: 300px; overflow-y: auto; padding-bottom: 6px; }
+.sub-block .sub-body { padding-bottom: 6px; }
 .sub-block.collapsed .sub-body { display: none; }
-.memo-block .memo-body { margin: 0; padding: 8px 10px 10px; white-space: pre-wrap; word-break: break-word; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink2); max-height: 220px; overflow-y: auto; }
+.memo-block .memo-body { margin: 0; padding: 8px 10px 10px; white-space: pre-wrap; word-break: break-word; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink2); }
 .sub-block .sub-n { display: inline-flex; gap: 8px; font-size: 12px; color: var(--ink2); }
 .st-t { border-top: 1px solid var(--line2); }
 .st-t summary { list-style: none; display: grid; grid-template-columns: 18px 1fr auto; gap: 6px; align-items: baseline; padding: 4px 14px; }
@@ -291,7 +302,7 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .st-t .rq { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-t[open] .rq { white-space: normal; overflow: visible; }
 .st-t .du { font-size: 11px; color: var(--ink3); white-space: nowrap; }
-.st-t pre { margin: 0; padding: 2px 14px 8px 38px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); max-height: 200px; overflow-y: auto; }
+.st-t pre { margin: 0; padding: 2px 14px 8px 38px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); }
 .st-t.failed pre { color: var(--neg); }
 .st-ic { width: 12px; height: 12px; border-radius: 50%; display: inline-block; align-self: center; border: 2px solid var(--ink3); }
 .st-ic.queued { border-style: dotted; }
@@ -343,6 +354,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="ln"><b id="nOff" class="num">-</b><span>公式(途中)</span></div>
       <div class="ln"><b id="nBest" class="num">-</b><span id="nBestSub">ルーム最高</span></div>
     </div>
+    <span class="prep-info" id="prepInfo" role="status"></span>
+    <button class="btn" id="btnPrep" type="button" title="入室前に、メインがルール・このルームの過去の試合・作戦方針を読んで最初のメモを作る（ルームには入らない）">準備</button>
     <button class="btn primary" id="btnStart" type="button">開始</button>
     <button class="btn" id="btnPause" type="button" hidden>試合後に一時停止</button>
     <button class="btn danger" id="btnStop" type="button" hidden>停止</button>
@@ -491,7 +504,7 @@ const load = (k) => { try { return localStorage.getItem(k); } catch { return nul
 const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 const STATUS = {
-  idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], waiting: ["他プレイヤー待ち", "warn"], claude_in_game: ["メインが思考中", "think"], preparing: ["準備中(資料を読んでメモ作成)", "think"],
+  idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], waiting: ["他プレイヤー待ち", "warn"], claude_in_game: ["メインが思考中", "think"], preparing: ["準備中(資料を読んでメモ作成)", "think"], standby: ["スタンバイOK", "on"],
   evolving: ["進化中(ソルバー改修)", "evo"], cooldown: ["次の試合を準備中", "warn"], paused: ["一時停止", "warn"], error: ["エラー", "err"],
 };
 const SERIES_VARS = ["--s1", "--s2", "--s3", "--s4", "--s5"];
@@ -660,7 +673,16 @@ function render_status() {
 function renderHead() {
   const st = S.st; if (!st) return;
   render_status();
-  $("#btnStart").hidden = st.running; $("#btnPause").hidden = !st.running; $("#btnStop").hidden = !st.running;
+  const prep = st.prep || { required: false, state: "none" };
+  const preparingNow = prep.state === "preparing";
+  const needPrep = prep.required && prep.state !== "ready";
+  $("#btnStart").hidden = st.running; $("#btnPause").hidden = !st.running; $("#btnStop").hidden = !st.running && !preparingNow;
+  $("#btnPrep").hidden = st.running || !prep.required;
+  $("#btnPrep").disabled = preparingNow;
+  $("#btnPrep").textContent = preparingNow ? "準備中…" : prep.state === "ready" ? "準備し直す" : "準備";
+  $("#btnStart").disabled = preparingNow || needPrep;
+  $("#btnStart").title = needPrep ? "先に「準備」を押してください（スタンバイOK になると入室できます）" : "入室して試合を始める";
+  renderPrepInfo(prep, st.running);
   $("#btnPause").disabled = !!st.pauseRequested; $("#btnPause").textContent = st.pauseRequested ? "一時停止を予約済み" : "試合後に一時停止";
   $("#nTurn").textContent = st.turn || 0;
   $("#nTurnSub").textContent = st.maxTurns ? `/ ${st.maxTurns} ターン` : "ターン";
@@ -720,6 +742,7 @@ $("#selRoom").addEventListener("change", (e) => {
   control({ action: "update_settings", ...settingsPayload() });
 });
 ["inMain", "inSub", "selEffort", "selSubEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
+$("#btnPrep").addEventListener("click", () => control({ action: "prepare", ...settingsPayload() }));
 $("#btnStart").addEventListener("click", () => control({ action: "start", ...settingsPayload() }));
 $("#btnStop").addEventListener("click", () => control({ action: "stop" }));
 $("#btnPause").addEventListener("click", () => control({ action: "pause" }));
@@ -1088,6 +1111,21 @@ function renderDecide() {
     <div class="meter ${lat >= budget ? "over" : ""}"><i style="width:${ratio * 100}%"></i></div>
     ${last ? `<div class="prev"><span>直前 T${last.turn}</span>${chip(last, 1)}${chip(last, 2)}<span>${fmt(last.estimatedScoreAfter)}点</span></div>` : ""}
     ${cands || fr ? `<details class="cand"><summary>候補ルート</summary><ul>${cands}${fr}</ul></details>` : ""}`;
+}
+
+/* ============ 準備フェーズ ============ */
+function renderPrepInfo(prep, running) {
+  const el = $("#prepInfo");
+  el.className = "prep-info";
+  if (running || !prep.required) { el.textContent = ""; el.title = ""; return; }
+  const ver = prep.versionChanged ? ` · 公式ver変更 ${prep.knownVersion}→${prep.officialVersion}` : "";
+  if (prep.state === "preparing") { el.textContent = `準備中 Room ${prep.room}…`; }
+  else if (prep.state === "ready") {
+    el.classList.add(prep.versionChanged ? "warn" : "ok");
+    el.textContent = `スタンバイOK Room ${prep.room}（${Math.round((prep.durationMs || 0) / 1000)}秒・${fmtTok(prep.tokens)}）${ver}`;
+  } else if (prep.state === "failed") { el.classList.add("warn"); el.textContent = `準備できず: ${prep.error || ""}`; }
+  else { el.textContent = "未準備"; }
+  el.title = [el.textContent, prep.officialVersion ? `公式 ver ${prep.officialVersion}（記録 ${prep.knownVersion ?? "-"}）` : ""].filter(Boolean).join("\n");
 }
 
 /* ============ トークン使用量 ============ */

@@ -13,7 +13,7 @@
 ## 現状の要点
 
 - 試合は `src/index.ts` のループが回す。1試合ごとに `MainAgent` を作り、入室前の `begin()` でメインの最初の問い合わせ用プロセスを先に起動し、サブを準備する（サブは依頼ごとにセッションを起動）。
-- 入室前の**準備フェーズ**（`AGENT_PREP`、`agent/prompts/prep.md`）: メインがツール（Read/Glob/Grep のみ）でルール・`var/room-profiles.json`・このルームの過去の試合（`AGENT_PREP_PAST_RUNS` 件、summary/diagnosis/MEMO/ASK_SUB/evolution-report）・作戦方針を読み、試合開始時のメモを作る。上限 `AGENT_PREP_TIMEOUT_SEC`、超えたらメモなしで開始。実測（room 555, gpt-6.2-astra medium）: 49秒・約6.8万トークン・728字。
+- **準備フェーズ**（「開始」より前、ルームには入らない。WebUI の「準備」→ スタンバイOK →「開始」で入室。`AGENT_PREP`、`agent/prompts/prep.md`）: 公式トップの `ver` を `knowledge/server.json` と比べ（変わっていれば警告し、メモにも注意を書かせる）、メインがツール（Read/Glob/Grep のみ）でルール・`var/room-profiles.json`・このルームの過去の試合（`AGENT_PREP_PAST_RUNS` 件、summary/diagnosis/MEMO/ASK_SUB/evolution-report）・作戦方針を読み、試合開始時のメモを作る。上限 `AGENT_PREP_TIMEOUT_SEC`。失敗したら「準備」をやり直す（スタンバイOK でないと開始できない）。ルーム・モデル・effort を変えると準備は無効。1回の準備は1試合で使い切り、連続モードの次の試合は入室前に自動で準備し直す。実測（room 555, gpt-6.2-astra medium）: 49秒・約6.8万トークン・728字。
 - メインは毎フェーズ**前の会話を持たない使い捨ての `claude -p`**（`--no-session-persistence --tools "" --system-prompt …`）で聞く。Claude Code 既定のシステムプロンプトとツール定義を送らないので、1回あたり約3,600トークンで一定（gpt-6.2-astra, 2026-11-20 実測、応答 約5〜8秒）。引き継ぐのは、メインが返答の `memo` で書き換えるメモ（`AGENT_MEMO_MAX_CHARS`）・ハーネスが作る直近の経過（`AGENT_RECENT_PHASES`）・現在の状況だけ。次のフェーズ用のプロセスは裏で先に起動し、予算切れの問い合わせは kill する。会話の要約（旧 `AGENT_COMPACT_AT_TOKENS`）は廃止。
 - メモは `var/current/MEMO.md`、サブへの依頼と結果の全文は `var/current/ASK_SUB.md` に毎回書き出す（人とサブが読む用。編集しても試合には反映されない）。試合後は `var/runs/<runId>/` にコピー。メインへのメッセージには依頼の TODO（`AGENT_SUB_TODO_ITEMS` 件）を毎回付ける。
 - メインは「作戦係＋例外係」。毎フェーズ `continue`（作戦のまま、ソルバーが手を打つ）/ `plan`（目標マスへ向かう作戦に変更）/ `command`（手を直接指定）を JSON で返す。任意の `delegate` でサブに仕事を依頼できる。

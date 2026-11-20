@@ -8,13 +8,13 @@
  * --model / --sub-model / --effort / --sub-effort / --turn-budget は .env より優先（src/config.ts）。
  */
 import { parseArgs } from "node:util";
-import { MainAgent } from "./agent/main-agent";
+import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { Client } from "./client";
 import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
 import { getRoomProfile } from "./memory/knowledge-store";
 import { runAgentMatch } from "./runner";
-import { numSetting } from "./settings";
+import { boolSetting, numSetting } from "./settings";
 
 const config = loadAgentConfig();
 const { values } = parseArgs({
@@ -33,12 +33,22 @@ try {
   if (mainAgent) {
     const profile = getRoomProfile(config.room);
     const t0 = Date.now();
-    const ready = await mainAgent.begin({
-      room: config.room,
-      stageName: null,
-      webMap: profile.webMapAvailable ?? false,
-      highScore: profile.highScore ?? 0,
-    });
+    // 準備フェーズ（ルームに入る前）: ルール・過去の試合・作戦方針を読んで最初のメモを作る
+    let prep: PrepResult | null = null;
+    if (boolSetting("AGENT_PREP")) {
+      prep = await runPrepPhase({ model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort }, config.room);
+      console.log(JSON.stringify({ prep: prep.status, sec: Math.round(prep.durationMs / 1000), memoChars: prep.memo.length, official: prep.official }));
+      if (prep.status !== "ok" || !prep.memo) prep = null;
+    }
+    const ready = await mainAgent.begin(
+      {
+        room: config.room,
+        stageName: null,
+        webMap: profile.webMapAvailable ?? false,
+        highScore: profile.highScore ?? 0,
+      },
+      prep ? { memo: prep.memo, usage: prep.usage } : null,
+    );
     console.log(JSON.stringify({ warmup: ready.status, ms: Date.now() - t0 }));
   }
 

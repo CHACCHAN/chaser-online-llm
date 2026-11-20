@@ -69,7 +69,6 @@ async function playPhases(agent: MainAgent, n: number) {
 
 test("毎フェーズ使い捨ての問い合わせで、メモと直近の経過だけを引き継ぐ", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
-  Bun.env.AGENT_PREP = "false";
   sent.length = 0;
   spawned = 0;
   const agent = new MainAgent({}, 5000);
@@ -99,7 +98,6 @@ test("毎フェーズ使い捨ての問い合わせで、メモと直近の経�
 
 test("1試合のトークン上限を超えたらソルバーのみで続ける", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "2000";
-  Bun.env.AGENT_PREP = "false";
   const agent = new MainAgent({}, 5000);
   await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
   const sources = await playPhases(agent, 5);
@@ -112,7 +110,6 @@ test("1試合のトークン上限を超えたらソルバーのみで続ける"
 
 test("サブへの依頼は TODO として次のフェーズ以降のメッセージに必ず載る", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
-  Bun.env.AGENT_PREP = "false";
   sent.length = 0;
   const agent = new MainAgent({}, 5000);
   await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
@@ -150,7 +147,6 @@ test("memo に { } が入っていても返答を読める", async () => {
 
 test("ワープで座標系が変わったら作戦目標を解除し、メッセージで知らせる", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
-  Bun.env.AGENT_PREP = "false";
   sent.length = 0;
   const agent = new MainAgent({}, 5000);
   await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
@@ -175,9 +171,8 @@ test("ワープで座標系が変わったら作戦目標を解除し、メッ�
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
 
-test("準備フェーズ: 入室前に読むだけのツールで調べさせ、返答の memo を試合開始時のメモにする", async () => {
+test("準備フェーズ（開始より前）: 読むだけのツールで調べさせ、そのメモから試合を始める", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
-  Bun.env.AGENT_PREP = "true";
   sent.length = 0;
   const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
   proto.ask = async function (this: { options: ClaudeSessionOptions }, text: string): Promise<AskResult> {
@@ -187,18 +182,25 @@ test("準備フェーズ: 入室前に読むだけのツールで調べさせ、
     }
     return origAsk.call(this, text);
   };
-  const agent = new MainAgent({}, 5000);
-  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
-  const prep = sent.find((s) => s.label === "prep")!;
-  expect(prep.options.tools).toBe("Read,Glob,Grep");
-  expect(prep.text).toContain("このルームの過去の試合");
-  expect(prep.text).toContain("ユーザー定義の作戦方針");
-  expect(agent.currentMemo).toBe("東に G の塊。南西の奈落に注意。序盤は北の土を一筆書き");
-  // 最初のフェーズのメッセージにそのメモが入る
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response("<html>ver 20260217</html>")) as unknown as typeof fetch;
+  const { runPrepPhase } = await import("./main-agent");
+  const prep = await runPrepPhase({}, 1);
+  globalThis.fetch = origFetch;
   proto.ask = origAsk;
+  expect(prep.status).toBe("ok");
+  expect(prep.memo).toBe("東に G の塊。南西の奈落に注意。序盤は北の土を一筆書き");
+  expect(prep.official.version).toBe("20260217");
+  const p = sent.find((x) => x.label === "prep")!;
+  expect(p.options.tools).toBe("Read,Glob,Grep");
+  expect(p.text).toContain("このルームの過去の試合");
+  expect(p.text).toContain("ユーザー定義の作戦方針");
+
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 }, { memo: prep.memo, usage: prep.usage });
+  expect(agent.currentMemo).toBe(prep.memo);
   await playPhases(agent, 1);
-  expect(sent.find((s) => s.label === "main")!.text).toContain("東に G の塊");
+  expect(sent.find((x) => x.label === "main")!.text).toContain("東に G の塊");
   await agent.end();
-  delete Bun.env.AGENT_PREP;
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });

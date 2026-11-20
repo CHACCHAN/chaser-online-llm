@@ -10,8 +10,10 @@ export type AgentRunStatus =
   | "playing"
   /** 他プレイヤー待ち（複数人ルーム） */
   | "waiting"
-  /** 試合前の準備フェーズ（メインが資料を読んで最初のメモを作る） */
+  /** 準備フェーズ（「開始」より前。メインが資料・過去の試合を読んで最初のメモを作る） */
   | "preparing"
+  /** 準備完了。「開始」で入室できる */
+  | "standby"
   | "claude_in_game"
   | "evolving"
   | "cooldown"
@@ -116,14 +118,31 @@ export interface UiDashboardState {
   agentUsage: AgentUsageReport | null;
   /** メインが次のフェーズへ引き継ぐメモ */
   agentMemo: string;
+  /** 準備フェーズの状態（「開始」はこれが ready の時だけ。準備不要の設定なら required=false） */
+  prep: PrepUiState;
   recentTurns: TurnRecord[];
   diagnosisMarkdown: string;
   roomProfiles: Record<string, RoomProfile>;
   updatedAt: string;
 }
 
+export interface PrepUiState {
+  required: boolean;
+  state: "none" | "preparing" | "ready" | "failed";
+  room: number | null;
+  model: string | null;
+  effort: string | null;
+  at: string | null;
+  durationMs: number | null;
+  tokens: number | null;
+  error: string | null;
+  officialVersion: string | null;
+  knownVersion: string | null;
+  versionChanged: boolean;
+}
+
 export interface UiControlCommand {
-  action: "start" | "stop" | "pause" | "resume" | "update_settings";
+  action: "prepare" | "start" | "stop" | "pause" | "resume" | "update_settings";
   room?: number;
   model?: string;
   subModel?: string;
@@ -177,6 +196,7 @@ class UiEventBus {
     subTasks: [],
     agentUsage: null,
     agentMemo: "",
+    prep: { required: true, state: "none", room: null, model: null, effort: null, at: null, durationMs: null, tokens: null, error: null, officialVersion: null, knownVersion: null, versionChanged: false },
     recentTurns: [],
     diagnosisMarkdown: "",
     roomProfiles: {},

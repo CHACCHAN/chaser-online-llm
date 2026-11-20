@@ -4,7 +4,9 @@ import { runPostMatchEvolution } from "./evolve";
 import { waitAwareClientConfig } from "./client/wait-status";
 import { boolSetting } from "./settings";
 import { getRoomProfile, loadRoomProfiles } from "./memory/knowledge-store";
-import { MainAgent } from "./agent/main-agent";
+import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
+import { totalTokens } from "./agent/usage";
+import type { PrepUiState } from "./ui/event-bus";
 import { runAgentMatch } from "./runner";
 import { logger } from "./tools";
 import { type UiControlCommand, uiBus } from "./ui/event-bus";
@@ -47,6 +49,64 @@ async function main() {
   let currentClient: Client | null = null;
   let pendingRoom: number | null = null;
 
+  // ---- 準備フェーズ（「開始」より前。ルームには入らない） ----
+  /** 準備済みの結果。ルーム・モデル・effort が変わったら無効 */
+  let prepared: { key: string; result: PrepResult } | null = null;
+  let preparing: Promise<boolean> | null = null;
+  let prepAbort: AbortController | null = null;
+  const prepKey = () => `${config.room}|${config.model ?? ""}|${config.effort ?? ""}`;
+  const prepRequired = () => config.useMainAgent && boolSetting("AGENT_PREP");
+  const isPrepared = () => !prepRequired() || prepared?.key === prepKey();
+  const publishPrep = (patch: Partial<PrepUiState>) =>
+    uiBus.patchState({ prep: { ...uiBus.getState().prep, required: prepRequired(), ...patch } });
+  const resetPrep = () => {
+    prepared = null;
+    publishPrep({ state: "none", room: null, model: null, effort: null, at: null, durationMs: null, tokens: null, error: null });
+  };
+  const idleStatus = () =>
+    prepRequired() && !isPrepared()
+      ? { status: "idle" as const, statusMessage: "待機中 — ルーム・モデルを選んで「準備」を押してください（準備が済むと「開始」で入室できます）" }
+      : { status: "standby" as const, statusMessage: `スタンバイOK — Room ${config.room}。「開始」で入室します` };
+
+  /** 準備フェーズを実行する（既に実行中ならその完了を待つ）。成功で true */
+  const doPrep = (): Promise<boolean> => {
+    if (preparing) return preparing;
+    preparing = (async () => {
+      const key = prepKey();
+      prepAbort = new AbortController();
+      publishPrep({ state: "preparing", room: config.room, model: config.model ?? null, effort: config.effort ?? null, error: null });
+      uiBus.patchState({ status: "preparing", statusMessage: `準備中 — メインが Room ${config.room} のルール・過去の試合・作戦方針を読んで最初のメモを作成中（ルームにはまだ入っていません）` });
+      try {
+        const r = await runPrepPhase({ model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort }, config.room, prepAbort.signal);
+        const aborted = prepAbort.signal.aborted;
+        const ok = !aborted && key === prepKey() && r.status === "ok" && r.memo.length > 0;
+        prepared = ok ? { key, result: r } : null;
+        publishPrep({
+          state: ok ? "ready" : aborted ? "none" : "failed",
+          at: new Date().toISOString(),
+          durationMs: r.durationMs,
+          tokens: totalTokens(r.usage),
+          error: ok ? null : aborted ? "中止" : key !== prepKey() ? "準備中に設定が変わった" : r.error ?? "メモが空",
+          officialVersion: r.official.version,
+          knownVersion: r.official.knownVersion,
+          versionChanged: r.official.changed,
+        });
+        if (ok) uiBus.patchState({ agentMemo: r.memo });
+        if (r.official.changed) {
+          uiBus.pushClaudeEvent({ context: "system", kind: "error", title: "公式のバージョンが変わった", content: `記録 ${r.official.knownVersion} → 公式 ${r.official.version}。アイテムID・コマンド・ルールが変わった可能性があります（agent/SETUP.md §4 の見直しを推奨）` });
+        }
+        if (!uiBus.getState().running) {
+          uiBus.patchState(ok ? idleStatus() : { status: "idle", statusMessage: `準備できませんでした（${aborted ? "中止" : r.error ?? "メモが空"}）— 「準備」をやり直してください` });
+        }
+        return ok;
+      } finally {
+        preparing = null;
+        prepAbort = null;
+      }
+    })();
+    return preparing;
+  };
+
   let wakeResolver: (() => void) | null = null;
   const wakeUp = () => {
     if (wakeResolver) {
@@ -79,18 +139,36 @@ async function main() {
     }
     if (typeof cmd.autoContinue === "boolean") uiBus.patchState({ autoContinue: cmd.autoContinue });
     uiBus.patchState(settingsState());
+    // ルーム・モデル・effort が変わったら準備はやり直し
+    if (prepared && prepared.key !== prepKey()) {
+      resetPrep();
+      if (!uiBus.getState().running) uiBus.patchState(idleStatus());
+    } else {
+      publishPrep({});
+    }
   };
 
   uiBus.setControlHandler((cmd) => {
     if (cmd.action === "update_settings") applySettings(cmd);
-    if (cmd.action === "start" || cmd.action === "resume") {
+    if (cmd.action === "prepare") {
+      if (uiBus.getState().running || inMatch) return;
       applySettings(cmd);
+      void doPrep();
+    }
+    if (cmd.action === "start" || cmd.action === "resume") {
+      if (preparing) return;
+      applySettings(cmd);
+      if (!isPrepared()) {
+        uiBus.patchState({ status: "idle", statusMessage: "先に「準備」を押してください（スタンバイOK になってから入室します）" });
+        return;
+      }
       uiBus.patchState({ running: true, pauseRequested: false, stopRequested: false });
       wakeUp();
     }
     if (cmd.action === "stop") {
       uiBus.patchState({ running: false, stopRequested: true, pauseRequested: false });
       currentClient?.abort();
+      prepAbort?.abort();
       wakeUp();
     }
   });
@@ -109,13 +187,13 @@ async function main() {
     // 待機状態: WebUI の「開始」ボタンが押されるまで何もしない
     if (!st.running || st.pauseRequested || st.stopRequested) {
       uiBus.patchState({
-        status: st.pauseRequested ? "paused" : "idle",
+        ...(preparing ? {} : st.pauseRequested ? { status: "paused" as const, statusMessage: "一時停止中" } : idleStatus()),
         running: false,
         pauseRequested: false,
         stopRequested: false,
         roomProfiles: loadRoomProfiles().rooms,
-        statusMessage: "待機中 — Webダッシュボードでルームを選択して「開始」を押してください",
       });
+      publishPrep({});
       await new Promise<void>((resolve) => {
         wakeResolver = resolve;
       });
@@ -140,6 +218,19 @@ async function main() {
       uiBus.updateScores({ roomHighScore: getRoomProfile(config.room).highScore });
       uiBus.patchState(settingsState());
     }
+    // 連続モードの次の試合など、準備が済んでいなければ入室前に準備する（直前の試合も読ませる）
+    if (!isPrepared()) {
+      const ok = await doPrep();
+      if (!ok || uiBus.getState().stopRequested) {
+        uiBus.patchState({ running: false });
+        continue;
+      }
+    }
+    // （prepared はクロージャから更新されるので、ここで型を明示して読む）
+    const preparedNow = prepared as { key: string; result: PrepResult } | null;
+    const prep = prepRequired() ? (preparedNow?.result ?? null) : null;
+    // 準備は1試合ごとに使い切る（次の試合はその試合の結果も読んで準備し直す）
+    resetPrep();
     matchIndex += 1;
 
     const runMatchCycle = async (client: Client, mainAgent: MainAgent | null) => {
@@ -209,12 +300,15 @@ async function main() {
         if (mainAgent) {
           uiBus.patchState({ statusMessage: `Match #${matchIndex}: メインエージェント起動中...` });
           const profile = getRoomProfile(config.room);
-          const ready = await mainAgent.begin({
-            room: config.room,
-            stageName: null,
-            webMap: profile.webMapAvailable ?? false,
-            highScore: profile.highScore ?? 0,
-          });
+          const ready = await mainAgent.begin(
+            {
+              room: config.room,
+              stageName: null,
+              webMap: profile.webMapAvailable ?? false,
+              highScore: profile.highScore ?? 0,
+            },
+            prep ? { memo: prep.memo, usage: prep.usage } : null,
+          );
           logger.info({ ready: ready.status }, "Main agent warm-up finished");
         }
 
