@@ -204,3 +204,16 @@ test("準備フェーズ（開始より前）: 読むだけのツールで調べ
   await agent.end();
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
+
+test("安全ガード: 行き先が罠・通行不可の直接指定を見分ける（未観測・静止は危険としない）", async () => {
+  const { landingDanger } = await import("./main-agent");
+  const wm = new WorldMap();
+  // 上=ジオード(4) 左=奈落(12) 右=岩盤(10) 下=土(2)
+  wm.applyObservation("CMD1", "gr", [2, 4, 2, 12, 1000, 10, 2, 2, 2], 1);
+  expect(landingDanger(wm, "gru")).toContain("罠(4)");
+  expect(landingDanger(wm, "wl")).toContain("罠(12)");
+  expect(landingDanger(wm, "wr")).toContain("通行不可(10)");
+  expect(landingDanger(wm, "wd")).toBeNull();
+  expect(landingDanger(wm, "gr")).toBeNull();
+  expect(landingDanger(wm, "keird")).toBeNull(); // 未観測
+});

@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { CMD1_COMMANDS, CMD2_COMMANDS, type WorldMap } from "../memory/world-map";
+import { CMD1_COMMANDS, CMD1_SPECS, CMD2_COMMANDS, CMD2_SPECS, classifyTileSafety, type WorldMap } from "../memory/world-map";
 import { getRoomProfile } from "../memory/knowledge-store";
 import { AGENT_DIR, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
 import { numSetting } from "../settings";
@@ -308,8 +308,16 @@ export class MainAgent {
       decision = ctx.solve(this.plan);
       note = `作戦変更 → 目標 (${reply.target.join(",")})`;
     } else if (reply.action === "command" && reply.command) {
-      decision = { command: reply.command as SolverDecision["command"], reason: reply.note ?? "", confidence: 1 };
-      note = "手を直接指定";
+      // 安全ガード: 行き先が罠・通行不可なのに、ソルバーの手なら避けられる時は却下する（モデルの見落とし対策）
+      const danger = landingDanger(ctx.worldMap, reply.command);
+      if (danger && !landingDanger(ctx.worldMap, solverNow.command)) {
+        note = `手の指定を却下（${reply.command} の行き先は${danger}）→ ソルバー手`;
+        this.notices.push(`前のフェーズの指定 ${reply.command} は行き先が${danger}だったので却下し、ソルバー手 ${solverNow.command} を送った。合法手の一覧と周囲のマスを確かめてから指定すること`);
+        uiBus.pushClaudeEvent({ context: "in_game", kind: "error", title: "危険な手を却下", content: `T${ctx.turn} ${ctx.phase}: ${reply.command}（行き先が${danger}）→ ${solverNow.command}` });
+      } else {
+        decision = { command: reply.command as SolverDecision["command"], reason: reply.note ?? "", confidence: 1 };
+        note = "手を直接指定";
+      }
     }
     return {
       decision: { ...decision, reason: `${decision.reason}${reply.note ? ` / ${reply.note}` : ""}` },
@@ -541,6 +549,19 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
     durationMs: Date.now() - t0,
     official,
   };
+}
+
+/** 手の行き先が罠・通行不可なら、その説明（観測済みのマスだけで判定。未観測は危険としない） */
+export function landingDanger(worldMap: WorldMap, command: string): string | null {
+  const spec = (CMD1_SPECS as Record<string, { move: [number, number] }>)[command] ?? (CMD2_SPECS as Record<string, { move: [number, number] }>)[command];
+  if (!spec || (spec.move[0] === 0 && spec.move[1] === 0)) return null;
+  const [x, y] = worldMap.getPosition();
+  const tile = worldMap.getTile(x + spec.move[0], y + spec.move[1]);
+  if (!tile) return null;
+  const safety = classifyTileSafety(tile.value);
+  if (safety === "HAZARD") return `罠(${tile.value})`;
+  if (safety === "BLOCKED") return tile.value >= 1000 ? `他プレイヤー(${tile.value})` : `通行不可(${tile.value})`;
+  return null;
 }
 
 /** 準備フェーズの返答から最初のメモを取り出す（最後の JSON 行の memo。無ければ本文全体） */
