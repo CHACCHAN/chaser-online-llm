@@ -192,7 +192,7 @@ export function decideTurnAction(
     for (const keiCmd of ["keilu", "keiru", "keild", "keird"] as Cmd2Command[]) {
       const [kdx, kdy] = CMD2_SPECS[keiCmd].move;
       const kRec = worldMap.getTile(x + kdx, y + kdy);
-      if (!kRec) continue;
+      if (!kRec) continue; // 未知へは飛ばない（room556 で大損）
       const kInfo = getTileInfo(kRec.value);
       if (kInfo.passable && !kInfo.hazard && kInfo.score >= 150) {
         return {
@@ -215,19 +215,27 @@ export function decideTurnAction(
     };
   }
 
-  for (const keiCmd of ["keilu", "keiru", "keild", "keird"] as Cmd2Command[]) {
-    const [kdx, kdy] = CMD2_SPECS[keiCmd].move;
-    const kRec = worldMap.getTile(x + kdx, y + kdy);
-    const safety = classifyTileSafety(kRec?.value ?? null);
-    if (safety !== "HAZARD" && safety !== "BLOCKED") {
-      return {
-        command: keiCmd,
-        reason: `Emergency knight escape ${keiCmd} from surrounded position`,
-        confidence: 0.4,
-        triggerHarness: true,
-        triggerReason: "SURROUNDED_BY_HAZARDS",
-      };
-    }
+  // room556 実測: kei* は -250 の高疲労。未知マスや穴へ飛ぶと大損するため、既知の安全マスだけを候補にする。
+  const escapes = (["keilu", "keiru", "keild", "keird"] as Cmd2Command[])
+    .map((keiCmd) => {
+      const [kdx, kdy] = CMD2_SPECS[keiCmd].move;
+      const kRec = worldMap.getTile(x + kdx, y + kdy);
+      const kInfo = kRec ? getTileInfo(kRec.value) : null;
+      return { keiCmd, kRec, kInfo };
+    })
+    .filter((o) => o.kInfo !== null && o.kInfo.passable && !o.kInfo.hazard)
+    .filter((o) => o.kInfo!.score >= 150 || o.kInfo!.score === 0);
+  if (escapes.length > 0) {
+    // 高得点着地を最優先。同点なら疲労を無駄にしないよう穴(0)より安全な土/アイテムへ。
+    escapes.sort((a, b) => b.kInfo!.score - a.kInfo!.score || (a.kRec!.visitedCount ?? 0) - (b.kRec!.visitedCount ?? 0));
+    const best = escapes[0]!;
+    return {
+      command: best.keiCmd,
+      reason: `Knight escape ${best.keiCmd} onto known ${best.kInfo!.label}(${best.kInfo!.score})`,
+      confidence: 0.4,
+      triggerHarness: true,
+      triggerReason: "SURROUNDED_BY_HAZARDS",
+    };
   }
 
   return {

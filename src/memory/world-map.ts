@@ -369,6 +369,8 @@ export class WorldMap {
     stageName?: string | null,
     turn?: number,
     selfTileId?: number | null,
+    /** 取得を始めた時点の自機のローカル座標（取得中に動いてもずれないように） */
+    localPosAtCapture?: [number, number],
   ): void {
     if (!grid.length || !grid[0]?.length) return;
     this.globalGrid = grid.map((r) => [...r]);
@@ -376,7 +378,8 @@ export class WorldMap {
     if (selfTileId) this.selfTileId = selfTileId;
     if (stageName !== undefined) this.stageName = stageName;
     if (knownPlayerPos) {
-      this.globalOffset = [knownPlayerPos[0] - this.x, knownPlayerPos[1] - this.y];
+      const [lx, ly] = localPosAtCapture ?? [this.x, this.y];
+      this.globalOffset = [knownPlayerPos[0] - lx, knownPlayerPos[1] - ly];
       this.overlayGlobalGridToCurrentSegment();
     } else {
       this.tryLocalizeOnGlobalGrid();
@@ -1222,8 +1225,9 @@ export class WorldMap {
       localPlannedPath.push([mainGoal.x, mainGoal.y]);
     }
 
-    // 1. Web マップがある場合はグローバルグリッドをベースに最新観測を上書きして返す
-    if (this.globalGrid && this.globalGrid.length > 0 && this.globalGrid[0]) {
+    // 1. Web マップがあり自機の位置合わせも済んでいれば、全体マップをベースに最新観測を上書きして返す
+    //    （取れていない・位置が合わない間は 2. の自作マップ表示）
+    if (this.globalGrid && this.globalGrid.length > 0 && this.globalGrid[0] && this.globalOffset) {
       const height = this.globalGrid.length;
       const width = this.globalGrid[0].length;
       const grid: (number | null)[][] = this.globalGrid.map((row) =>

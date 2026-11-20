@@ -1,0 +1,119 @@
+import { webMapRefreshMode } from "../config";
+import type { WorldMap } from "../memory/world-map";
+import { numSetting } from "../settings";
+import { logger } from "../tools";
+import { uiBus } from "../ui/event-bus";
+import { scrapeRoomWebMap, type WebMapScrapeResult } from "./web-map-scraper";
+
+/**
+ * Web マップの取得を試合の進行と切り離して裏で行う。
+ * - 取得は同時に1つだけ。終わっていなければ次の依頼は見送る（重いサーバを叩き続けない）
+ * - まだ取れていない間は CHASER_WEB_MAP_RETRY_TURNS ターンごとに再挑戦（サーバが重い・複数人で開始待ち等）
+ * - 取れてからは CHASER_WEB_MAP_REFRESH に従って取り直す（every_turn / warp / off）
+ * - 取得開始時点の自機位置を基準に盤面を合わせるので、取得中に動いてもずれない。取得中にワープしたら捨てる
+ */
+export class WebMapRefresher {
+  private inFlight: Promise<void> | null = null;
+  private found = false;
+  private lastSourceUrl: string | null = null;
+  private lastStageName: string | null = null;
+  private consecutiveFailures = 0;
+  private attempts = 0;
+
+  constructor(
+    private readonly room: number,
+    private readonly webMapUrl: string | undefined,
+    private readonly worldMap: WorldMap,
+    private readonly onUpdated: (r: WebMapScrapeResult) => void,
+  ) {}
+
+  get available(): boolean {
+    return this.found;
+  }
+
+  get sourceUrl(): string | null {
+    return this.lastSourceUrl;
+  }
+
+  get stageName(): string | null {
+    return this.lastStageName;
+  }
+
+  /** 試合開始時: 取得を始め、タイムアウト1回分だけ結果を待つ（間に合わなければ裏で続行） */
+  async start(): Promise<void> {
+    if (webMapRefreshMode() === "off") return;
+    this.request(0, "開始時");
+    const waitMs = numSetting("CHASER_WEB_MAP_TIMEOUT_SEC", { min: 1 }) * 1000;
+    await Promise.race([this.inFlight, Bun.sleep(waitMs)]);
+  }
+
+  /** 各ターンの頭で呼ぶ */
+  onTurnStart(turn: number): void {
+    const mode = webMapRefreshMode();
+    if (mode === "off") return;
+    if (!this.found) {
+      const every = numSetting("CHASER_WEB_MAP_RETRY_TURNS", { min: 1, integer: true });
+      if (turn % every === 0) this.request(turn, "再挑戦");
+      return;
+    }
+    if (mode === "every_turn") this.request(turn, "定期");
+  }
+
+  /** ワープ直後: 位置合わせのためすぐ取り直す */
+  onWarp(turn: number): void {
+    if (webMapRefreshMode() !== "off") this.request(turn, "ワープ");
+  }
+
+  /** 試合終了時: 実行中の取得が終わるのを少しだけ待つ（ログ・プロファイルの書き込みを揃える） */
+  async drain(): Promise<void> {
+    if (this.inFlight) await Promise.race([this.inFlight, Bun.sleep(3000)]);
+  }
+
+  private request(turn: number, reason: string): void {
+    if (this.inFlight) return;
+    const capturePos = this.worldMap.getPosition();
+    const captureSegments = this.worldMap.getStats().segmentCount;
+    this.attempts += 1;
+    const startedAt = Date.now();
+    this.inFlight = (async () => {
+      try {
+        const r = await scrapeRoomWebMap({ room: this.room, webMapUrl: this.webMapUrl });
+        if (!r.found || !r.grid) {
+          this.onFailure(reason, r.error ?? "マップが見つからない", startedAt);
+          return;
+        }
+        if (this.worldMap.getStats().segmentCount !== captureSegments) {
+          logger.info({ reason }, "Web map discarded: warped while fetching");
+          return;
+        }
+        this.worldMap.setGlobalGrid(r.grid, r.playerPos, r.stageName, turn, r.selfTileId, capturePos);
+        this.consecutiveFailures = 0;
+        this.lastSourceUrl = r.sourceUrl;
+        this.lastStageName = r.stageName;
+        if (!this.found) {
+          this.found = true;
+          uiBus.pushClaudeEvent({
+            context: "system",
+            kind: "system",
+            title: "Web マップを取得",
+            content: `${reason}（T${turn}、${Math.round((Date.now() - startedAt) / 1000)}秒）。以降は ${webMapRefreshMode()} で更新`,
+          });
+          uiBus.patchState({ webMapDetected: true });
+        }
+        this.onUpdated(r);
+      } catch (err) {
+        this.onFailure(reason, err instanceof Error ? err.message : String(err), startedAt);
+      } finally {
+        this.inFlight = null;
+      }
+    })();
+  }
+
+  private onFailure(reason: string, error: string, startedAt: number): void {
+    this.consecutiveFailures += 1;
+    logger.warn(
+      { reason, error, ms: Date.now() - startedAt, consecutiveFailures: this.consecutiveFailures, attempts: this.attempts },
+      "Web map fetch failed (play continues with own map)",
+    );
+  }
+}

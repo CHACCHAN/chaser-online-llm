@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-11-20T07:25:00.000Z",
+  "updatedAt": "2026-11-20T12:55:07.277Z",
   "tiles": {
     "0": {
       "name": "hole",
@@ -121,6 +121,379 @@
       "symbol": "X",
       "known": true,
       "source": "verified"
+    },
+    "20": {
+      "name": "warp_20",
+      "label": "ワープ(20)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: knowledge/research/rules.json 20-53=warp(+5), observed 20-53 range"
+    },
+    "21": {
+      "name": "warp_21",
+      "label": "ワープ(21)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: knowledge/research/rules.json 20-53=warp(+5), observed 20-53 range"
+    },
+    "22": {
+      "name": "warp_22",
+      "label": "ワープ(22)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred"
+    },
+    "23": {
+      "name": "warp_23",
+      "label": "ワープ(23)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: knowledge/research/rules.json 20-53=warp(+5), observed 20-53 range"
+    },
+    "24": {
+      "name": "warp_24",
+      "label": "ワープ(24)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "25": {
+      "name": "warp_25",
+      "label": "ワープ(25)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "26": {
+      "name": "warp_26",
+      "label": "ワープ(26)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "27": {
+      "name": "warp_27",
+      "label": "ワープ(27)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "28": {
+      "name": "warp_28",
+      "label": "ワープ(28)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "29": {
+      "name": "warp_29",
+      "label": "ワープ(29)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "30": {
+      "name": "warp_30",
+      "label": "ワープ(30)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "31": {
+      "name": "warp_31",
+      "label": "ワープ(31)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "32": {
+      "name": "warp_32",
+      "label": "ワープ(32)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "33": {
+      "name": "warp_33",
+      "label": "ワープ(33)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "34": {
+      "name": "warp_34",
+      "label": "ワープ(34)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "35": {
+      "name": "warp_35",
+      "label": "ワープ(35)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "36": {
+      "name": "warp_36",
+      "label": "ワープ(36)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "37": {
+      "name": "warp_37",
+      "label": "ワープ(37)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "38": {
+      "name": "warp_38",
+      "label": "ワープ(38)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "39": {
+      "name": "warp_39",
+      "label": "ワープ(39)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "40": {
+      "name": "warp_40",
+      "label": "ワープ(40)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "41": {
+      "name": "warp_41",
+      "label": "ワープ(41)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "42": {
+      "name": "warp_42",
+      "label": "ワープ(42)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "43": {
+      "name": "warp_43",
+      "label": "ワープ(43)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "44": {
+      "name": "warp_44",
+      "label": "ワープ(44)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "45": {
+      "name": "warp_45",
+      "label": "ワープ(45)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "46": {
+      "name": "warp_46",
+      "label": "ワープ(46)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "47": {
+      "name": "warp_47",
+      "label": "ワープ(47)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "48": {
+      "name": "warp_48",
+      "label": "ワープ(48)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "49": {
+      "name": "warp_49",
+      "label": "ワープ(49)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "50": {
+      "name": "warp_50",
+      "label": "ワープ(50)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "51": {
+      "name": "warp_51",
+      "label": "ワープ(51)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "52": {
+      "name": "warp_52",
+      "label": "ワープ(52)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
+    },
+    "53": {
+      "name": "warp_53",
+      "label": "ワープ(53)",
+      "score": 5,
+      "passable": true,
+      "hazard": false,
+      "symbol": "W",
+      "known": true,
+      "source": "inferred",
+      "notes": "warp: rules.json 20-53=warp(+5)"
     }
   }
 }

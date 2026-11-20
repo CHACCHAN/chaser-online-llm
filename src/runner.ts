@@ -3,13 +3,13 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { RUNS_DIR, SOLVER_PATH } from "./paths";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
-import { type AgentConfig, webMapRefreshMode } from "./config";
+import type { AgentConfig } from "./config";
 import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
 import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
 import { getRoomProfile, reloadTilesKnowledge } from "./memory/knowledge-store";
 import { WorldMap } from "./memory/world-map";
-import { scrapeRoomWebMap } from "./perception/web-map-scraper";
+import { WebMapRefresher } from "./perception/web-map-refresher";
 import { GameOver, logger } from "./tools";
 import { decideTurnAction as defaultDecideTurnAction, type SolverDecision } from "./solver/active-solver";
 import { type UiPredictionState, uiBus } from "./ui/event-bus";
@@ -150,58 +150,28 @@ export async function runAgentMatch(
   const worldMap = new WorldMap();
   const roomProfileBefore = getRoomProfile(config.room);
 
-  // 開幕時に Web マップが利用可能か自動プローブ
-  const initialScrape = await scrapeRoomWebMap({
-    room: config.room,
-    webMapUrl: config.webMapUrl,
+  // Web マップは裏で取得する。取れない間は自作マップ、途中で取れたら全体マップ表示に切り替わる
+  const webMap = new WebMapRefresher(config.room, config.webMapUrl, worldMap, (r) => {
+    if (r.liveScore) uiBus.updateScores({ liveOfficial: r.liveScore });
+    uiBus.updateMap(worldMap.buildUiMapState(null, mainAgent?.currentPlan?.target ?? null));
   });
-  if (initialScrape.found && initialScrape.grid) {
-    worldMap.setGlobalGrid(initialScrape.grid, initialScrape.playerPos, initialScrape.stageName, 0, initialScrape.selfTileId);
-    logger.info(
-      {
-        method: initialScrape.method,
-        sourceUrl: initialScrape.sourceUrl,
-        stageName: initialScrape.stageName,
-        dimensions: initialScrape.dimensions,
-        playerPos: initialScrape.playerPos,
-      },
-      "Web map scraped and registered to WorldMap",
-    );
-  }
+  await webMap.start();
 
   uiBus.patchState({
     status: "playing",
-    statusMessage: `Room ${config.room} (${initialScrape.stageName ?? "SLAM"}) 対戦中`,
-    webMapDetected: initialScrape.found,
+    statusMessage: `Room ${config.room} (${webMap.stageName ?? "自作マップ"}) 対戦中`,
+    webMapDetected: webMap.available,
   });
   uiBus.updateScores({
     estimatedTotal: 0,
     estimatedAction: 0,
     estimatedItem: 0,
-    liveOfficial: initialScrape.liveScore,
+    liveOfficial: null,
     roomHighScore: roomProfileBefore.highScore,
     holeRevisits: 0,
     hazardHits: 0,
   });
   uiBus.updateMap(worldMap.buildUiMapState(null));
-
-  /**
-   * Web マップがあるルームでは毎ターン取り直して盤面・敵位置・公式スコアを更新する。
-   * 無いルームでは何もしない（ReturnCode の観測から自前マップを毎フェーズ更新している）。
-   * 取得失敗はゲーム進行を止めない。
-   */
-  const refreshWebMap = async (turn: number): Promise<void> => {
-    if (!initialScrape.found || webMapRefreshMode() === "off") return;
-    try {
-      const r = await scrapeRoomWebMap({ room: config.room, webMapUrl: config.webMapUrl });
-      if (!r.found || !r.grid) return;
-      worldMap.setGlobalGrid(r.grid, r.playerPos, r.stageName, turn, r.selfTileId);
-      if (r.liveScore) uiBus.updateScores({ liveOfficial: r.liveScore });
-      uiBus.updateMap(worldMap.buildUiMapState(null, mainAgent?.currentPlan?.target ?? null));
-    } catch (err) {
-      logger.warn({ err: err instanceof Error ? err.message : String(err) }, "Web map refresh failed");
-    }
-  };
 
   const turnLogs: TurnRecord[] = [];
   const commandCounts: Record<string, number> = {};
@@ -226,6 +196,7 @@ export async function runAgentMatch(
         gameOverReason = "Phase is GAME_OVER";
         break;
       }
+      webMap.onTurnStart(turn);
 
       let cmd1: string | null = null;
       let cmd1Reason: string | null = null;
@@ -294,8 +265,8 @@ export async function runAgentMatch(
         worldMap.applyObservation(phase, decision.command, r.values, turn);
         // 観測直後にもマップを更新（次の判断を待たずに画面へ反映）
         uiBus.updateMap(worldMap.buildUiMapState(null, mainAgent?.currentPlan?.target ?? null));
-        // ワープ直後は位置合わせのためすぐ取り直す（every_turn ならターン終了時にも取り直す）
-        if (worldMap.getLastEventFlags().warped && webMapRefreshMode() !== "off") await refreshWebMap(turn);
+        // ワープ直後は位置合わせのためすぐ取り直す（裏で実行）
+        if (worldMap.getLastEventFlags().warped) webMap.onWarp(turn);
         return { command: decision.command, reason: decision.reason, values: r.values, source };
       };
 
@@ -313,7 +284,7 @@ export async function runAgentMatch(
           cmd2Values = p2.values;
           cmd2Source = p2.source;
           // ターン終了と並行して Web マップを取り直し、盤面（敵の位置を含む）を毎ターン最新にする
-          await Promise.all([client.command3("#"), webMapRefreshMode() === "every_turn" ? refreshWebMap(turn) : null]);
+          await client.command3("#");
           turnCompleted = true;
         }
       } catch (err) {
@@ -435,6 +406,7 @@ export async function runAgentMatch(
 
   const finishedAt = new Date().toISOString();
   const stats = worldMap.getStats();
+  await webMap.drain();
   const officialResult = await fetchLatestResult(config.room);
   const fallbackTurns = turnLogs.filter((r) => r.usedFallback).length;
   const harnessTurns = turnLogs.filter((r) => r.usedHarness).length;
@@ -448,8 +420,8 @@ export async function runAgentMatch(
     finishedAt,
     room: config.room,
     model: config.model ?? null,
-    webMapDetected: initialScrape.found,
-    webMapUrl: initialScrape.sourceUrl,
+    webMapDetected: webMap.available,
+    webMapUrl: webMap.sourceUrl,
     turns: turnLogs.length,
     gameOverReason,
     estimatedScore: stats,

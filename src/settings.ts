@@ -34,6 +34,16 @@ export const SETTINGS = {
     description: "Webマップの取り直し: every_turn（毎ターン）| warp（ワープ時のみ）| off",
     defaultValue: "every_turn",
   },
+  CHASER_WEB_MAP_RETRY_TURNS: {
+    group: "chaser",
+    description: "Webマップがまだ取れていない時に再挑戦する間隔（ターン）。サーバが重い時や複数人で開始待ちの時用",
+    defaultValue: "5",
+  },
+  CHASER_WEB_MAP_TIMEOUT_SEC: {
+    group: "chaser",
+    description: "Webマップ取得の通信1回あたりのタイムアウト（秒）。取得は裏で行うので試合は待たない",
+    defaultValue: "10",
+  },
   CHASER_MAX_TURNS: { group: "chaser", description: "1試合の最大ターン数（空=サーバが終えるまで）", defaultValue: "" },
   CHASER_MAX_MATCHES: { group: "chaser", description: "連続モードの最大試合数（空=無制限）", defaultValue: "" },
   CHASER_RETRY_MS: { group: "chaser", description: "コマンド再送間隔（ミリ秒、50以上）", defaultValue: "250" },

@@ -1,4 +1,4 @@
-import { hostUrl } from "../settings";
+import { hostUrl, numSetting } from "../settings";
 import { getRoomProfile, saveRoomProfile } from "../memory/knowledge-store";
 
 const shiftJisDecoder = new TextDecoder("shift_jis");
@@ -214,7 +214,7 @@ async function tryScrapeChaserServerHttp(
       const res = await fetch(current, {
         redirect: "manual",
         headers: cookie ? { Cookie: cookie } : {},
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(numSetting("CHASER_WEB_MAP_TIMEOUT_SEC", { min: 1 }) * 1000),
       });
       const m = res.headers.get("set-cookie")?.match(/JSESSIONID=([^;]+)/);
       if (m?.[1]) cookie = `JSESSIONID=${m[1]}`;
@@ -357,8 +357,10 @@ export async function scrapeRoomWebMap(options: {
     options.webMapUrl,
   );
 
+  // 一時的な失敗（重い・開始前）で「Webマップなし」に上書きしない。取れた時だけ記録する
   const profile = getRoomProfile(options.room);
-  profile.webMapAvailable = result.found;
+  if (result.found) profile.webMapAvailable = true;
+  else if (profile.webMapAvailable === undefined || profile.webMapAvailable === null) profile.webMapAvailable = false;
   if (result.found && result.sourceUrl) {
     profile.webMapUrl = result.sourceUrl;
   }
