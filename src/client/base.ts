@@ -1,7 +1,7 @@
+import { hostUrl } from "../settings";
 import { GameOver, HTTPError } from "../tools";
 import type { Status } from "../types/client";
 
-const DEFAULT_HOST_URL = "http://www7019ug.sakura.ne.jp/CHaserOnline003/user/";
 const shiftJisDecoder = new TextDecoder("shift_jis");
 
 // 基本関数を格納
@@ -35,7 +35,7 @@ export class Base {
 
   // CHaserOnlineは競技Webのエンドポイントにクエリを添える仕様
   public async getReq(path: string, querys: Record<string, string>): Promise<string> {
-    const rawHost = Bun.env.HOST_URL || DEFAULT_HOST_URL;
+    const rawHost = hostUrl();
     const baseUrl = rawHost.endsWith("/") ? rawHost : `${rawHost}/`;
     const url = new URL(path, baseUrl);
     for (const [k, v] of Object.entries(querys)) {

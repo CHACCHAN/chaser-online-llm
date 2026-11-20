@@ -1,6 +1,6 @@
+import { hostUrl } from "../settings";
 import { getRoomProfile, saveRoomProfile } from "../memory/knowledge-store";
 
-const DEFAULT_HOST_URL = "http://www7019ug.sakura.ne.jp/CHaserOnline003/user/";
 const shiftJisDecoder = new TextDecoder("shift_jis");
 
 export interface LiveMapScore {
@@ -339,7 +339,7 @@ export async function scrapeRoomWebMap(options: {
   room: number;
   webMapUrl?: string;
 }): Promise<WebMapScrapeResult> {
-  const rawHost = Bun.env.HOST_URL || DEFAULT_HOST_URL;
+  const rawHost = hostUrl();
   const userBase = rawHost.endsWith("/") ? rawHost : `${rawHost}/`;
   const serverBase = new URL("../Server/", userBase);
   const playerUser = Bun.env.CHASER_USER;

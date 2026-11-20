@@ -1,6 +1,7 @@
 import { Client } from "./client";
 import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
+import { boolSetting } from "./settings";
 import { getRoomProfile, loadRoomProfiles } from "./memory/knowledge-store";
 import { MainAgent } from "./agent/main-agent";
 import { runAgentMatch } from "./runner";
@@ -144,7 +145,7 @@ async function main() {
         "Match finished; starting Claude Code self-evolution",
       );
 
-      if (!uiBus.getState().stopRequested) {
+      if (!uiBus.getState().stopRequested && boolSetting("AGENT_EVOLVE")) {
         const evo = await runPostMatchEvolution(summary, mainAgent);
         logger.info(
           {

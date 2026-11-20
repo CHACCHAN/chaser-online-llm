@@ -63,7 +63,7 @@ function listRecentRuns(limit = 20) {
   return items;
 }
 
-export function startWebUiServer(port = 3456) {
+export function startWebUiServer(port: number) {
   const server = Bun.serve({
     port,
     idleTimeout: 255,

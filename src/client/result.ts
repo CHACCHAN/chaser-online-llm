@@ -1,4 +1,4 @@
-const DEFAULT_HOST_URL = "http://www7019ug.sakura.ne.jp/CHaserOnline003/user/";
+import { hostUrl } from "../settings";
 const shiftJisDecoder = new TextDecoder("shift_jis");
 
 export interface OfficialResult {
@@ -130,7 +130,7 @@ export async function fetchLatestResult(
   roomNumber?: string | number,
 ): Promise<OfficialResult | null> {
   try {
-    const rawHost = Bun.env.HOST_URL || DEFAULT_HOST_URL;
+    const rawHost = hostUrl();
     const userBase = rawHost.endsWith("/") ? rawHost : `${rawHost}/`;
     const serverBase = new URL("../Server/", userBase);
 

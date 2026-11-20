@@ -20,11 +20,13 @@
 - [ ] 1ファイル 400 行目安を超えたら分割を検討
 - [ ] 同じ処理のコピペがない（CMD1/CMD2 など）
 - [ ] 秘密情報（`.env` の値）をログ・UI・外部送信に出していない
+- [ ] 後から変えたくなる値（URL・ポート・タイムアウト・回数・有無の切替）をコードに直書きしていない。`src/settings.ts` に1項目足し、`bun scripts/gen-env-example.ts` で `.env.example` を再生成する（`src/settings.test.ts` が漏れを検出）
+- [ ] マップ: Web マップのあるルームは毎ターン取り直し（`CHASER_WEB_MAP_REFRESH`）、無いルームは観測ごとに自前マップを更新して UI に送っている。自機・敵マーカー（`UiMapState.players`）が出る
 - [ ] WebUI を外部公開していない（devcontainer 内 localhost 利用が前提。2026-11-20 ユーザー判断で hostname 制限は不要）
 
 ## 4. 進化ループの健全性
 - [ ] 試合後の改修で `active-solver.ts` が実際に変化したか（`evolution-report.md` の `Solver Changed`）。変化なしが2回続いたら原因調査
-- [ ] メイン判断率（`turns.jsonl` の `cmd1Source/cmd2Source === "main"` の割合）が 80% 以上。低ければ予算・effort・プロンプトを見直す
+- [ ] メイン判断率（`turns.jsonl` の `cmd1Source/cmd2Source === "main"` の割合）が 80% 以上。作戦（`mainActions` の plan/command）とサブ依頼（`delegations`）の結果も確認。低ければ予算・effort・プロンプトを見直す
 - [ ] `mainLatencyMs` の最大がターン予算未満、かつサーバ許容時間（`SETUP.md` §1-4）未満
 - [ ] メインがソルバー手を変更したターンの得失点を確認（変更が損なら `agent/prompts/main.md` か知識を直す）
 - [ ] `knowledge/` と `CLAUDE.md` に、実測と矛盾するルールが残っていない（例: 旧「穴なら必ず gr」ルール）
@@ -36,3 +38,4 @@
 ## 6. 更新履歴
 - v0 (2026-11-20): 初版。コードレビュー・公式調査の結果から作成
 - v1 (2026-11-20): 常駐メインエージェント・ディレクトリ再編に合わせて更新。オフライン判断テストで、CLAUDE.md の古い gr ルールのせいでメインが誤った手に変更していたのを発見・修正したため、知識の矛盾チェックを追加
+- v2 (2026-11-20): メインを作戦係＋例外係（continue/plan/command＋delegate）にし、サブを常駐 SubWorker に。設定を `src/settings.ts`＋`.env` に一本化（直書き禁止の項目を追加）。マップの毎ターン更新と自機・敵マーカーを追加し、room10 の実ログ再生で表示を確認

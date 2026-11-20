@@ -35,6 +35,16 @@ export interface TileInfo {
   known: boolean;
 }
 
+export interface UiPlayerMarker {
+  x: number;
+  y: number;
+  role: "self" | "enemy";
+  /** 1000, 2000 ... のプレイヤー ID。不明なら null */
+  tileId: number | null;
+  lastSeenTurn: number | null;
+  source: "web_map" | "slam";
+}
+
 export interface TileRecord {
   value: number;
   firstSeenTurn: number;
@@ -294,6 +304,12 @@ export class WorldMap {
 
   // Global Web Map integration (when available via Playwright/HTTP scraper)
   private globalGrid: number[][] | null = null;
+  /** Web マップを最後に取得したターン（これより新しい自前観測だけを UI で上書き表示する） */
+  private globalGridTurn = 0;
+  /** 自機のタイル ID（観測の中心値 / Web マップの自機表示から判明。既定 1000） */
+  private selfTileId = 1000;
+  /** 自前観測で見えた他プレイヤー（ローカル座標）。key = tileId */
+  private enemySightings = new Map<number, { x: number; y: number; tileId: number; lastSeenTurn: number }>();
   private globalOffset: [number, number] | null = null; // [globalOriginX, globalOriginY] so global = local + offset
   private trail: [number, number][] = [[0, 0]];
   private stageName: string | null = null;
@@ -351,9 +367,13 @@ export class WorldMap {
     grid: number[][],
     knownPlayerPos?: [number, number] | null,
     stageName?: string | null,
+    turn?: number,
+    selfTileId?: number | null,
   ): void {
     if (!grid.length || !grid[0]?.length) return;
     this.globalGrid = grid.map((r) => [...r]);
+    this.globalGridTurn = turn ?? this.lastTurn;
+    if (selfTileId) this.selfTileId = selfTileId;
     if (stageName !== undefined) this.stageName = stageName;
     if (knownPlayerPos) {
       this.globalOffset = [knownPlayerPos[0] - this.x, knownPlayerPos[1] - this.y];
@@ -736,7 +756,11 @@ export class WorldMap {
           const oy = Math.floor(i / 3) - 1;
 
           if (i === 4 && spec.obsOffset[0] === 0 && spec.obsOffset[1] === 0) {
+            if (val >= 1000) this.selfTileId = val;
             this.setTile(cx, cy, 0, turn, hasMove && !blocked ? 1 : 0);
+          } else if (val >= 1000 && val !== this.selfTileId) {
+            // 他プレイヤーは動くのでタイルとしては保存せず、目撃情報として記録する
+            this.enemySightings.set(val, { x: cx + ox, y: cy + oy, tileId: val, lastSeenTurn: turn });
           } else {
             this.setTile(cx + ox, cy + oy, val, turn, 0);
           }
@@ -757,6 +781,10 @@ export class WorldMap {
         for (let k = 0; k < values.length; k++) {
           const val = values[k];
           if (val === undefined) continue;
+          if (val >= 1000 && val !== this.selfTileId) {
+            this.enemySightings.set(val, { x: this.x + rdx * (k + 1), y: this.y + rdy * (k + 1), tileId: val, lastSeenTurn: turn });
+            continue;
+          }
           this.setTile(this.x + rdx * (k + 1), this.y + rdy * (k + 1), val, turn, 0);
         }
       }
@@ -896,17 +924,19 @@ export class WorldMap {
       }
     }
 
-    valueTargets.sort(
-      (a, b) =>
-        b.estimatedNetGain - a.estimatedNetGain ||
-        a.distance - b.distance,
-    );
+    // Rank before truncating: equally close routes over fresh ground should not
+    // disappear from the shortlist behind routes over visited holes.
+    valueTargets.sort((a, b) => getPathUtility(b) - getPathUtility(a) || a.distance - b.distance);
 
-    frontierTargets.sort(
-      (a, b) =>
-        b.estimatedNetGain - a.estimatedNetGain ||
-        a.distance - b.distance,
-    );
+    // Tie-break only: the unseen extension of a straight abyss may be blocked.
+    // Prefer observing an open frontier, without marking the extension impassable.
+    const extendsAbyss = (t: PathTarget) => DIRS.some((dir) => {
+      const [dx, dy] = DIR_DELTA[dir];
+      return this.getTile(t.x + dx, t.y + dy)?.value === 12 &&
+        this.getTile(t.x + 2 * dx, t.y + 2 * dy)?.value === 12;
+    });
+    frontierTargets.sort((a, b) => getPathUtility(b) - getPathUtility(a) ||
+      Number(extendsAbyss(a)) - Number(extendsAbyss(b)) || a.distance - b.distance);
 
     return {
       topValueTargets: valueTargets.slice(0, 8),
@@ -1144,7 +1174,7 @@ export class WorldMap {
    * 現在の盤面（Webマップ統合済みなら全体2D配列、未取得ならReturnCode SLAMのバウンディングボックス配列）と
    * 予測着地マス・最短ターゲット経路を WebUI 描画用フォーマットで返す。
    */
-  public buildUiMapState(plannedCmd?: string | null): {
+  public buildUiMapState(plannedCmd?: string | null, planTarget?: [number, number] | null): {
     source: "web_map" | "slam";
     stageName: string | null;
     width: number;
@@ -1155,7 +1185,19 @@ export class WorldMap {
     plannedPath: [number, number][];
     nextLandingPos: [number, number] | null;
     localAscii: string;
+    /** 表示座標での自機・他プレイヤー。tileId が不明な敵は null（UI は仮アイコンを出す） */
+    players: UiPlayerMarker[];
+    /** 盤面データを最後に更新したターン */
+    updatedTurn: number;
+    /** 作戦目標の表示座標（範囲外・作戦なしなら null） */
+    planCell: [number, number] | null;
   } {
+    const toCell = (ox: number, oy: number, w: number, h: number): [number, number] | null => {
+      if (!planTarget) return null;
+      const cx = planTarget[0] + ox;
+      const cy = planTarget[1] + oy;
+      return cx >= 0 && cy >= 0 && cx < w && cy < h ? [cx, cy] : null;
+    };
     let nextLocal: [number, number] | null = null;
     if (plannedCmd) {
       const spec =
@@ -1187,6 +1229,14 @@ export class WorldMap {
       const grid: (number | null)[][] = this.globalGrid.map((row) =>
         row.map((v) => (v >= 1000 ? 0 : v)),
       );
+      const webPlayers: UiPlayerMarker[] = [];
+      this.globalGrid.forEach((row, gy) =>
+        row.forEach((v, gx) => {
+          if (v >= 1000) {
+            webPlayers.push({ x: gx, y: gy, role: v === this.selfTileId ? "self" : "enemy", tileId: v, lastSeenTurn: this.globalGridTurn, source: "web_map" });
+          }
+        }),
+      );
 
       let playerPos: [number, number] | null = null;
       let trail: [number, number][] = [];
@@ -1196,7 +1246,8 @@ export class WorldMap {
       if (this.globalOffset) {
         const [ox, oy] = this.globalOffset;
         for (const [k, rec] of this.currentMap.entries()) {
-          if (rec.fromGlobalMap) continue;
+          // Web マップ取得後に自分で観測したマスだけ上書き（Web マップの方が新しければそちらを優先）
+          if (rec.fromGlobalMap || rec.lastSeenTurn <= this.globalGridTurn) continue;
           const [lx, ly] = parseCoordKey(k);
           const gx = lx + ox;
           const gy = ly + oy;
@@ -1220,6 +1271,10 @@ export class WorldMap {
         }
       }
 
+      // 自機は自前の位置推定を正とし、Web マップ上の自機表示は除く（ずれていると二重表示になるため）
+      const players: UiPlayerMarker[] = webPlayers.filter((p) => p.role === "enemy");
+      if (playerPos) players.unshift({ x: playerPos[0], y: playerPos[1], role: "self", tileId: this.selfTileId, lastSeenTurn: this.lastTurn, source: "slam" });
+      else players.unshift(...webPlayers.filter((p) => p.role === "self"));
       return {
         source: "web_map",
         stageName: this.stageName,
@@ -1231,6 +1286,9 @@ export class WorldMap {
         plannedPath,
         nextLandingPos,
         localAscii: this.renderAscii(6),
+        players,
+        updatedTurn: Math.max(this.globalGridTurn, this.lastTurn),
+        planCell: this.globalOffset ? toCell(this.globalOffset[0], this.globalOffset[1], width, height) : null,
       };
     }
 
@@ -1270,6 +1328,14 @@ export class WorldMap {
       plannedPath: localPlannedPath.map(([px, py]): [number, number] => [px - minX, py - minY]),
       nextLandingPos: nextLocal ? [nextLocal[0] - minX, nextLocal[1] - minY] : null,
       localAscii: this.renderAscii(6),
+      players: [
+        { x: this.x - minX, y: this.y - minY, role: "self", tileId: this.selfTileId, lastSeenTurn: this.lastTurn, source: "slam" },
+        ...[...this.enemySightings.values()]
+          .map((e): UiPlayerMarker => ({ x: e.x - minX, y: e.y - minY, role: "enemy", tileId: e.tileId, lastSeenTurn: e.lastSeenTurn, source: "slam" }))
+          .filter((p) => p.x >= 0 && p.x < width && p.y >= 0 && p.y < height),
+      ],
+      updatedTurn: this.lastTurn,
+      planCell: toCell(-minX, -minY, width, height),
     };
   }
 }

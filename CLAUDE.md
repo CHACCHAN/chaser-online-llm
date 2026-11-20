@@ -3,8 +3,13 @@
 CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/.bin/claude`) を**ハーネスとして**使ってプレイし、最高得点を更新し続ける実験プロジェクト。
 モデルは `LLM_API_URL` のゲートウェイから選ぶ（`GET /api/models`）。通常の Claude Code の使い方（対話開発）はこのハーネスでは行わない。
 
-- **試合中**: 常駐する**メインエージェント**が毎ターン「観測＋ソルバー候補」を受けて手を決める（手順は `agent/prompts/main.md`）。時間予算を超えたらソルバー手が自動送信される。調査・素材収集・ツール作成は**サブエージェント `sub`** に任せる（`agent/prompts/sub.md`）。
+- **試合中（メイン）**: 常駐の**メインエージェント（作戦係＋例外係）**が毎フェーズ盤面とソルバー候補を見て、`continue`（作戦のまま）/ `plan`（目標マスを変える）/ `command`（手を直接指定）を返す（手順は `agent/prompts/main.md`）。1手先の計算はソルバーが行う。
+- **試合中（サブ）**: メインの `delegate` で依頼された調査・ツール作成は、別の常駐セッション（SubWorker、`agent/prompts/sub.md`）が裏で処理する。結果は後のターンでメインに届き、メインは待たない。
+- **臨時ツール**: 試合中に作るツールは `@temporary` 付きで `agent/tools/` に置く。恒久化（ソルバー組込み・正式ツール化・削除）は試合後にメインが決める。
+- **時間切れ**: 思考予算（既定 20 秒）を超えた・応答が不正なフェーズは、ソルバー手が自動送信される。
 - **試合後**: 同じメインエージェントが振り返り、`src/solver/active-solver.ts` を改修する。リプレイ検証に失敗したら自動ロールバック。
+- **起動**: `bun run start`（Web ダッシュボード）／ `bun run play --room N`（WebUI なしで1試合）。
+- **設定**: 全て `.env` から読む。項目・既定値・説明は `src/settings.ts` に一本化（コードに直書きしない）。追加したら `bun scripts/gen-env-example.ts`。
 - **セットアップ・自己レビュー**: `agent/SETUP.md` → `agent/SELF_CHECK.md`（実施後は両方を更新する）。
 - 詳細仕様: [docs/README.md](docs/README.md)
 

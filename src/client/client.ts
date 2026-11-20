@@ -1,9 +1,9 @@
 import { GameOver, GeneralError, logger, LoginError } from "../tools";
 import type { Config, StepResult } from "../types/client";
+import { numSetting } from "../settings";
 import { Base } from "./base";
 import { buildStepResult, extractVisibleLines, inspectFormMarkers } from "./parser";
 
-const DEFAULT_MAX_WAIT_MS = 120_000;
 
 export class Client extends Base {
   constructor(private readonly config: Config) {
@@ -20,7 +20,7 @@ export class Client extends Base {
     maxWaitMsOverride?: number,
   ): Promise<string> {
     const start = Date.now();
-    const maxWaitMs = maxWaitMsOverride ?? this.config.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
+    const maxWaitMs = maxWaitMsOverride ?? this.config.maxWaitMs ?? numSetting("CHASER_COMMAND_MAX_WAIT_SEC", { min: 1 }) * 1000;
 
     for (;;) {
       const body = await this.getReq(path, params);
@@ -65,7 +65,7 @@ export class Client extends Base {
     this.updateStatus({ game: { roomNumber } });
 
     const start = Date.now();
-    const maxWaitMs = this.config.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
+    const maxWaitMs = this.config.maxWaitMs ?? numSetting("CHASER_COMMAND_MAX_WAIT_SEC", { min: 1 }) * 1000;
 
     for (;;) {
       const body = await this.getReq("RoomNumberCheck", {

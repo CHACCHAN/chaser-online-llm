@@ -5,7 +5,7 @@
 
 ## 0. 前提
 - Bun がインストール済み、`bun install` 済み
-- `.env` に `CHASER_USER` / `CHASER_PASS` / `HOST_URL` / `LLM_API_URL` / `LLM_API_KEY` / `LLM_MODEL_NAME` が設定済み（値は出力・送信しない）。雛形は `.env.example`
+- `.env` に `CHASER_USER` / `CHASER_PASS` / `HOST_URL` / `LLM_API_URL` / `LLM_API_KEY` / `LLM_MODEL_NAME` が設定済み（値は出力・送信しない）。雛形は `.env.example`（`src/settings.ts` から `bun scripts/gen-env-example.ts` で生成。全設定の説明と既定値はそこにある。値は CLI 引数 > `.env` > 既定値 の順で効き、WebUI の「設定」から保存すると再起動なしで次の読み取りから反映）
 - python3 は devcontainer の python feature で導入（補助スクリプト用。プロジェクト本体は Bun のみ）
 
 ## 1. 公式情報の確認（毎回）

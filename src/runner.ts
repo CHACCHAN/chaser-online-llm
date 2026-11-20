@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { RUNS_DIR, SOLVER_PATH } from "./paths";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
-import type { AgentConfig } from "./config";
+import { type AgentConfig, webMapRefreshMode } from "./config";
 import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
 import type { MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
@@ -125,7 +125,7 @@ function syncUiPredictionAndMap(
     candidates: evalSummary.candidates,
     ...agentInfo,
   });
-  uiBus.updateMap(worldMap.buildUiMapState(decision.command));
+  uiBus.updateMap(worldMap.buildUiMapState(decision.command, agentInfo.plan?.target ?? null));
 }
 
 export async function runAgentMatch(
@@ -185,12 +185,13 @@ export async function runAgentMatch(
    * 取得失敗はゲーム進行を止めない。
    */
   const refreshWebMap = async (turn: number): Promise<void> => {
-    if (!initialScrape.found) return;
+    if (!initialScrape.found || webMapRefreshMode() === "off") return;
     try {
       const r = await scrapeRoomWebMap({ room: config.room, webMapUrl: config.webMapUrl });
       if (!r.found || !r.grid) return;
       worldMap.setGlobalGrid(r.grid, r.playerPos, r.stageName, turn, r.selfTileId);
       if (r.liveScore) uiBus.updateScores({ liveOfficial: r.liveScore });
+      uiBus.updateMap(worldMap.buildUiMapState(null, mainAgent?.currentPlan?.target ?? null));
     } catch (err) {
       logger.warn({ err: err instanceof Error ? err.message : String(err) }, "Web map refresh failed");
     }
@@ -289,13 +290,10 @@ export async function runAgentMatch(
 
         const r = phase === "CMD1" ? await client.command1(decision.command) : await client.command2(decision.command);
         worldMap.applyObservation(phase, decision.command, r.values, turn);
-        if (worldMap.getLastEventFlags().warped && initialScrape.found) {
-          const rescraped = await scrapeRoomWebMap({ room: config.room, webMapUrl: config.webMapUrl });
-          if (rescraped.found && rescraped.grid) {
-            worldMap.setGlobalGrid(rescraped.grid, rescraped.playerPos, rescraped.stageName, turn, rescraped.selfTileId);
-            if (rescraped.liveScore) uiBus.updateScores({ liveOfficial: rescraped.liveScore });
-          }
-        }
+        // 観測直後にもマップを更新（次の判断を待たずに画面へ反映）
+        uiBus.updateMap(worldMap.buildUiMapState(null, mainAgent?.currentPlan?.target ?? null));
+        // ワープ直後は位置合わせのためすぐ取り直す（every_turn ならターン終了時にも取り直す）
+        if (worldMap.getLastEventFlags().warped && webMapRefreshMode() !== "off") await refreshWebMap(turn);
         return { command: decision.command, reason: decision.reason, values: r.values, source };
       };
 
@@ -313,7 +311,7 @@ export async function runAgentMatch(
           cmd2Values = p2.values;
           cmd2Source = p2.source;
           // ターン終了と並行して Web マップを取り直し、盤面（敵の位置を含む）を毎ターン最新にする
-          await Promise.all([client.command3("#"), refreshWebMap(turn)]);
+          await Promise.all([client.command3("#"), webMapRefreshMode() === "every_turn" ? refreshWebMap(turn) : null]);
           turnCompleted = true;
         }
       } catch (err) {

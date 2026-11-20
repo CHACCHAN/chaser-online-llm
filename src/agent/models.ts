@@ -1,3 +1,4 @@
+import { numSetting } from "../settings";
 /**
  * LLM_API_URL のゲートウェイからモデル一覧を取得する (OpenAI 互換 / Anthropic 互換 /models の両方に対応)。
  */
@@ -18,7 +19,7 @@ export async function listGatewayModels(): Promise<{ models: string[]; error: st
             : {}),
           "anthropic-version": "2023-06-01",
         },
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(numSetting("LLM_MODELS_TIMEOUT_SEC", { min: 1 }) * 1000),
       });
       if (!res.ok) {
         lastError = `HTTP ${res.status} (${url})`;

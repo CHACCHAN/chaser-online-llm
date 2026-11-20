@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { CMD1_COMMANDS, CMD2_COMMANDS, type WorldMap } from "../memory/world-map";
 import { AGENT_DIR, VAR_DIR } from "../paths";
+import { numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
 import type { ClaudeModelSettings } from "./claude-env";
 import { type AskResult, ClaudeSession } from "./claude-session";
@@ -76,7 +77,7 @@ export class MainAgent {
         `[MATCH START] room=${info.room} stage=${info.stageName ?? "unknown"} webMap=${info.webMap} roomHighScore=${info.highScore}`,
         "knowledge/strategy.md と knowledge/tiles.json に目を通して準備し、準備できたら「READY」とだけ返答せよ。",
       ].join("\n"),
-      90_000,
+      numSetting("AGENT_WARMUP_TIMEOUT_SEC", { min: 5 }) * 1000,
     );
   }
 

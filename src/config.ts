@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { boolSetting, getNumberSetting, getSetting, numSetting, type SettingKey } from "./settings";
 
 export interface AgentConfig {
   room: number;
@@ -21,6 +22,10 @@ export interface AgentConfig {
   port: number;
 }
 
+/**
+ * 設定の解決順は CLI 引数 > .env > src/settings.ts の既定値。
+ * 既定値・説明は src/settings.ts にだけ書く（ここには書かない）。
+ */
 export function loadAgentConfig(argv: string[] = Bun.argv.slice(2)): AgentConfig {
   const { values } = parseArgs({
     args: argv,
@@ -41,67 +46,45 @@ export function loadAgentConfig(argv: string[] = Bun.argv.slice(2)): AgentConfig
     strict: false,
   });
 
-  const roomRaw = typeof values.room === "string" ? values.room : (Bun.env.CHASER_ROOM ?? "3");
-  const room = Number(roomRaw);
-  if (!Number.isInteger(room) || room <= 0) {
-    throw new Error(`Invalid room number: ${roomRaw}`);
-  }
-
-  const model =
-    typeof values.model === "string"
-      ? values.model
-      : (Bun.env.LLM_MODEL_NAME ?? Bun.env.LLM_MODEL);
-
-  const retryRaw = typeof values["retry-ms"] === "string" ? values["retry-ms"] : "250";
-  const retryMs = Number(retryRaw);
-  if (!Number.isFinite(retryMs) || retryMs < 50) {
-    throw new Error(`Invalid --retry-ms: ${retryRaw}`);
-  }
-
-  const maxTurnsRaw =
-    typeof values["max-turns"] === "string" ? values["max-turns"] : undefined;
-  const maxTurns = maxTurnsRaw !== undefined ? Number(maxTurnsRaw) : null;
-  if (maxTurns !== null && (!Number.isInteger(maxTurns) || maxTurns <= 0)) {
-    throw new Error(`Invalid --max-turns: ${maxTurnsRaw}`);
-  }
-
-  const maxMatchesRaw =
-    typeof values["max-matches"] === "string" ? values["max-matches"] : undefined;
-  const maxMatches = maxMatchesRaw !== undefined ? Number(maxMatchesRaw) : null;
-  if (maxMatches !== null && (!Number.isInteger(maxMatches) || maxMatches <= 0)) {
-    throw new Error(`Invalid --max-matches: ${maxMatchesRaw}`);
-  }
-
-  const portRaw =
-    typeof values.port === "string" ? values.port : (Bun.env.PORT ?? "3456");
-  const port = Number(portRaw);
-  if (!Number.isInteger(port) || port <= 0) {
-    throw new Error(`Invalid --port: ${portRaw}`);
-  }
-
-  const webMapUrl =
-    typeof values["web-map-url"] === "string"
-      ? values["web-map-url"]
-      : Bun.env.CHASER_WEB_MAP_URL;
-
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
-  const turnBudgetSec = Number(str(values["turn-budget"]) ?? Bun.env.AGENT_TURN_BUDGET_SEC ?? "20");
-  if (!Number.isFinite(turnBudgetSec) || turnBudgetSec < 3) {
-    throw new Error(`Invalid --turn-budget: ${turnBudgetSec}`);
-  }
+  const cli = (name: string): string | undefined => {
+    const v = values[name];
+    return typeof v === "string" && v.trim() ? v.trim() : undefined;
+  };
+  const str = (flag: string, key: SettingKey) => cli(flag) ?? getSetting(key);
+  const num = (flag: string, key: SettingKey, opts: { min?: number; integer?: boolean }) => {
+    const raw = cli(flag);
+    if (raw === undefined) return getNumberSetting(key, opts) ?? null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || (opts.integer && !Number.isInteger(n)) || (opts.min !== undefined && n < opts.min)) {
+      throw new Error(`Invalid --${flag}: ${raw}`);
+    }
+    return n;
+  };
+  const required = (v: number | null, key: SettingKey) => {
+    if (v === null) throw new Error(`設定 ${key} が未設定です`);
+    return v;
+  };
 
   return {
-    room,
-    model,
-    subModel: str(values["sub-model"]) ?? str(Bun.env.LLM_SUB_MODEL_NAME),
-    effort: str(values.effort) ?? str(Bun.env.LLM_MODEL_EFFORT),
-    subEffort: str(values["sub-effort"]) ?? str(Bun.env.LLM_SUB_MODEL_EFFORT),
-    turnBudgetSec,
-    useMainAgent: values["solver-only"] !== true,
-    retryMs,
-    maxTurns,
-    maxMatches,
-    webMapUrl,
-    port,
+    room: required(num("room", "CHASER_ROOM", { min: 1, integer: true }), "CHASER_ROOM"),
+    model: cli("model") ?? getSetting("LLM_MODEL_NAME") ?? Bun.env.LLM_MODEL,
+    subModel: str("sub-model", "LLM_SUB_MODEL_NAME"),
+    effort: str("effort", "LLM_MODEL_EFFORT"),
+    subEffort: str("sub-effort", "LLM_SUB_MODEL_EFFORT"),
+    turnBudgetSec: required(num("turn-budget", "AGENT_TURN_BUDGET_SEC", { min: 3 }), "AGENT_TURN_BUDGET_SEC"),
+    useMainAgent: values["solver-only"] === true ? false : boolSetting("AGENT_USE_MAIN"),
+    retryMs: required(num("retry-ms", "CHASER_RETRY_MS", { min: 50 }), "CHASER_RETRY_MS"),
+    maxTurns: num("max-turns", "CHASER_MAX_TURNS", { min: 1, integer: true }),
+    maxMatches: num("max-matches", "CHASER_MAX_MATCHES", { min: 1, integer: true }),
+    webMapUrl: str("web-map-url", "CHASER_WEB_MAP_URL"),
+    port: required(num("port", "PORT", { min: 1, integer: true }), "PORT"),
   };
 }
+
+/** Web マップを取り直すタイミング */
+export function webMapRefreshMode(): "every_turn" | "warp" | "off" {
+  const v = getSetting("CHASER_WEB_MAP_REFRESH");
+  return v === "warp" || v === "off" ? v : "every_turn";
+}
+
+export { numSetting };

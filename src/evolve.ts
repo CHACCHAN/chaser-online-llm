@@ -1,3 +1,4 @@
+import { numSetting } from "./settings";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { verifySolverWithReplay } from "./evolution/replay-verifier";
@@ -17,7 +18,6 @@ export interface EvolutionOutcome {
   summaryText: string;
 }
 
-const POST_MATCH_TIMEOUT_MS = 15 * 60_000;
 
 /**
  * 試合後の自己進化。試合中ずっと常駐していたメインエージェント（試合の文脈を保持）に振り返りと改修をさせ、
@@ -39,7 +39,7 @@ export async function runPostMatchEvolution(
   const res = await mainAgent.postMatch(
     summary.diagnosis?.markdownReport ?? "(no diagnosis)",
     summary.runDir,
-    POST_MATCH_TIMEOUT_MS,
+    numSetting("AGENT_POST_MATCH_TIMEOUT_MIN", { min: 1 }) * 60_000,
   );
   const outputText = res.status === "ok" ? res.text : `(${res.status}${res.status === "dead" ? `: ${res.error}` : ""})`;
   const solverChanged = backupCode !== null && existsSync(SOLVER_PATH) && readFileSync(SOLVER_PATH, "utf-8") !== backupCode;

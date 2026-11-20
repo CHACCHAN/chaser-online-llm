@@ -14,6 +14,7 @@ import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
 import { getRoomProfile } from "./memory/knowledge-store";
 import { runAgentMatch } from "./runner";
+import { numSetting } from "./settings";
 
 const config = loadAgentConfig();
 const { values } = parseArgs({
@@ -21,7 +22,8 @@ const { values } = parseArgs({
   options: { evolve: { type: "boolean" }, "login-wait-min": { type: "string" } },
   strict: false,
 });
-const loginWaitMs = Number(values["login-wait-min"] ?? "10") * 60_000;
+const loginWaitMs =
+  (values["login-wait-min"] !== undefined ? Number(values["login-wait-min"]) : numSetting("CHASER_LOGIN_WAIT_MIN", { min: 0 })) * 60_000;
 
 const mainAgent = config.useMainAgent
   ? new MainAgent({ model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort }, config.turnBudgetSec * 1000)
@@ -51,7 +53,7 @@ try {
     } catch (err) {
       if (Date.now() - loginStart > loginWaitMs) throw err;
       console.log(JSON.stringify({ loginRetry: attempt + 1, at: new Date().toISOString() }));
-      await Bun.sleep(45_000);
+      await Bun.sleep(numSetting("CHASER_LOGIN_RETRY_SEC", { min: 1 }) * 1000);
     }
   }
   await client.enterRoom(config.room);

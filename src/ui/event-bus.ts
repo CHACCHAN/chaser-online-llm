@@ -1,5 +1,5 @@
 import type { RoomProfile } from "../memory/knowledge-store";
-import type { CandidateEvaluation, PathTarget } from "../memory/world-map";
+import type { CandidateEvaluation, PathTarget, UiPlayerMarker } from "../memory/world-map";
 import type { LiveMapScore } from "../perception/web-map-scraper";
 import type { TurnRecord } from "../runner";
 
@@ -24,6 +24,12 @@ export interface UiMapState {
   plannedPath: [number, number][];
   nextLandingPos: [number, number] | null;
   localAscii: string;
+  /** 自機・他プレイヤー（表示座標） */
+  players: UiPlayerMarker[];
+  /** 盤面を最後に更新したターン */
+  updatedTurn: number;
+  /** 作戦目標の表示座標 */
+  planCell: [number, number] | null;
 }
 
 export interface UiPredictionState {

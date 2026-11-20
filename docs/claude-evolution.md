@@ -1,47 +1,60 @@
-# Claude Code の隔離実行・常駐メインエージェント・自己進化
+# Claude Code の隔離実行・常駐メイン／サブ・自己進化
 
 ## 1. 隔離実行 (`src/agent/claude-env.ts`)
 
 - 実行バイナリは `./node_modules/.bin/claude`（`@anthropic-ai/claude-code`）。ホストの `~/.claude` は使わない。
 - `HOME` と `CLAUDE_CONFIG_DIR` を `var/claude-home/` に向け、初回に onboarding 済みの `.claude.json` を作る。
 - ゲートウェイは `LLM_API_URL` を `ANTHROPIC_BASE_URL` に渡し（末尾の `/v1` は除去）、`LLM_API_KEY` を `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` と `X-Gravitee-Api-Key` ヘッダに渡す。
-- モデル指定: `ANTHROPIC_MODEL` と、`sonnet` / `opus` / `haiku` の各エイリアスを選択中のモデルに差し替える。ゲートウェイにない既定モデルが裏で呼ばれないようにするため。サブエージェントのモデルは `LLM_SUB_MODEL_NAME`（空ならメインと同じ）。
+- モデル: メインは `--model` / `LLM_MODEL_NAME`。`ANTHROPIC_MODEL` と `sonnet` / `opus` の各エイリアスを選択中のモデルに差し替え、ゲートウェイにない既定モデルが裏で呼ばれないようにする。サブは `--sub-model` / `LLM_SUB_MODEL_NAME`（空ならメインと同じ）で、`haiku` 系エイリアスと `CLAUDE_CODE_SUBAGENT_MODEL` に入る。
+- effort: メインは `--effort` / `LLM_MODEL_EFFORT`、サブは `--sub-effort` / `LLM_SUB_MODEL_EFFORT`（空ならメインと同じ）。
 - 起動引数の共通部分: `-p --output-format stream-json --verbose --dangerously-skip-permissions --disable-slash-commands`、さらに `--model`, `--effort`。常駐時は `--input-format stream-json` を足す。
 - モデル一覧は `GET /api/models`（`src/agent/models.ts`）でゲートウェイの `/v1/models` から取る。
 
 ## 2. 常駐セッション (`src/agent/claude-session.ts`)
 
 - `ClaudeSession` は Claude Code を 1 プロセスで起動したままにし、ユーザメッセージを stdin の stream-json で流し込む。文脈は同じプロセス内に残る。
+- 試合中は 2 つのセッションが並ぶ（メイン `label=main`、サブ `label=sub`）。それぞれ独立したプロセス・文脈を持つ。
 - `ask(text, timeoutMs)` は次のいずれかを返す。
   - `ok`: `result` イベントの本文
   - `timeout`: 時間切れ。ただし Claude の処理は止めない。遅れて届いた結果は「Late Result (discarded)」として記録するだけで、手には使わない。
   - `busy`: 前の問い合わせがまだ終わっていない
   - `dead`: プロセスが終了した
-- 同時に 1 問い合わせだけ。前の処理が続いている間、新しいフェーズは「busy」となり、ソルバー手で進む。
-- 思考・本文・ツール呼び出し・ツール結果は `uiBus` に流れ、ダッシュボードの思考ログに出る。
-- 実測: 起動の準備（ウォームアップ）約 6 秒、1 手約 2〜5 秒（計測条件は `agent/SETUP.md` の「既知の事実」を参照）。
+- 1 セッションにつき同時に 1 問い合わせだけ。
+- 思考・本文・ツール呼び出し・ツール結果は `uiBus` に流れ、ダッシュボードの思考ログに出る（`[main]` / `[sub]` の接頭辞付き）。
+- 実測（作戦係）: 起動の準備 約 6 秒、1 フェーズ 2〜4 秒。delegate を含むターンも 11 秒で返答。
 
 ## 3. メインエージェント (`src/agent/main-agent.ts`)
 
-`MainAgent` は試合 1 回ごとに作られ、次の 3 つを行う。
+`MainAgent` は試合 1 回ごとに作られ、次を行う。
 
 | メソッド | タイミング | 内容 |
 | :--- | :--- | :--- |
-| `begin(info)` | 入室前 | セッションを起動し、`knowledge/strategy.md` と `knowledge/tiles.json` を読んで「READY」と返させる（制限 90 秒） |
-| `decide(ctx)` | 毎フェーズ | 盤面を `var/current/snapshot.json` に書き出し、ASCII 盤面・候補手・高得点目標・最寄りの未探索点・合法手をメッセージで渡す。返答末尾の JSON を採用する |
+| `begin(info)` | 入室前 | メインとサブを起動し、`strategy.md` と `tiles.json` を読ませて「READY」と返させる（制限 90 秒） |
+| `decide(ctx)` | 毎フェーズ | 盤面を `var/current/snapshot.json` に書き出し、ASCII 盤面・現在の作戦・ソルバー候補・目標候補・合法手・サブ結果をメッセージで渡す。返答末尾の JSON を採用する |
 | `postMatch(report, runDir, timeoutMs)` | 試合後 | 同じセッションで振り返りと改修をさせる（上限 15 分） |
 
 ### 応答の契約
 
-メインは最後の行に次の JSON を 1 行で返す。
+メインは本文の後の最後の行に次の JSON を 1 行で返す（`prompts/main.md`）。
 
 ```json
-{"turn": 12, "phase": "CMD2", "command": "wr", "reason": "高得点マスへ"}
+{"turn": 12, "phase": "CMD2", "action": "plan", "target": [3, -2], "note": "未探索の広い区画へ", "delegate": "..."}
 ```
 
-- `command` は合法手（CMD1 は 5 種、CMD2 は 24 種）のいずれかでなければならない。
-- `turn` と `phase` が付いていれば、現在のターンと一致しなければならない。
-- 解析は本文中の `{...}` を後ろから探す。該当がなければ「応答に有効な JSON がない」としてソルバー手を使う。
+| `action` | 意味 | 必要な項目 |
+| :--- | :--- | :--- |
+| `continue` | 今の作戦のまま。ソルバーが「continue した場合の手」を打つ | なし |
+| `plan` | 作戦を変える。ソルバーは `target` へ向かう最初の一歩を優先する | `target: [x, y]`（メッセージの pos と同じ座標系） |
+| `command` | 手を直接指定する（罠回避や緊急時のみ） | `command`（合法手のいずれか） |
+
+- `delegate`（任意・どの action にも付けられる）: サブへの依頼文。サブは裏で作業し、結果は後のターンに「サブ結果」として届く。
+- 解析は本文中の `{...}` を後ろから探す。`turn` / `phase` が付いていれば現在のターンと一致しなければならない。該当がなければ「応答に有効な JSON がない」としてソルバー手を使う。
+
+### 作戦 (plan) の追跡
+
+- `plan` は `MainAgent` が保持し、以後のフェーズでソルバーに渡す。
+- 毎フェーズ `WorldMap.firstStepTowards` で判定する。目標に到達すると「到達」、到達できなければ「到達不能」として作戦を解除し、次のメッセージでメインに知らせる。
+- `begin()` で作戦は解除される（試合開始時は `null`）。
 
 ### ソルバー手にフォールバックする条件
 
@@ -52,39 +65,50 @@
 | プロセスが死んでいる（dead） | ソルバー手 |
 | 応答が不正（JSON なし、合法手でない、ターン不一致） | ソルバー手 |
 
-ソルバー手を使ったターンは `solverFallbackNotes` と `skipped` に残り、次の「TURN」メッセージで「前回以降にソルバーが打った手」として再通知される。
+ソルバー手を使ったターンは `solverFallbackNotes` に残る。
 
-### サブエージェント `sub`
+## 4. サブエージェント (`src/agent/sub-worker.ts`)
 
-`--agents` で定義した汎用サブエージェント。ログ分析、タイル調査、公式サイトの調査、素材集め、`agent/tools/` のツール作成を任せる。`src/solver/active-solver.ts` は編集しない（メインの担当）。
+- `SubWorker` は試合ごとに 1 つ作られる常駐の Claude セッション。メインの `delegate` を受けて、キューに積んだ依頼を順に処理する。
+- 1 件の上限は 10 分。タイムアウトした場合は、セッションが処理を終えるまで次の依頼を流さない。
+- 依頼の状態は `queued` / `running` / `done` / `failed` で、ダッシュボードの `subTasks` に出る。
+- 完了した結果は `takeFinished()` で一度だけメインに渡る（次のフェーズのメッセージ、または試合後の `postMatch` に含まれる）。メインは結果を待たない。
+- 仕事の例: ログ分析、未知タイルの得点推定と `knowledge/tiles.json` への登録、公式サイトの調査、素材収集、`agent/tools/` のツール作成と動作確認。
+- 制約（`prompts/sub.md`）: `src/solver/active-solver.ts` は編集しない。CHaserOnline サーバにはログインしない。`.env` の値を出力・送信しない。
+- 旧方式（Claude Code 内蔵の `--agents` によるサブ定義）は廃止した。
 
-## 4. 試合後の進化 (`src/evolve.ts`)
+## 5. 試合後の進化 (`src/evolve.ts`)
 
 1. 改修前の `active-solver.ts` を退避する。
-2. `postMatch` に診断レポート（`diagnosis.md`）と run ディレクトリを渡す。セッションは試合中の文脈を持っている。
-3. 改修後、`verifySolverWithReplay(runDir)` で検証する。
-4. 検証に失敗したら退避したコードへ戻す（自動ロールバック）。
-5. 検証に通り、そのルームの最高得点を出した試合なら `var/best-solvers/room<N>.ts` にコピーし、`room-profiles.json` を更新する。
-6. `summary.json` に `evolution: { solverChanged, replayVerified, rolledBack }` を追記し、`evolution-report.md` を書く。
+2. `postMatch` に診断レポート（`diagnosis.md`）と run ディレクトリを渡す。セッションは試合中の文脈（盤面の記憶、立てた作戦）を持っている。
+3. メインは改修後、臨時ツール（`@temporary`）を「ソルバーへ組込む／正式ツールにする（`@temporary` を外す）／削除する」のいずれかに決める。判明したタイル得点・ルールは `knowledge/` に残す。
+4. 改修後、`verifySolverWithReplay(runDir)` で検証する。
+5. 検証に失敗したら退避したコードへ戻す（自動ロールバック）。
+6. 検証に通り、そのルームの最高得点を出した試合なら `var/best-solvers/room<N>.ts` にコピーし、`room-profiles.json` を更新する。
+7. `summary.json` に `evolution: { solverChanged, replayVerified, rolledBack }` を追記し、`evolution-report.md` を書く。
 
-### リプレイ検証の意味
+## 6. リプレイ検証の意味 (`src/evolution/replay-verifier.ts`)
 
-`replay-verifier.ts` は `turns.jsonl` の観測を順に新しいソルバーへ与え、次を確かめる。
+`turns.jsonl` の観測を順に新しいソルバーへ与え、次を確かめる。
 
 - `decideTurnAction` が例外を投げないこと
 - CMD1 / CMD2 が合法手を返すこと
 - 試合を最後まで再生できること
 
-「変わったターン数」（`changedCmd1Count` など）は集計しているだけで、改善を示すものではない。得点の改善は次の試合の結果で判断する。`turns.jsonl` がない場合は、スモークテスト（ダミー盤面 1 手）だけを行う。
+注意点:
 
-## 5. ソルバー (`src/solver/active-solver.ts`)
+- リプレイでは作戦（`plan`）を再現しない。ターンログに plan を記録していないため、新しいソルバーは plan なしで走る。
+- 「変わったターン数」（`changedCmd1Count` など）は集計しているだけで、改善を示すものではない。得点の改善は次の試合の結果で判断する。
+- `turns.jsonl` がない場合は、スモークテスト（ダミー盤面 1 手）だけを行う。
 
-- `decideTurnAction(worldMap, phase, turn)` を export する。この署名は維持する。
-- CMD1: 隣接マスの得点から `gru/grd/grl/grr` を選ぶ。安全なプラス得点マス（または目的地方向の安全マス）がなければ `gr`。`gr` は静止しても現在地（穴）への再着地で -20 かかるため、その分も見積もる。
-- CMD2: 候補方向ごとに「即時得点 − 訪問回数ペナルティ − 逆走ペナルティ + 目的地へのボーナス」を比べて `w*` を選ぶ。周囲が穴や罠だけのときは桂馬飛び `kei*` を検討する。
-- 未知タイルが出た場合は `triggerHarness` を立てる（メインの相談理由になる）。
+## 7. ソルバー (`src/solver/active-solver.ts`)
 
-## 6. CLI (`bun src/cli.ts`)
+- `decideTurnAction(worldMap, phase, turn, plan = null)` を export する。第 4 引数は省略可能。この署名は維持する。
+- CMD1: 隣接マスの得点から `gru/grd/grl/grr` を選ぶ。`plan` の最初の一歩があればそれを優先候補にする。安全なプラス得点マスがなければ `gr`。`gr` は静止しても現在地（穴）への再着地で -20 かかるため、その分も見積もる。
+- CMD2: 候補方向ごとに「即時得点 − 訪問回数ペナルティ − 逆走ペナルティ + 目的地へのボーナス」を比べて `w*` を選ぶ。`plan` の最初の一歩には +400 の経路ボーナスが付く。周囲が穴や罠だけのときは桂馬飛び `kei*` を検討する。
+- 未知タイルが出た場合は `triggerHarness` を立てる（メインへの情報になる）。
+
+## 8. CLI (`bun src/cli.ts`)
 
 | サブコマンド | 用途 |
 | :--- | :--- |
@@ -95,11 +119,12 @@
 | `verify [--run-dir <dir>]` | リプレイ検証。失敗時は終了コード 1 |
 | `status [--room <n>]` | ルームの成績とタイル数 |
 
-`create-tool` は廃止した。ツールは `agent/tools/<name>.ts` に書き、`bun agent/tools/<name>.ts` で実行する（規約は `agent/tools/README.md`）。
+ツールは `agent/tools/<name>.ts` に書き、`bun agent/tools/<name>.ts` で実行する（規約は `agent/tools/README.md`。出力は JSON 1 行、2 秒以内を目安）。`create-tool` は廃止した。
 
-## 7. 制約と既知の課題
+## 9. 制約と既知の課題
 
 - 改修の良し悪しは自動では判定しない。`evolution-report.md` と次回の試合の得点で人が見る。
-- メインの判断率（`turns.jsonl` の `cmd*Source === "main"`）が低いときは、予算・effort・プロンプトを見直す。
-- サーバの制限時間は公開されていない。過去ログでは約 25 秒の遅延でも切断されなかったが、計測は未完了（`agent/SETUP.md` 1-4）。
+- メインの判断率（`turns.jsonl` の `cmd*Source === "main"`、`mainActions`）が低いときは、予算・effort・プロンプトを見直す。
+- サーバの制限時間は公開されていない。実測では CMD1 を 120 秒遅らせても切断されなかった（上限は未確認。`knowledge/server.json`）。
+- 同一ユーザーの二重ログインは拒否される。途中放棄後は約 5 分、ログインのみのセッションは約 12 分ロックされるため、`bun run play --login-wait-min` で待つ。
 - タイル得点は公式根拠がない。`knowledge/tiles.json` は実測値として扱う（[chaser-protocol.md](chaser-protocol.md)）。

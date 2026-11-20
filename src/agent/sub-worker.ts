@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { AGENT_DIR } from "../paths";
+import { numSetting } from "../settings";
 import type { ClaudeModelSettings } from "./claude-env";
 import { uiBus } from "../ui/event-bus";
 import { ClaudeSession } from "./claude-session";
@@ -13,7 +14,6 @@ export interface SubTask {
   durationMs: number | null;
 }
 
-const TASK_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * メインエージェントから仕事（調査・ツール作成・ログ分析）を受け取り、裏で順番に処理する常駐サブエージェント。
@@ -77,7 +77,7 @@ export class SubWorker {
       for (let task = this.tasks.find((t) => t.status === "queued"); task; task = this.tasks.find((t) => t.status === "queued")) {
         task.status = "running";
         this.publish();
-        const res = await this.session.ask(`[TASK #${task.id}] ${task.request}`, TASK_TIMEOUT_MS);
+        const res = await this.session.ask(`[TASK #${task.id}] ${task.request}`, numSetting("AGENT_SUB_TASK_TIMEOUT_MIN", { min: 1 }) * 60_000);
         if (res.status === "ok") {
           task.status = "done";
           task.result = res.text.slice(0, 1500);

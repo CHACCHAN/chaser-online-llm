@@ -26,6 +26,8 @@
   --unk: #cdd3d8;
   --s1: #0f8a8f; --s2: #a63f8a; --s3: #6f8a14; --s4: #7a63c9; --s5: #c0572a;
   --focus: #3447c9;
+  --plan: #c0268a;
+  --plan-bg: rgba(192, 38, 138, .10);
   --font: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic UI", "Noto Sans CJK JP", "Noto Sans JP", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   color-scheme: light;
@@ -48,6 +50,8 @@
   --unk: #1b2227;
   --s1: #3cc0c6; --s2: #e07cc0; --s3: #a8c43a; --s4: #a692f0; --s5: #f09064;
   --focus: #8a9cff;
+  --plan: #f06cc0;
+  --plan-bg: rgba(240, 108, 192, .13);
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -56,6 +60,7 @@
     --line: #28323a; --line2: #1f282f; --main: #8a9cff; --main-bg: rgba(138,156,255,.13);
     --solver: #e3a53f; --solver-bg: rgba(227,165,63,.13); --pos: #4cc38a; --neg: #f07067; --unk: #1b2227;
     --s1: #3cc0c6; --s2: #e07cc0; --s3: #a8c43a; --s4: #a692f0; --s5: #f09064; --focus: #8a9cff;
+    --plan: #f06cc0; --plan-bg: rgba(240,108,192,.13);
     color-scheme: dark;
   }
 }
@@ -77,7 +82,9 @@ button { cursor: pointer; }
 /* ---------- 上部バー ---------- */
 .top { background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
 .top-row { display: flex; align-items: center; gap: 14px; padding: 7px 16px; min-width: 0; }
-.top-row + .top-row { border-top: 1px solid var(--line2); background: var(--bg); }
+.top-row + .top-row { border-top: 1px solid var(--line2); background: var(--bg); gap: 12px; }
+.top-row .field { flex: 0 1 auto; }
+.top-row .field.chk { flex: none; }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; letter-spacing: .02em; flex: none; }
 .glyph { display: grid; grid-template-columns: 7px 7px; gap: 2px; }
 .glyph i { width: 7px; height: 7px; background: var(--ink3); display: block; }
@@ -110,15 +117,16 @@ button { cursor: pointer; }
   background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 3px 7px; min-width: 0; height: 26px;
 }
 .field input:hover, .field select:hover { border-color: var(--ink3); }
-#inMain, #inSub { width: 170px; }
-#selRoom { width: 204px; }
-#selEffort { width: 92px; }
-#inBudget { width: 62px; -moz-appearance: textfield; }
+#inMain, #inSub { width: 122px; }
+#selRoom { width: 160px; }
+#selEffort, #selSubEffort { width: 84px; }
+#inBudget { width: 56px; -moz-appearance: textfield; }
 #inBudget::-webkit-inner-spin-button, #inMax::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-#inMax { width: 84px; }
+#inMax { width: 76px; }
 .field.chk label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
 .sep { flex: 1; }
-.hint { font-size: 11px; color: var(--ink3); white-space: nowrap; }
+.hint { font-size: 11px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#modelHint { flex: 1 1 0; min-width: 0; text-align: right; }
 
 /* ---------- 3 カラム ---------- */
 .work { flex: 1; display: grid; grid-template-columns: 268px minmax(0, 1fr) 328px; min-height: 0; }
@@ -201,6 +209,8 @@ table.turns { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .who.main { color: var(--main); } .who.solver { color: var(--solver); } .who.mix { color: var(--ink2); }
 .ev { display: inline-block; font-size: 11px; border: 1px solid var(--line); padding: 0 5px; border-radius: 2px; margin-right: 4px; color: var(--ink2); }
 .ev.bad { color: var(--neg); border-color: var(--neg); }
+.ev.plan { color: var(--plan); border-color: var(--plan); }
+.ev.sub { color: var(--s1); border-color: var(--s1); }
 .detail td { background: var(--sunk); white-space: normal; padding: 8px 12px 10px 28px; }
 .detail dl { margin: 0; display: grid; grid-template-columns: 60px 1fr; gap: 3px 10px; }
 .detail dt { color: var(--ink3); font-size: 12px; }
@@ -256,6 +266,46 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .lg-ev pre { margin: 0; padding: 4px 14px 8px 112px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); max-height: 260px; overflow-y: auto; }
 .lg-ev.tool pre { font-family: var(--mono); font-size: 11px; }
 
+/* ---------- 作戦・サブ ---------- */
+.badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 0 7px; border-radius: 2px; border: 1px solid currentColor; line-height: 1.55; white-space: nowrap; }
+.badge.b-continue { color: var(--main); background: var(--main-bg); }
+.badge.b-plan { color: var(--plan); background: var(--plan-bg); }
+.badge.b-command { color: var(--s4); background: transparent; }
+.badge.b-solver { color: var(--solver); background: var(--solver-bg); }
+.badge.b-wait { color: var(--ink2); background: var(--sunk); }
+.planline { margin-top: 8px; padding: 5px 8px; border-left: 3px solid var(--plan); background: var(--plan-bg); font-size: 12px; overflow-wrap: anywhere; }
+.planline b { color: var(--plan); font-weight: 600; }
+.planline.none { border-left-color: var(--line); background: var(--sunk); color: var(--ink3); }
+.dline { margin-top: 6px; font-size: 12px; overflow-wrap: anywhere; }
+.dline .k { color: var(--ink3); margin-right: 6px; }
+.sub-block .sec-h { flex-wrap: nowrap; }
+.sub-block .sub-n { flex: 1; min-width: 0; flex-wrap: wrap; }
+.sub-block .sub-body { max-height: 300px; overflow-y: auto; padding-bottom: 6px; }
+.sub-block.collapsed .sub-body { display: none; }
+.sub-block .sub-n { display: inline-flex; gap: 8px; font-size: 12px; color: var(--ink2); }
+.st-t { border-top: 1px solid var(--line2); }
+.st-t summary { list-style: none; display: grid; grid-template-columns: 18px 1fr auto; gap: 6px; align-items: baseline; padding: 4px 14px; }
+.st-t summary::-webkit-details-marker { display: none; }
+.st-t summary:hover { background: var(--sunk); }
+.st-t .rq { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-t[open] .rq { white-space: normal; overflow: visible; }
+.st-t .du { font-size: 11px; color: var(--ink3); white-space: nowrap; }
+.st-t pre { margin: 0; padding: 2px 14px 8px 38px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); max-height: 200px; overflow-y: auto; }
+.st-t.failed pre { color: var(--neg); }
+.st-ic { width: 12px; height: 12px; border-radius: 50%; display: inline-block; align-self: center; border: 2px solid var(--ink3); }
+.st-ic.queued { border-style: dotted; }
+.st-ic.running { border-color: var(--plan-bg); border-top-color: var(--plan); animation: spin .9s linear infinite; }
+.st-ic.done { border-color: var(--pos); background: var(--pos); }
+.st-ic.failed { border-color: var(--neg); background: var(--neg); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .st-ic.running { animation: none; border-top-color: var(--plan); } }
+.tag.plan { border-color: var(--plan); color: var(--plan); }
+.tag.sub { border-color: var(--s1); color: var(--s1); }
+.who small { font-weight: 400; color: var(--ink2); }
+.who.plan { color: var(--plan); } .who.cmdx { color: var(--s4); }
+.agent-line { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.agent-line code { font-family: var(--mono); font-size: 12px; background: var(--sunk); padding: 0 4px; }
+
 /* ---------- ダイアログ ---------- */
 dialog { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 4px; padding: 0; width: min(760px, 94vw); max-height: 86vh; }
 dialog::backdrop { background: rgba(0,0,0,.4); }
@@ -271,7 +321,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
 @media (max-width: 1100px) {
   .work { grid-template-columns: 230px minmax(0,1fr) 280px; }
-  #inMain, #inSub { width: 130px; }
+  #inMain, #inSub { width: 120px; }
 }
 </style>
 </head>
@@ -298,11 +348,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <div class="field"><label for="selRoom">ルーム</label><select id="selRoom"></select></div>
     <div class="field"><label for="inMain">メイン</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
     <div class="field"><label for="inSub">サブ</label><input id="inSub" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
-    <div class="field"><label for="selEffort">effort</label><select id="selEffort"></select></div>
+    <div class="field"><label for="selEffort" title="メインの思考の深さ">メイン effort</label><select id="selEffort"></select></div>
+    <div class="field"><label for="selSubEffort" title="サブの思考の深さ。同上=メインと同じ">サブ effort</label><select id="selSubEffort"></select></div>
     <div class="field"><label for="inBudget" title="メインが1手に使える思考時間。超えると solver が代わりに打つ">思考予算</label><input id="inBudget" type="number" min="3" step="1" /><span class="dim">秒</span></div>
     <div class="field"><label for="inMax">最大ターン</label><input id="inMax" type="number" min="1" step="1" placeholder="無制限" /></div>
-    <div class="field chk"><label><input type="checkbox" id="chkAuto" />試合後に自動で次へ</label></div>
-    <span class="sep"></span>
+    <div class="field chk"><label><input type="checkbox" id="chkAuto" title="試合後に自動で次の試合を始める" />自動で次へ</label></div>
     <span class="hint" id="modelHint"></span>
     <datalist id="dlModels"></datalist>
   </div>
@@ -366,6 +416,14 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="sec-h"><h2>マップ</h2><div class="right-end faint" id="mapSrc"></div></div>
       <div class="mapbox" id="mapbox"><canvas id="map" width="10" height="10"></canvas><div class="maptip" id="maptip" hidden></div><div class="mapinfo" id="mapinfo"></div></div>
     </section>
+    <section class="block sub-block" id="subBlock">
+      <div class="sec-h">
+        <h2 title="メインが依頼した裏の仕事(調査・ツール作成・ログ分析)">サブの仕事</h2>
+        <span class="sub-n" id="subCount"></span>
+        <div class="right-end"><button type="button" class="link" id="subToggle" aria-expanded="true">折りたたむ</button></div>
+      </div>
+      <div class="sub-body" id="subBody"></div>
+    </section>
     <section class="block log-block" id="logBlock">
       <div class="sec-h">
         <h2 title="Claude Code の思考・ツール呼び出しログ">思考ログ</h2>
@@ -427,8 +485,9 @@ const S = {
   chartMode: "turns", tab: "turns", tf: "all", lf: "all", roomAll: false,
   hiTurn: null, expanded: new Set(), models: [], logCollapsed: false,
   imgs: new Map(), tileFiles: null, mapHit: null,
+  subCollapsed: false, subClosed: new Set(), subSeen: {}, planKeep: undefined, planOff: null,
 };
-{ const t = load("chaser.roomAll"); if (t === "1") S.roomAll = true; if (load("chaser.logCollapsed") === "1") S.logCollapsed = true; }
+{ const t = load("chaser.roomAll"); if (t === "1") S.roomAll = true; if (load("chaser.logCollapsed") === "1") S.logCollapsed = true; if (load("chaser.subCollapsed") === "1") S.subCollapsed = true; }
 
 /* ============ 再描画スケジューラ ============ */
 const dirty = new Set(); let raf = 0;
@@ -436,8 +495,8 @@ function mark(...ks) { ks.forEach((k) => dirty.add(k)); if (!raf) raf = requestA
 function flush() {
   raf = 0; const d = [...dirty]; dirty.clear();
   const R = { head: renderHead, settings: syncSettings, rail: renderRail, chart: renderChart, runhead: renderRunHead, table: renderMain,
-    decide: renderDecide, map: renderMap, log: renderLog };
-  for (const k of ["head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log"]) if (d.includes(k)) { try { R[k](); } catch (e) { console.error(k, e); } }
+    decide: renderDecide, map: renderMap, log: renderLog, sub: renderSub };
+  for (const k of ["head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "sub", "log"]) if (d.includes(k)) { try { R[k](); } catch (e) { console.error(k, e); } }
 }
 
 /* ============ ターン記録の正規化 ============ */
@@ -448,6 +507,26 @@ function srcOf(t, n) {
 }
 const derived = (t) => t.cmd1Source === undefined && t.cmd2Source === undefined;
 function latencyOf(t) { return Array.isArray(t.mainLatencyMs) ? t.mainLatencyMs.reduce((a, b) => a + (Number(b) || 0), 0) : 0; }
+const ACT = { continue: ["作戦どおり", "main"], plan: ["作戦変更", "plan"], command: ["直接指定", "cmdx"] };
+function actOf(t, n) { const a = (t.mainActions || []).find((x) => String(x).startsWith(`CMD${n}:`)); return a ? String(a).slice(5) : null; }
+function noteOf(t, n) { const x = (t.solverFallbackNotes || []).find((q) => String(q).startsWith(`CMD${n}:`)); return x ? String(x).slice(5).trim() : null; }
+function reasonJa(note) {
+  if (!note) return "";
+  if (/^timeout/i.test(note)) return "時間切れ";
+  if (/busy/i.test(note)) return "多忙";
+  if (/not running/i.test(note)) return "未起動";
+  if (/JSON/.test(note)) return "不正応答";
+  return note.length > 16 ? note.slice(0, 16) + "…" : note;
+}
+function whoPart(t, n) {
+  const src = srcOf(t, n); if (!src) return null;
+  if (src === "main") {
+    const a = actOf(t, n), m = ACT[a];
+    return { src, cls: m ? m[1] : "main", text: m ? `main(${m[0]})` : "main" };
+  }
+  const note = noteOf(t, n), r = reasonJa(note);
+  return { src, cls: "solver", text: r ? `solver(${r})` : "solver", full: note || "" };
+}
 function whoOf(t) {
   const a = srcOf(t, 1), b = srcOf(t, 2);
   if (a && b && a !== b) return "mix";
@@ -471,7 +550,7 @@ function normRun(r) {
   const start = m ? new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : null;
   const official = r.officialTotalScore ?? null, est = r.estimatedTotalScore ?? null;
   return { id: r.runId, room: r.room, turns: r.turns, official, est, score: official ?? est, isOfficial: official !== null,
-    start, finished: r.finishedAt ? new Date(r.finishedAt) : start };
+    start, finished: r.finishedAt ? new Date(r.finishedAt) : start, agent: r.agent || null, evolution: r.evolution || null };
 }
 function runLabel(r) { return r.start ? r.start.toLocaleString("ja-JP", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : r.id; }
 function runsForView() {
@@ -485,6 +564,19 @@ function prevOf(r) {   // 同ルームの直前の試合
 function turnsOfRun(id) { return S.runTurns[id] || null; }
 function statsOfRun(id) { return statsOf(S.runTurns[id]); }
 const hasEvo = (id) => !!(S.evo[id] && S.evo[id].length > 0);
+/* 進化したか: summary の evolution があればそれを優先、無い古い試合だけ進化レポートの有無で判定 */
+function evolved(id) {
+  const r = S.runs.find((x) => x.id === id);
+  if (r?.evolution && typeof r.evolution.solverChanged === "boolean") return r.evolution.solverChanged;
+  return hasEvo(id);
+}
+/* main 判断率と平均応答: summary の agent があれば優先、無ければ turns から計算 */
+function rateOfRun(r) {
+  const a = r.agent, s = statsOfRun(r.id);
+  const mainRate = a && typeof a.mainDecisionRate === "number" ? a.mainDecisionRate : s ? s.mainRate : undefined;
+  const avgLat = a && typeof a.avgLatencyMs === "number" ? a.avgLatencyMs : s ? s.avgLat : undefined;
+  return { mainRate, avgLat, ready: mainRate !== undefined || avgLat !== undefined || !!s };
+}
 function bestId(room) { return S.rooms[String(room)]?.bestRunId || null; }
 function getFocusTurns() { return S.focus === "live" ? S.liveTurns : turnsOfRun(S.focus) || []; }
 function focusRun() { return S.focus === "live" ? null : S.runs.find((r) => r.id === S.focus) || null; }
@@ -578,6 +670,11 @@ function syncSettings(force) {
     es.innerHTML = `<option value="">既定</option>` + eff.map((e) => `<option>${esc(e)}</option>`).join("");
     es.value = st.effort || "";
   }
+  const ses = $("#selSubEffort");
+  if (document.activeElement !== ses) {
+    ses.innerHTML = `<option value="">同上</option>` + eff.map((e) => `<option>${esc(e)}</option>`).join("");
+    ses.value = st.subEffort || "";
+  }
   set($("#inMain"), st.model || ""); set($("#inSub"), st.subModel || "");
   set($("#inBudget"), st.turnBudgetSec ?? ""); set($("#inMax"), st.maxTurns ?? "");
   $("#chkAuto").checked = !!st.autoContinue;
@@ -586,7 +683,7 @@ function settingsPayload() {
   const room = Number($("#selRoom").value) || S.st?.room || 3;
   const mx = $("#inMax").value.trim();
   const bud = Number($("#inBudget").value);
-  return { room, model: $("#inMain").value.trim(), subModel: $("#inSub").value.trim(), effort: $("#selEffort").value,
+  return { room, model: $("#inMain").value.trim(), subModel: $("#inSub").value.trim(), effort: $("#selEffort").value, subEffort: $("#selSubEffort").value,
     ...(bud >= 3 ? { turnBudgetSec: bud } : {}), maxTurns: mx ? Number(mx) : null, autoContinue: $("#chkAuto").checked };
 }
 async function control(body) {
@@ -600,7 +697,7 @@ $("#selRoom").addEventListener("change", (e) => {
   }
   control({ action: "update_settings", ...settingsPayload() });
 });
-["inMain", "inSub", "selEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
+["inMain", "inSub", "selEffort", "selSubEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
 $("#btnStart").addEventListener("click", () => control({ action: "start", ...settingsPayload() }));
 $("#btnStop").addEventListener("click", () => control({ action: "stop" }));
 $("#btnPause").addEventListener("click", () => control({ action: "pause" }));
@@ -632,13 +729,13 @@ function renderRail() {
   }
   const list = runsForView().filter((r) => !(liveShown && r.id === S.liveRunId));
   for (const r of list) {
-    const s = statsOfRun(r.id); const prev = prevOf(r);
+    const s = rateOfRun(r); const prev = prevOf(r);
     const d = prev && r.score !== null && prev.score !== null ? r.score - prev.score : null;
     const best = bestId(r.room) === r.id;
     rows.push(`<div class="run" data-id="${esc(r.id)}" tabindex="0" role="button" aria-current="${S.focus === r.id}">
       <input type="checkbox" data-ov="${esc(r.id)}" ${S.compare.includes(r.id) ? "checked" : ""} title="グラフに重ねる" aria-label="グラフに重ねる" />
-      <div><div class="run-t"><b>${esc(runLabel(r))}</b><span class="faint">Room ${r.room ?? "?"}</span>${best ? `<span class="tag best">最高</span>` : ""}${hasEvo(r.id) ? `<span class="tag evo" title="この試合の後にソルバー改修(進化)が行われた">進化</span>` : ""}</div>
-      <div class="run-m"><span>${r.turns}T</span><span title="main 判断率"><span class="mbar"><i style="width:${(s?.mainRate || 0) * 100}%"></i></span> ${s ? pct(s.mainRate) : "…"}</span><span title="main の平均応答時間">${s ? sec(s.avgLat) : ""}</span></div></div>
+      <div><div class="run-t"><b>${esc(runLabel(r))}</b><span class="faint">Room ${r.room ?? "?"}</span>${best ? `<span class="tag best">最高</span>` : ""}${evolved(r.id) ? `<span class="tag evo" title="${r.evolution?.rolledBack ? "ソルバーを改修したが検証に失敗し巻き戻した" : "この試合の後にソルバー改修(進化)が行われた"}">進化${r.evolution?.rolledBack ? "(戻し)" : ""}</span>` : ""}</div>
+      <div class="run-m"><span>${r.turns}T</span><span title="main 判断率"><span class="mbar"><i style="width:${(s.mainRate || 0) * 100}%"></i></span> ${s.ready ? pct(s.mainRate ?? null) : "…"}</span><span title="main の平均応答時間">${s.ready ? sec(s.avgLat) : ""}</span></div></div>
       <div class="run-s"><b>${fmt(r.score)}</b><small>${r.isOfficial ? "公式" : "推定"}${d !== null ? ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${fmt(d)}</span>` : ""}</small></div></div>`);
   }
   box.innerHTML = rows.join("") || `<div class="empty">この範囲に試合がありません。開始すると、ここに試合が並びます。</div>`;
@@ -783,13 +880,13 @@ function chartRuns(el) {
   runs.forEach((r, i) => {
     const sel = S.focus === r.id;
     g += `<circle data-id="${esc(r.id)}" cx="${X(i)}" cy="${Y(r.score)}" r="${sel ? 6 : 4.5}" fill="${r.isOfficial ? "var(--ink)" : "var(--panel)"}" stroke="${sel ? "var(--main)" : "var(--ink)"}" stroke-width="${sel ? 3 : 1.6}" style="cursor:pointer"><title>${esc(runLabel(r))} Room ${r.room}: ${fmt(r.score)} ${r.isOfficial ? "(公式)" : "(推定)"}</title></circle>`;
-    if (hasEvo(r.id)) g += `<path d="M${X(i)},${f.y1 - 2}l-5,-9h10z" fill="var(--s2)"><title>この試合の後に進化(ソルバー改修)</title></path>`;
+    if (evolved(r.id)) g += `<path d="M${X(i)},${f.y1 - 2}l-5,-9h10z" fill="var(--s2)"><title>この試合の後に進化(ソルバー改修)</title></path>`;
   });
   const rb = f.rTop + CH.ribbonH;
   g += `<text x="${f.x0 - 6}" y="${f.rTop + 10}" text-anchor="end">main率</text><line x1="${f.x0}" x2="${f.x1}" y1="${rb}" y2="${rb}" stroke="var(--ink3)"/>`;
   const bw = Math.min(26, ((f.x1 - f.x0) / n) * 0.6);
   runs.forEach((r, i) => {
-    const s = statsOfRun(r.id); if (!s || s.mainRate === null) return;
+    const s = rateOfRun(r); if (s.mainRate === undefined || s.mainRate === null) return;
     const h = Math.max(1, s.mainRate * (CH.ribbonH - 4));
     g += `<rect x="${X(i) - bw / 2}" y="${rb - h}" width="${bw}" height="${h}" fill="var(--main)"><title>${esc(runLabel(r))} main ${pct(s.mainRate)} 平均応答 ${sec(s.avgLat)}</title></rect>`;
     g += `<rect x="${X(i) - bw / 2}" y="${rb - (CH.ribbonH - 4)}" width="${bw}" height="${CH.ribbonH - 4 - h}" fill="var(--solver-bg)"/>`;
@@ -805,6 +902,8 @@ new ResizeObserver(() => mark("chart", "map")).observe($("#chart"));
 /* ============ 選択中の試合の見出し ============ */
 function renderRunHead() {
   const el = $("#runHead"), turns = getFocusTurns(), s = statsOf(turns);
+  const fr = S.focus === "live" ? null : focusRun();
+  const rr = fr ? rateOfRun(fr) : { mainRate: s?.mainRate, avgLat: s?.avgLat, ready: !!s };
   let title, off = null, est = null, d = null, room = S.st?.room;
   if (S.focus === "live") { title = `いまの試合${S.st?.runId ? ` (${S.st.runId})` : ""}`; est = S.st?.scores.estimatedTotal ?? s?.lastScore ?? null; off = S.st?.scores.liveOfficial?.totalScore ?? null; }
   else {
@@ -813,7 +912,17 @@ function renderRunHead() {
     const p = r && prevOf(r); if (p && r.score !== null && p.score !== null) d = r.score - p.score;
   }
   const kv = (k, v, cls = "") => `<span class="kv"><span>${k}</span><b class="${cls}">${v}</b></span>`;
-  el.innerHTML = `<h2>${esc(title)}</h2>${kv("Room", room ?? "-")}${kv("公式", fmt(off))}${kv("推定", fmt(est))}${d !== null ? kv("前の試合比", (d >= 0 ? "+" : "") + fmt(d), d >= 0 ? "up" : "down") : ""}${kv("ターン", turns.length)}${kv("main 判断率", s ? pct(s.mainRate) : "-")}${kv("main 平均応答", s ? sec(s.avgLat) : "-")}${S.focus !== "live" && hasEvo(S.focus) ? `<span class="tag evo">この試合の後に進化あり</span>` : ""}`;
+  el.innerHTML = `<h2>${esc(title)}</h2>${kv("Room", room ?? "-")}${kv("公式", fmt(off))}${kv("推定", fmt(est))}${d !== null ? kv("前の試合比", (d >= 0 ? "+" : "") + fmt(d), d >= 0 ? "up" : "down") : ""}${kv("ターン", turns.length)}${kv("main 判断率", rr.ready ? pct(rr.mainRate ?? null) : "-")}${kv("main 平均応答", rr.ready ? sec(rr.avgLat) : "-")}${S.focus !== "live" && evolved(S.focus) ? `<span class="tag evo">この試合の後に進化あり</span>` : ""}${agentLine(S.focus === "live" ? null : focusRun())}`;
+}
+function agentLine(r) {
+  let a;
+  if (r) a = r.agent; else if (S.st) a = { model: S.st.model, subModel: S.st.subModel, effort: S.st.effort, subEffort: S.st.subEffort, turnBudgetSec: S.st.turnBudgetSec };
+  if (!a) return `<span class="agent-line faint" style="flex-basis:100%">モデル情報: この試合には記録がありません</span>`;
+  const m = (v) => (v ? `<code>${esc(v)}</code>` : `<span class="faint">既定</span>`);
+  const ef = (v) => (v ? esc(v) : "既定");
+  const ev = r?.evolution ? ` <span class="faint">/</span> 進化後: ${r.evolution.solverChanged ? "ソルバー変更あり" : "変更なし"}${r.evolution.solverChanged ? (r.evolution.replayVerified ? "・リプレイ検証OK" : "・検証NG") : ""}${r.evolution.rolledBack ? "・巻き戻し" : ""}` : "";
+  const mx = a.maxLatencyMs != null ? ` / 最大 ${sec(a.maxLatencyMs)}` : "";
+  return `<span class="agent-line dim" style="flex-basis:100%">メイン ${m(a.model)} effort ${ef(a.effort)} <span class="faint">/</span> サブ ${a.subModel ? m(a.subModel) : '<span class="faint">メインと同じ</span>'} effort ${a.subEffort ? esc(a.subEffort) : "メインと同じ"} <span class="faint">/</span> 思考予算 ${a.turnBudgetSec ?? "-"}秒${a.avgLatencyMs != null ? ` <span class="faint">/</span> 平均応答 ${sec(a.avgLatencyMs)}${mx}` : ""}${ev}</span>`;
 }
 
 /* ============ ターン履歴 / レポート ============ */
@@ -823,8 +932,18 @@ function eventsOf(t, i, turns) {
   if (d < 0) ev.push(["bad", `スコア ${fmt(d)}`]);
   (t.breakpointReasons || []).forEach((b) => ev.push(["", b]));
   if (t.usedFallback) ev.push(["bad", "fallback"]);
+  if ((t.mainActions || []).some((x) => String(x).endsWith(":plan"))) ev.push(["plan", "作戦変更"]);
+  if (t.delegations?.length) ev.push(["sub", "サブ依頼"]);
   if (t.gameOver) ev.push(["bad", `終了 ${t.gameOverReason || ""}`]);
   return ev;
+}
+function whoCell(t) {
+  const a = whoPart(t, 1), b = whoPart(t, 2);
+  if (!a && !b) return `<span class="who">-</span>`;
+  const one = (p, pre) => `<span class="who ${p.cls}" title="${esc(pre + p.text + (p.full ? " : " + p.full : ""))}">${esc(p.text)}</span>`;
+  if (a && b && a.text === b.text) return one(a, "CMD1/2 ");
+  const stack = (p, n) => (p ? `<div style="line-height:1.25;font-size:11.5px"><small class="faint">${n}</small> ${one(p, "CMD" + n + " ")}</div>` : "");
+  return stack(a, 1) + stack(b, 2);
 }
 function renderMain() {
   const wrap = $("#tblWrap");
@@ -846,7 +965,7 @@ function renderMain() {
       <td class="r faint">${t.turn}</td>
       <td><span class="cmd ${c1 || "none"}" title="${c1 ? c1 + (derived(t) ? "(旧ログから推定)" : "") : ""}">${esc(t.cmd1 || "-")}</span></td>
       <td><span class="cmd ${c2 || "none"}" title="${c2 ? c2 + (derived(t) ? "(旧ログから推定)" : "") : ""}">${esc(t.cmd2 || "-")}</span></td>
-      <td><span class="who ${who || ""}">${who === "mix" ? "main+solver" : who || "-"}</span></td>
+      <td>${whoCell(t)}</td>
       <td class="r">${l > 0 ? sec(l) : "-"}</td>
       <td class="r ${d < 0 ? "down" : ""}">${i === 0 && d === 0 ? "-" : (d >= 0 ? "+" : "") + fmt(d)}</td>
       <td class="r">${fmt(t.estimatedScoreAfter)}</td>
@@ -854,11 +973,13 @@ function renderMain() {
     if (open) rows.push(`<tr class="detail"><td colspan="8"><dl>
       <dt>CMD1</dt><dd>${esc(t.cmd1 || "-")}  ${esc(t.cmd1Reason || "(理由なし)")}</dd>
       <dt>CMD2</dt><dd>${esc(t.cmd2 || "-")}  ${esc(t.cmd2Reason || "(理由なし)")}</dd>
+      ${t.mainActions?.length || t.solverFallbackNotes?.length ? `<dt>主体</dt><dd>${[1, 2].map((n) => { const p = whoPart(t, n); return p ? `CMD${n}: ${esc(p.text)}${p.full ? ` <span class="faint">(${esc(p.full)})</span>` : ""}` : ""; }).filter(Boolean).join(" / ")}</dd>` : ""}
+      ${t.delegations?.length ? `<dt>サブ依頼</dt><dd>${t.delegations.map((d) => `<div>${esc(d)}</div>`).join("")}</dd>` : ""}
       <dt>応答</dt><dd>${Array.isArray(t.mainLatencyMs) && t.mainLatencyMs.length ? t.mainLatencyMs.map((x) => sec(x)).join(" + ") : "なし"}${derived(t) ? "  旧ログのため main/solver は usedHarness からの推定" : ""}</dd>
       <dt>位置</dt><dd>(${(t.positionAfter || []).join(", ")})${t.globalPositionAfter ? ` 全体 (${t.globalPositionAfter.join(", ")})` : ""}</dd>
       ${t.breakpointReasons?.length ? `<dt>停止点</dt><dd>${esc(t.breakpointReasons.join(" / "))}</dd>` : ""}</dl></td></tr>`);
   });
-  wrap.innerHTML = `<table class="turns"><colgroup><col style="width:38px"><col style="width:66px"><col style="width:76px"><col style="width:86px"><col style="width:58px"><col style="width:56px"><col style="width:62px"><col></colgroup>
+  wrap.innerHTML = `<table class="turns"><colgroup><col style="width:38px"><col style="width:62px"><col style="width:72px"><col style="width:136px"><col style="width:58px"><col style="width:56px"><col style="width:62px"><col></colgroup>
     <thead><tr><th class="r">T</th><th>CMD1</th><th>CMD2</th><th>決めた主体</th><th class="r">応答</th><th class="r">増減</th><th class="r">推定</th><th>イベント / 理由</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
   if (S.focus === "live" && near && S.hiTurn == null) wrap.scrollTop = wrap.scrollHeight;
 }
@@ -895,34 +1016,90 @@ function renderReport(wrap) {
 }
 
 /* ============ いまの判断 ============ */
+function trackPrediction(p) { if (p && p.plan !== undefined) S.planKeep = p.plan; }
+function curPlan() {
+  const p = S.st?.prediction;
+  if (p && p.plan !== undefined) return p.plan;
+  return S.planKeep || null;
+}
+function decideBadge(st, p) {
+  if (p.source === "main") {
+    const m = ACT[p.mainAction];
+    return { cls: "b-" + (p.mainAction || "continue"), text: m ? m[0] : "main が決定" };
+  }
+  if (p.source === "fallback") return { cls: "b-solver", text: "fallback" };
+  if (p.mainAction === undefined && p.mainNote === undefined) {
+    return st.status === "claude_in_game" ? { cls: "b-wait", text: "main 思考中(solver 案)" } : { cls: "b-solver", text: "solver が決定" };
+  }
+  return { cls: "b-solver", text: "solver 代行" };
+}
 function renderDecide() {
   const st = S.st, p = st?.prediction, el = $("#decide");
   if (!st) return;
   const turns = S.liveTurns, last = turns[turns.length - 1];
   $("#decWhen").textContent = p ? `ターン ${p.turn}  ${p.phase}` : "";
   if (!p) { el.innerHTML = `<div class="faint">対戦が始まると、1手ごとの判断がここに出ます。</div>`; return; }
-  const src = p.source, srcLabel = src === "main" ? "main が決定" : src === "solver" ? "solver が決定" : "fallback";
-  const budget = (st.turnBudgetSec || 20) * 1000, lat = last ? latencyOf(last) : 0;
+  trackPrediction(p);
+  const src = p.source, badge = decideBadge(st, p);
+  const budget = (st.turnBudgetSec || 20) * 1000;
+  const hasLat = typeof p.mainLatencyMs === "number";
+  const lat = hasLat ? p.mainLatencyMs : last ? latencyOf(last) : 0;
   let why = "";
-  if (src !== "main") {
-    const bits = [];
-    if (p.breakpointReasons?.length) bits.push(`停止点: ${p.breakpointReasons.join(", ")}`);
-    if (lat >= budget) bits.push(`直前の応答が予算 ${st.turnBudgetSec}秒 を超過(時間切れの可能性)`);
-    else if (!lat && last && srcOf(last, 1) === "solver") bits.push("直前ターンはメインの応答なし(多忙または未呼び出し)");
-    why = `<div class="dim" style="margin-top:6px;font-size:12px">solver の理由(推定): ${esc(bits.join(" / ") || "記録なし")}</div>`;
-  } else if (p.breakpointReasons?.length) why = `<div class="dim" style="margin-top:6px;font-size:12px">停止点: ${esc(p.breakpointReasons.join(", "))}</div>`;
+  const bp = p.breakpointReasons?.length ? `停止点: ${p.breakpointReasons.join(", ")}` : "";
+  if (src === "solver" && (p.mainAction === null || (p.mainAction === undefined && p.mainNote))) {
+    why = `<div class="dline"><span class="k">代行理由</span><b>${esc(reasonJa(p.mainNote) || "記録なし")}</b>${p.mainNote && reasonJa(p.mainNote) !== p.mainNote ? ` <span class="faint">(${esc(p.mainNote)})</span>` : ""}</div>`;
+  }
+  if (bp) why += `<div class="dline dim">${esc(bp)}</div>`;
+  const plan = curPlan(), hasMain = p.mainAction !== undefined || p.mainNote !== undefined || plan;
+  const planLine = plan
+    ? `<div class="planline"><b>作戦目標 (${esc(plan.target[0])}, ${esc(plan.target[1])})</b>${plan.note ? ` ${esc(plan.note)}` : ""}</div>`
+    : hasMain ? `<div class="planline none">作戦なし(ソルバーの貪欲探索)</div>` : "";
+  const deleg = p.delegated ? `<div class="dline"><span class="k">サブ依頼</span>${esc(p.delegated)}</div>` : "";
   const ratio = Math.min(1, lat / budget);
   const cands = (p.topTargets || []).slice(0, 3).map((t) => `<li><span>${esc(t.tileLabel)} (${t.x},${t.y}) 距離${t.distance}</span><span class="mono">${esc(t.recommendedCmd2)}</span></li>`).join("");
   const fr = (p.nearestFrontiers || []).slice(0, 3).map((t) => `<li><span>未探索 (${t.x},${t.y}) 距離${t.distance}</span><span class="mono">${esc(t.recommendedCmd2)}</span></li>`).join("");
   const chip = (t, n) => `<span class="cmd ${srcOf(t, n) || "none"}">${esc(t["cmd" + n] || "-")}</span>`;
   el.innerHTML = `
-    <div class="now"><div class="big ${src}">${esc(p.command)}</div><div><div class="chip ${src}">${srcLabel}</div><div class="faint" style="font-size:12px">確信度 ${Math.round((p.confidence ?? 0) * 100)}%</div></div></div>
-    <p class="why">${esc(p.reason || "")}</p>${why}
-    <div style="margin-top:10px;font-size:12px" class="dim">メイン応答(直前ターン) <b style="color:var(--ink)">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
+    <div class="now"><div class="big ${src}">${esc(p.command)}</div><div><span class="badge ${badge.cls}">${esc(badge.text)}</span><div class="faint" style="font-size:12px;margin-top:3px">確信度 ${Math.round((p.confidence ?? 0) * 100)}%</div></div></div>
+    <p class="why">${esc(p.reason || "")}</p>${why}${planLine}${deleg}
+    <div style="margin-top:10px;font-size:12px" class="dim">メイン応答(${hasLat ? "このフェーズ" : "直前ターン"}) <b style="color:var(--ink)">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
     <div class="meter ${lat >= budget ? "over" : ""}"><i style="width:${ratio * 100}%"></i></div>
     ${last ? `<div class="prev"><span>直前 T${last.turn}</span>${chip(last, 1)}${chip(last, 2)}<span>${fmt(last.estimatedScoreAfter)}点</span></div>` : ""}
     ${cands || fr ? `<details class="cand"><summary>候補ルート</summary><ul>${cands}${fr}</ul></details>` : ""}`;
 }
+
+/* ============ サブの仕事 ============ */
+let subSig = "";
+function fmtElapsed(ms) { const s = Math.max(0, Math.round(ms / 1000)); return s >= 60 ? `${Math.floor(s / 60)}分${s % 60}秒` : `${s}秒`; }
+const SUB_LABEL = { queued: "待機", running: "実行中", done: "完了", failed: "失敗" };
+function renderSub() {
+  const tasks = S.st?.subTasks || [];
+  $("#subBlock").classList.toggle("collapsed", S.subCollapsed);
+  $("#subToggle").textContent = S.subCollapsed ? "開く" : "折りたたむ"; $("#subToggle").setAttribute("aria-expanded", String(!S.subCollapsed));
+  const n = (k) => tasks.filter((t) => t.status === k).length;
+  $("#subCount").innerHTML = tasks.length ? [n("running") ? `<span style="color:var(--plan)">実行中 ${n("running")}</span>` : "", n("queued") ? `<span>待機 ${n("queued")}</span>` : "", `<span>完了 ${n("done")}</span>`, n("failed") ? `<span class="down">失敗 ${n("failed")}</span>` : ""].filter(Boolean).join("") : "";
+  const now = Date.now();
+  for (const t of tasks) if (t.status === "running" && !S.subSeen[t.id]) S.subSeen[t.id] = now;
+  const sig = JSON.stringify([tasks, [...S.subClosed]]);
+  if (sig === subSig) return; subSig = sig;
+  const box = $("#subBody");
+  if (!tasks.length) { box.innerHTML = `<div class="empty">まだ仕事はありません。メインが調査・ツール作成・ログ分析を頼むと、ここに並びます。</div>`; return; }
+  box.innerHTML = [...tasks].reverse().map((t) => {
+    const fin = t.status === "done" || t.status === "failed";
+    const du = fin ? (t.durationMs != null ? sec(t.durationMs) : "") : t.status === "running" ? `<span data-since="${t.id}">${fmtElapsed(now - (S.subSeen[t.id] || now))}</span>` : "";
+    const open = fin && !S.subClosed.has(t.id) && t.result;
+    return `<details class="st-t ${t.status}" data-id="${t.id}" ${open ? "open" : ""}><summary><span class="st-ic ${t.status}" title="${SUB_LABEL[t.status] || t.status}"></span><span class="rq" title="${esc(t.request)}"><span class="faint">#${t.id}</span> ${esc(t.request)}</span><span class="du">${SUB_LABEL[t.status] || ""} ${du}</span></summary>${t.result ? `<pre>${esc(t.result)}</pre>` : ""}</details>`;
+  }).join("");
+}
+$("#subBody").addEventListener("toggle", (e) => {
+  const d = e.target; if (!d.dataset || !d.dataset.id) return;
+  const id = Number(d.dataset.id); if (d.open) S.subClosed.delete(id); else S.subClosed.add(id);
+}, true);
+$("#subToggle").addEventListener("click", () => { S.subCollapsed = !S.subCollapsed; save("chaser.subCollapsed", S.subCollapsed ? "1" : "0"); mark("sub"); });
+setInterval(() => {
+  const now = Date.now();
+  $$("[data-since]").forEach((el) => { const t0 = S.subSeen[el.dataset.since]; if (t0) el.textContent = fmtElapsed(now - t0); });
+}, 1000);
 
 /* ============ マップ ============ */
 const TILE_NAMES = { 0: "穴 -20", 1: "ターゲット +50", 2: "土 +10", 3: "アイテム +30", 4: "ジオード -1000", 5: "化石1 +125", 6: "化石2 +150", 7: "化石3 +175", 8: "化石4 +200", 9: "アンモナイト +100", 10: "岩盤(通行不可)", 12: "奈落 -600" };
@@ -958,9 +1135,54 @@ function tileImg(v) {
 fetch("/assets/tiles/manifest.json").then((r) => r.json()).then((m) => {
   S.tileFiles = new Set((m.files || []).map((f) => String(f.file).split("/").pop())); mark("map");
 }).catch(() => {});
+/* 作戦目標の表示座標。サーバが map.planCell で渡す（無い古いサーバだけ自機位置の差から推定） */
+function planCell(map) {
+  if (map && "planCell" in map) return map.planCell;
+  const plan = curPlan(); if (!plan || !map?.playerPos || !Array.isArray(plan.target)) return null;
+  const last = S.liveTurns[S.liveTurns.length - 1], p = S.st?.prediction;
+  let off = null;
+  if (last?.globalPositionAfter && last.positionAfter && map.source === "web_map") off = [last.globalPositionAfter[0] - last.positionAfter[0], last.globalPositionAfter[1] - last.positionAfter[1]];
+  else if (last?.positionAfter && p && p.phase === "CMD1" && p.turn === last.turn + 1) off = [map.playerPos[0] - last.positionAfter[0], map.playerPos[1] - last.positionAfter[1]];
+  if (off) S.planOff = { run: S.liveRunId, off };
+  else if (S.planOff && S.planOff.run === S.liveRunId) off = S.planOff.off;
+  else if (last?.positionAfter) off = [map.playerPos[0] - last.positionAfter[0], map.playerPos[1] - last.positionAfter[1]];
+  else return null;
+  const x = plan.target[0] + off[0], y = plan.target[1] + off[1];
+  return x >= 0 && y >= 0 && x < map.width && y < map.height ? [x, y] : null;
+}
+/* 自機・敵の一覧。players が無い古いサーバでは playerPos だけを自機として扱う */
+function playersOf(map) {
+  if (Array.isArray(map.players)) return map.players.filter((q) => q && Number.isFinite(q.x) && Number.isFinite(q.y));
+  return map.playerPos ? [{ x: map.playerPos[0], y: map.playerPos[1], role: "self", tileId: null, lastSeenTurn: null, source: map.source }] : [];
+}
+function isStale(m) { const cur = S.st?.turn ?? 0; return m.role === "enemy" && m.lastSeenTurn != null && m.lastSeenTurn < cur; }
+function playerTip(m) {
+  if (m.role === "self") return `自機${m.tileId ? " " + m.tileId : ""}`;
+  return `敵${m.tileId ? " " + m.tileId : "(ID不明)"}${m.lastSeenTurn != null ? `  T${m.lastSeenTurn} に目撃${isStale(m) ? "(古い情報)" : ""}` : ""}`;
+}
+function drawPlayer(c, m, cell, enemy) {
+  const px = m.x * cell, py = m.y * cell, cx = px + cell / 2, cy = py + cell / 2, r = Math.max(4, cell / 2 - 1);
+  const img = m.tileId ? tileImg(m.tileId) : null, col = enemy ? "#d92d20" : "#3447c9";
+  c.save();
+  if (enemy && isStale(m)) c.globalAlpha = 0.5;
+  if (img) {
+    c.drawImage(img, px, py, cell, cell);
+    c.strokeStyle = "#fff"; c.lineWidth = 4; c.strokeRect(px + 1.5, py + 1.5, cell - 3, cell - 3);
+    c.strokeStyle = col; c.lineWidth = 2.4; c.strokeRect(px + 1.5, py + 1.5, cell - 3, cell - 3);
+  } else {
+    c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.fillStyle = col; c.fill();
+    c.strokeStyle = "#fff"; c.lineWidth = 2; c.stroke();
+    if (cell >= 13) { c.fillStyle = "#fff"; c.font = `700 ${Math.floor(cell * (enemy ? 0.44 : 0.6))}px ${cssVar("--font")}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(enemy ? "敵?" : "自", cx, cy + 1); }
+  }
+  if (!enemy) {   // 自機は小さな三角で位置を強調
+    c.beginPath(); c.moveTo(cx - 3, py - 1); c.lineTo(cx + 3, py - 1); c.lineTo(cx, py + 4); c.closePath();
+    c.fillStyle = col; c.fill(); c.strokeStyle = "#fff"; c.lineWidth = 1; c.stroke();
+  }
+  c.restore();
+}
 function renderMap() {
   const map = S.st?.map, cv = $("#map"), info = $("#mapinfo");
-  $("#mapSrc").textContent = map ? (map.source === "web_map" ? "Web マップ" : "SLAM(推測)") : "";
+  $("#mapSrc").textContent = map ? `${typeof map.updatedTurn === "number" ? `更新: T${map.updatedTurn}・` : ""}${map.source === "web_map" ? "Webマップ" : "自前マップ"}` : "";
   if (!map || !map.grid?.length) {
     cv.hidden = true; info.innerHTML = `<span class="faint">盤面はまだありません。設定の「選択ルームのマップを取得」か、開始すると表示されます。</span>`; return;
   }
@@ -987,9 +1209,20 @@ function renderMap() {
   if (map.plannedPath?.length) { c.setLineDash([4, 3]); c.strokeStyle = "#111"; c.lineWidth = Math.max(4, cell * .38); c.beginPath(); map.plannedPath.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke();
     c.strokeStyle = "#ffd23f"; c.lineWidth = Math.max(2, cell * .22); c.beginPath(); map.plannedPath.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke(); c.setLineDash([]); }
   if (map.nextLandingPos) { const [x, y] = map.nextLandingPos; c.strokeStyle = "#ffd23f"; c.lineWidth = 2; c.strokeRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2); }
-  if (map.playerPos) { const [x, y] = map.playerPos; c.strokeStyle = "#fff"; c.lineWidth = 4; c.strokeRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4); c.strokeStyle = "#3447c9"; c.lineWidth = 2.5; c.strokeRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4); }
-  S.mapHit = { cell, w, h };
-  info.innerHTML = `<span>${w} × ${h}</span>${map.playerPos ? `<span>自機 (${map.playerPos.join(", ")})</span>` : ""}<span>青線 軌跡</span><span>黄点線 予測ルート</span>`;
+  const pls = playersOf(map), self = pls.find((q) => q.role === "self");
+  const pc = planCell(map);
+  if (pc) {
+    const [x, y] = pc, px = x * cell, py = y * cell, pk = "#e0208f";
+    c.fillStyle = "rgba(224,32,143,.28)"; c.fillRect(px, py, cell, cell);
+    c.strokeStyle = "#fff"; c.lineWidth = 4; c.strokeRect(px + 1, py + 1, cell - 2, cell - 2);
+    c.strokeStyle = pk; c.lineWidth = 2; c.strokeRect(px + 1, py + 1, cell - 2, cell - 2);
+    c.beginPath(); c.moveTo(px + 3, py + 3); c.lineTo(px + cell - 3, py + cell - 3); c.moveTo(px + cell - 3, py + 3); c.lineTo(px + 3, py + cell - 3);
+    c.strokeStyle = "#fff"; c.lineWidth = 3.5; c.stroke(); c.strokeStyle = pk; c.lineWidth = 1.6; c.stroke();
+  }
+  for (const m of pls.filter((q) => q.role === "enemy")) drawPlayer(c, m, cell, true);
+  for (const m of pls.filter((q) => q.role === "self")) drawPlayer(c, m, cell, false);
+  S.mapHit = { cell, w, h, players: pls };
+  info.innerHTML = `<span>${w} × ${h}</span>${self ? `<span>自機 (${self.x}, ${self.y})</span>` : ""}${pls.some((q) => q.role === "enemy") ? `<span style="color:var(--neg)">赤 敵 ${pls.filter((q) => q.role === "enemy").length}</span>` : ""}<span>青線 軌跡</span><span>黄点線 予測ルート</span>${pc ? `<span style="color:var(--plan)">桃 ✕ 作戦目標 (${pc.join(", ")})</span>` : curPlan() ? `<span class="faint">作戦目標 (${curPlan().target.join(", ")}) は表示範囲外</span>` : ""}`;
 }
 {
   const cv = $("#map"), tip = $("#maptip");
@@ -997,7 +1230,8 @@ function renderMap() {
     const map = S.st?.map; if (!map || !S.mapHit) return;
     const r = cv.getBoundingClientRect(), x = Math.floor((e.clientX - r.left) / S.mapHit.cell), y = Math.floor((e.clientY - r.top) / S.mapHit.cell);
     if (x < 0 || y < 0 || x >= map.width || y >= map.height) { tip.hidden = true; return; }
-    const v = map.grid[y]?.[x]; tip.hidden = false; tip.textContent = `(${x}, ${y}) ${tileName(v)}`;
+    const v = map.grid[y]?.[x], pm = (S.mapHit.players || []).filter((q) => q.x === x && q.y === y); tip.hidden = false;
+    tip.textContent = `(${x}, ${y}) ${pm.length ? pm.map(playerTip).join(" / ") : tileName(v)}`;
     const box = $("#mapbox").getBoundingClientRect(); tip.style.left = Math.min(e.clientX - box.left + 10, box.width - tip.offsetWidth - 4) + "px"; tip.style.top = (e.clientY - box.top - 26) + "px";
   });
   cv.addEventListener("mouseleave", () => { tip.hidden = true; });
@@ -1068,6 +1302,7 @@ function applyState(st) {
   S.st = st;
   if (st.roomProfiles && Object.keys(st.roomProfiles).length) S.rooms = { ...S.rooms, ...st.roomProfiles };
   if (st.runId !== prevRun) {
+    S.planKeep = undefined; S.planOff = null; S.subSeen = {}; S.subClosed = new Set(); subSig = "";
     S.liveRunId = st.runId; S.liveTurns = [...(st.recentTurns || [])];
     if (st.runId && st.running) { S.focus = "live"; S.hiTurn = null; }
     if (st.runId) fetch(`/api/runs/${encodeURIComponent(st.runId)}/turns`).then((r) => r.json()).then((d) => {
@@ -1079,7 +1314,8 @@ function applyState(st) {
   } else if (S.liveTurns.length === 0 && st.recentTurns?.length) S.liveTurns = [...st.recentTurns];
   if (prevStatus !== undefined && (prevStatus !== st.status && (st.status === "idle" || st.status === "cooldown" || st.status === "evolving") || prevRunning && !st.running)) fetchRuns();
   if (!S.compareInit && S.runs.length) initCompare();
-  mark("head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log");
+  trackPrediction(st.prediction);
+  mark("head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "sub", "log");
 }
 function initCompare() {
   S.compareInit = true;
@@ -1092,7 +1328,7 @@ function connect() {
   const es = new EventSource("/api/events");
   es.addEventListener("state", (e) => applyState(JSON.parse(e.data)));
   es.addEventListener("map", (e) => { if (S.st) { S.st.map = JSON.parse(e.data); mark("map"); } });
-  es.addEventListener("prediction", (e) => { if (S.st) { S.st.prediction = JSON.parse(e.data); mark("decide"); } });
+  es.addEventListener("prediction", (e) => { if (S.st) { S.st.prediction = JSON.parse(e.data); trackPrediction(S.st.prediction); mark("decide", "map"); } });
   es.addEventListener("scores", (e) => { if (S.st) { S.st.scores = JSON.parse(e.data); mark("head", "rail", "runhead"); } });
   es.addEventListener("turn", (e) => {
     const t = JSON.parse(e.data); const i = S.liveTurns.findIndex((x) => x.turn === t.turn);
