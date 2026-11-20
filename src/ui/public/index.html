@@ -335,6 +335,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <div class="live-nums">
       <div class="ln"><b id="nTurn" class="num">0</b><span id="nTurnSub">ターン</span></div>
       <div class="ln"><b id="nEst" class="num">0</b><span>推定スコア</span></div>
+      <div class="ln" id="lnTok" title="この試合でエージェント（メイン・サブ・要約）が使ったトークン"><b id="nTok" class="num">-</b><span id="nTokSub">トークン</span></div>
       <div class="ln"><b id="nOff" class="num">-</b><span>公式(途中)</span></div>
       <div class="ln"><b id="nBest" class="num">-</b><span id="nBestSub">ルーム最高</span></div>
     </div>
@@ -646,6 +647,7 @@ function renderHead() {
   $("#nTurn").textContent = st.turn || 0;
   $("#nTurnSub").textContent = st.maxTurns ? `/ ${st.maxTurns} ターン` : "ターン";
   $("#nEst").textContent = fmt(st.scores.estimatedTotal);
+  renderUsage(st.agentUsage);
   const live = st.scores.liveOfficial ? st.scores.liveOfficial.totalScore : st.scores.lastOfficialTotal;
   $("#nOff").textContent = fmt(live);
   const hs = st.scores.roomHighScore ?? S.rooms[String(st.room)]?.highScore ?? null;
@@ -1066,6 +1068,24 @@ function renderDecide() {
     <div class="meter ${lat >= budget ? "over" : ""}"><i style="width:${ratio * 100}%"></i></div>
     ${last ? `<div class="prev"><span>直前 T${last.turn}</span>${chip(last, 1)}${chip(last, 2)}<span>${fmt(last.estimatedScoreAfter)}点</span></div>` : ""}
     ${cands || fr ? `<details class="cand"><summary>候補ルート</summary><ul>${cands}${fr}</ul></details>` : ""}`;
+}
+
+/* ============ トークン使用量 ============ */
+function fmtTok(n) { return n == null ? "-" : n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n); }
+function sumTok(u) { return u ? u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens : 0; }
+function renderUsage(u) {
+  const b = $("#nTok"), sub = $("#nTokSub"), box = $("#lnTok");
+  if (!u) { b.textContent = "-"; sub.textContent = "トークン"; b.style.color = ""; return; }
+  b.textContent = fmtTok(u.totalTokens) + (u.limitTokens ? ` / ${fmtTok(u.limitTokens)}` : "");
+  const ratio = u.limitTokens ? u.totalTokens / u.limitTokens : 0;
+  b.style.color = u.limitReached ? "#c0392b" : ratio > 0.8 ? "#b7791f" : "";
+  sub.textContent = u.limitReached ? "上限到達・ソルバーのみ" : `会話 ${fmtTok(u.mainContextTokens)}${u.compacting ? " · 要約中" : ""}${u.compactions ? ` · 要約${u.compactions}回` : ""}`;
+  box.title = [
+    `合計 ${(u.totalTokens || 0).toLocaleString()} トークン（上限 ${u.limitTokens ? u.limitTokens.toLocaleString() : "なし"}）`,
+    `メイン ${fmtTok(sumTok(u.main))} / サブ ${fmtTok(sumTok(u.sub))} / 要約 ${fmtTok(sumTok(u.compact))}`,
+    `メインの会話 ${u.mainContextTokens == null ? "-" : u.mainContextTokens.toLocaleString()}（${u.compactAtTokens ? `${u.compactAtTokens.toLocaleString()} を超えたら裏で要約` : "要約なし"}）`,
+    u.total.costUsd ? `推定コスト ${u.total.costUsd.toFixed(2)}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 /* ============ サブの仕事 ============ */

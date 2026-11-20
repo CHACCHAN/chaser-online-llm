@@ -45,6 +45,7 @@ export async function runPostMatchEvolution(
 
   const backupCode = existsSync(SOLVER_PATH) ? readFileSync(SOLVER_PATH, "utf-8") : null;
   const protectedBefore = snapshotProtectedFiles();
+  const tokensBefore = mainAgent.usage().totalTokens;
   const res = await mainAgent.postMatch(
     summary.diagnosis?.markdownReport ?? "(no diagnosis)",
     summary.runDir,
@@ -118,6 +119,7 @@ export async function runPostMatchEvolution(
       `- **Solver Changed**: ${solverChanged}`,
       `- **Replay Verified**: ${verification.ok} (Turns Tested: ${verification.turnsTested}, Changed CMD1: ${verification.changedCmd1Count}, Changed CMD2: ${verification.changedCmd2Count})`,
       `- **Rolled Back**: ${rolledBack}`,
+      `- **Tokens Used (post-match)**: ${(mainAgent.usage().totalTokens - tokensBefore).toLocaleString()}`,
       reverted.length > 0 ? `- **Reverted (out of scope)**: ${reverted.join(", ")}` : "",
       verification.errors.length > 0 ? `- **Errors**: ${verification.errors.join("; ")}` : "",
       "",

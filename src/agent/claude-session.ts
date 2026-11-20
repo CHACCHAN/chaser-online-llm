@@ -3,6 +3,7 @@ import { PROJECT_ROOT } from "../paths";
 import { logger } from "../tools/logger";
 import { uiBus } from "../ui/event-bus";
 import { baseClaudeArgs, buildClaudeEnv, type ClaudeModelSettings } from "./claude-env";
+import { addUsage, contextSizeFromRaw, emptyUsage, type UsageTotals, usageFromRaw } from "./usage";
 
 export type ClaudeContext = "in_game" | "evolution" | "system";
 
@@ -16,7 +17,10 @@ interface StreamEvent {
   type?: string;
   subtype?: string;
   result?: string;
+  usage?: Parameters<typeof usageFromRaw>[0];
+  total_cost_usd?: number;
   message?: {
+    usage?: Parameters<typeof usageFromRaw>[0];
     content?: Array<{ type?: string; thinking?: string; text?: string; name?: string; input?: unknown; content?: unknown }>;
   };
 }
@@ -45,6 +49,8 @@ export class ClaudeSession {
   private busyFlag = false;
   private deadReason: string | null = null;
   private readonly context: ClaudeContext;
+  private usageTotals: UsageTotals = emptyUsage();
+  private contextTokens: number | null = null;
 
   constructor(private readonly options: ClaudeSessionOptions) {
     this.context = options.context ?? "in_game";
@@ -52,6 +58,16 @@ export class ClaudeSession {
 
   get busy(): boolean {
     return this.busyFlag;
+  }
+
+  /** このセッションの累計使用量（タイムアウト後に遅れて届いた分も含む） */
+  get usage(): UsageTotals {
+    return { ...this.usageTotals };
+  }
+
+  /** 直近の API 呼び出しで送った会話の大きさ（トークン）。不明なら null */
+  get contextSize(): number | null {
+    return this.contextTokens;
   }
 
   get alive(): boolean {
@@ -132,6 +148,10 @@ export class ClaudeSession {
       return;
     }
 
+    if (ev.type === "assistant") {
+      const size = contextSizeFromRaw(ev.message?.usage);
+      if (size !== null) this.contextTokens = size;
+    }
     if (ev.type === "assistant" && Array.isArray(ev.message?.content)) {
       for (const b of ev.message.content) {
         if (b.type === "thinking" && b.thinking) this.emit("thinking", "Reasoning", b.thinking.slice(0, 2000));
@@ -150,6 +170,8 @@ export class ClaudeSession {
       return;
     }
     if (ev.type === "result") {
+      if (ev.usage) this.usageTotals = addUsage(this.usageTotals, usageFromRaw(ev.usage, ev.total_cost_usd));
+      else this.usageTotals = addUsage(this.usageTotals, { ...emptyUsage(), calls: 1 });
       const entry = this.pending;
       this.pending = null;
       this.busyFlag = false;

@@ -29,6 +29,7 @@
 - [ ] 振り返りで範囲外（ハーネス本体等）が変わっていない。戻した場合は `evolution-report.md` の `Reverted (out of scope)` に出る
 - [ ] 試合後の改修で `active-solver.ts` が実際に変化したか（`evolution-report.md` の `Solver Changed`）。変化なしが2回続いたら原因調査
 - [ ] メイン判断率（`turns.jsonl` の `cmd1Source/cmd2Source === "main"` の割合）が 80% 以上。作戦（`mainActions` の plan/command）とサブ依頼（`delegations`）の結果も確認。低ければ予算・effort・プロンプトを見直す
+- [ ] トークン: `summary.json` の `agent.usage.totalTokens` と `turns.jsonl` の `agentTokens` / `mainContextTokens`。会話の大きさが `AGENT_COMPACT_AT_TOKENS` 付近で頭打ちになっている（要約・入れ替えが効いている）こと。1ターンあたりのトークンが試合後半で増え続けていないこと
 - [ ] `mainLatencyMs` の最大がターン予算未満、かつサーバ許容時間（`SETUP.md` §1-4）未満
 - [ ] メインがソルバー手を変更したターンの得失点を確認（変更が損なら `agent/prompts/main.md` か知識を直す）
 - [ ] `knowledge/` と `CLAUDE.md` に、実測と矛盾するルールが残っていない（例: 旧「穴なら必ず gr」ルール）
@@ -42,3 +43,4 @@
 - v1 (2026-11-20): 常駐メインエージェント・ディレクトリ再編に合わせて更新。オフライン判断テストで、CLAUDE.md の古い gr ルールのせいでメインが誤った手に変更していたのを発見・修正したため、知識の矛盾チェックを追加
 - v2 (2026-11-20): メインを作戦係＋例外係（continue/plan/command＋delegate）にし、サブを常駐 SubWorker に。設定を `src/settings.ts`＋`.env` に一本化（直書き禁止の項目を追加）。マップの毎ターン更新と自機・敵マーカーを追加し、room10 の実ログ再生で表示を確認
 - v3 (2026-11-20): 複数人ルーム (room 366) で他プレイヤー待ちが 120 秒で打ち切られ0ターン終了→その0ターン試合で振り返りが走りハーネス (runner.ts) まで改修、World 結果ページの別盤面を自機位置確定に使用、0点が最高記録に登録、を発見。待機上限の設定化と待機表示、短い試合の振り返り省略、振り返りの編集範囲ガード、World ページは自分が載っている時のみ使用、に修正
+- v4 (2026-11-20): 長いステージ (room 719, 190ターンで手動停止) で毎フェーズ会話全体を送り直すためトークン消費が加速、返答時間も 4.8→6.5 秒に増加。試合を止めずに裏で要約→要約入りの新メインへ入れ替え（`AGENT_COMPACT_AT_TOKENS`）、使用量の記録・表示と1試合の上限（`AGENT_MATCH_TOKEN_LIMIT`）を追加

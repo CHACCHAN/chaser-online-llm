@@ -5,7 +5,7 @@ import { RUNS_DIR, SOLVER_PATH } from "./paths";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
 import { type AgentConfig, webMapRefreshMode } from "./config";
 import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
-import type { MainAgent } from "./agent/main-agent";
+import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
 import { getRoomProfile, reloadTilesKnowledge } from "./memory/knowledge-store";
 import { WorldMap } from "./memory/world-map";
@@ -34,6 +34,10 @@ export interface TurnRecord {
   mainActions: string[];
   /** サブへ依頼した仕事 */
   delegations: string[];
+  /** このターンにエージェント全体（メイン・サブ・要約）が使ったトークン */
+  agentTokens?: number;
+  /** ターン終了時点のメインの会話の大きさ（トークン） */
+  mainContextTokens?: number | null;
   breakpointReasons: string[];
   positionAfter: [number, number];
   globalPositionAfter: [number, number] | null;
@@ -72,6 +76,8 @@ export interface RunSummary {
     mainDecisionRate: number | null;
     avgLatencyMs: number | null;
     maxLatencyMs: number | null;
+    /** 試合終了時点の使用量（振り返りは含まない） */
+    usage?: AgentUsageReport;
   };
   /** 試合後の進化結果（evolve.ts が追記） */
   evolution?: { solverChanged: boolean; replayVerified: boolean; rolledBack: boolean };
@@ -238,6 +244,7 @@ export async function runAgentMatch(
       const solverFallbackNotes: string[] = [];
       const mainActions: string[] = [];
       const delegations: string[] = [];
+      const tokensAtTurnStart = mainAgent?.usage().totalTokens ?? 0;
       const breakpointReasons: string[] = [];
 
       /** ソルバー候補 → メインエージェント判断 → 送信 → 観測反映 を1フェーズ分行う */
@@ -375,6 +382,9 @@ export async function runAgentMatch(
         solverFallbackNotes,
         mainActions,
         delegations,
+        ...(mainAgent
+          ? { agentTokens: mainAgent.usage().totalTokens - tokensAtTurnStart, mainContextTokens: mainAgent.usage().mainContextTokens }
+          : {}),
         breakpointReasons,
         positionAfter: worldMap.getPosition(),
         globalPositionAfter: worldMap.getGlobalPosition(),
@@ -460,6 +470,7 @@ export async function runAgentMatch(
       mainDecisionRate: phaseSources.length > 0 ? phaseSources.filter((s) => s === "main").length / phaseSources.length : null,
       avgLatencyMs: latencies.length > 0 ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null,
       maxLatencyMs: latencies.length > 0 ? Math.max(...latencies) : null,
+      ...(mainAgent ? { usage: mainAgent.usage() } : {}),
     },
     unknownTiles: stats.unknownTiles,
   };

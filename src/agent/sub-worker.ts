@@ -37,6 +37,11 @@ export class SubWorker {
     });
   }
 
+  /** サブの累計使用量 */
+  get usage() {
+    return this.session.usage;
+  }
+
   start(): void {
     this.session.start();
     this.publish();

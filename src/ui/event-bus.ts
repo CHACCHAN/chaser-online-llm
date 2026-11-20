@@ -1,3 +1,4 @@
+import type { AgentUsageReport } from "../agent/main-agent";
 import type { RoomProfile } from "../memory/knowledge-store";
 import type { CandidateEvaluation, PathTarget, UiPlayerMarker } from "../memory/world-map";
 import type { LiveMapScore } from "../perception/web-map-scraper";
@@ -109,6 +110,8 @@ export interface UiDashboardState {
   claudeStream: UiClaudeEvent[];
   /** サブエージェントの仕事一覧（今の試合） */
   subTasks: UiSubTask[];
+  /** 今の試合のエージェント使用量（トークン） */
+  agentUsage: AgentUsageReport | null;
   recentTurns: TurnRecord[];
   diagnosisMarkdown: string;
   roomProfiles: Record<string, RoomProfile>;
@@ -168,6 +171,7 @@ class UiEventBus {
     },
     claudeStream: [],
     subTasks: [],
+    agentUsage: null,
     recentTurns: [],
     diagnosisMarkdown: "",
     roomProfiles: {},
