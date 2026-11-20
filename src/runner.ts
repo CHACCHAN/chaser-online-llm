@@ -1,0 +1,449 @@
+import { copyFileSync, existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { RUNS_DIR, SOLVER_PATH } from "./paths";
+import { Client, fetchLatestResult, type OfficialResult } from "./client";
+import type { AgentConfig } from "./config";
+import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
+import type { MainAgent } from "./agent/main-agent";
+import { evaluateBreakpoint } from "./agent/turn-events";
+import { getRoomProfile, reloadTilesKnowledge } from "./memory/knowledge-store";
+import { WorldMap } from "./memory/world-map";
+import { scrapeRoomWebMap } from "./perception/web-map-scraper";
+import { GameOver, logger } from "./tools";
+import { decideTurnAction as defaultDecideTurnAction, type SolverDecision } from "./solver/active-solver";
+import { uiBus } from "./ui/event-bus";
+
+export interface TurnRecord {
+  turn: number;
+  cmd1: string | null;
+  cmd1Reason: string | null;
+  cmd1Values: number[] | null;
+  cmd2: string | null;
+  cmd2Reason: string | null;
+  cmd2Values: number[] | null;
+  usedFallback: boolean;
+  /** メインエージェントがこのターンの手を決めたか */
+  usedHarness: boolean;
+  cmd1Source: "main" | "solver" | null;
+  cmd2Source: "main" | "solver" | null;
+  mainLatencyMs: number[];
+  /** ソルバー手を採用した理由（時間切れ・多忙など）。main が決めたフェーズは含まない */
+  solverFallbackNotes: string[];
+  breakpointReasons: string[];
+  positionAfter: [number, number];
+  globalPositionAfter: [number, number] | null;
+  estimatedScoreAfter: number;
+  gameOver: boolean;
+  gameOverReason: string | null;
+}
+
+export interface RunSummary {
+  runId: string;
+  runDir: string;
+  startedAt: string;
+  finishedAt: string;
+  room: number;
+  model: string | null;
+  webMapDetected: boolean;
+  webMapUrl: string | null;
+  turns: number;
+  gameOverReason: string | null;
+  estimatedScore: ReturnType<WorldMap["getStats"]>;
+  officialResult: OfficialResult | null;
+  tilePickups: Record<string, number>;
+  commandCounts: Record<string, number>;
+  holeRevisits: number;
+  hazardHits: number;
+  fallbackTurns: number;
+  harnessTurns: number;
+  /** メインエージェントの設定と成績 */
+  agent: {
+    enabled: boolean;
+    model: string | null;
+    subModel: string | null;
+    effort: string | null;
+    turnBudgetSec: number;
+    mainDecisionRate: number | null;
+    avgLatencyMs: number | null;
+    maxLatencyMs: number | null;
+  };
+  /** 試合後の進化結果（evolve.ts が追記） */
+  evolution?: { solverChanged: boolean; replayVerified: boolean; rolledBack: boolean };
+  unknownTiles: number[];
+  diagnosis?: DiagnosticReport;
+}
+
+function makeRunId(room: number): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  return `${stamp}_room${room}`;
+}
+
+async function loadActiveSolver(): Promise<typeof defaultDecideTurnAction> {
+  const solverPath = SOLVER_PATH;
+  try {
+    const mod = (await import(`${solverPath}?t=${Date.now()}`)) as {
+      decideTurnAction?: typeof defaultDecideTurnAction;
+    };
+    if (typeof mod.decideTurnAction === "function") {
+      return mod.decideTurnAction;
+    }
+  } catch (err) {
+    // 改修失敗に気づけるよう握りつぶさない（試合は静的 import 版で継続）
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err: msg }, "active-solver.ts の読み込みに失敗。静的 import 版で継続");
+    uiBus.pushClaudeEvent({ context: "system", kind: "error", title: "Solver Load Failed", content: msg });
+  }
+  return defaultDecideTurnAction;
+}
+
+function syncUiPredictionAndMap(
+  worldMap: WorldMap,
+  turn: number,
+  phase: "CMD1" | "CMD2",
+  decision: SolverDecision,
+  source: "solver" | "main" | "fallback",
+  breakpointReasons: string[],
+): void {
+  const evalSummary = worldMap.evaluateCandidates(phase);
+  uiBus.updatePrediction({
+    turn,
+    phase,
+    command: decision.command,
+    reason: decision.reason,
+    confidence: decision.confidence,
+    source,
+    breakpointReasons,
+    topTargets: evalSummary.topValueTargets,
+    nearestFrontiers: evalSummary.nearestFrontiers,
+    candidates: evalSummary.candidates,
+  });
+  uiBus.updateMap(worldMap.buildUiMapState(decision.command));
+}
+
+export async function runAgentMatch(
+  client: Client,
+  config: AgentConfig,
+  matchIndex = 1,
+  mainAgent: MainAgent | null = null,
+): Promise<RunSummary> {
+  const runId = makeRunId(config.room);
+  const runDir = path.join(RUNS_DIR, runId);
+  await mkdir(runDir, { recursive: true });
+
+  uiBus.clearMatchLogs(config.room, matchIndex, runId);
+
+  const startedAt = new Date().toISOString();
+  const worldMap = new WorldMap();
+  const roomProfileBefore = getRoomProfile(config.room);
+
+  // 開幕時に Web マップが利用可能か自動プローブ
+  const initialScrape = await scrapeRoomWebMap({
+    room: config.room,
+    webMapUrl: config.webMapUrl,
+  });
+  if (initialScrape.found && initialScrape.grid) {
+    worldMap.setGlobalGrid(initialScrape.grid, initialScrape.playerPos, initialScrape.stageName);
+    logger.info(
+      {
+        method: initialScrape.method,
+        sourceUrl: initialScrape.sourceUrl,
+        stageName: initialScrape.stageName,
+        dimensions: initialScrape.dimensions,
+        playerPos: initialScrape.playerPos,
+      },
+      "Web map scraped and registered to WorldMap",
+    );
+  }
+
+  uiBus.patchState({
+    status: "playing",
+    statusMessage: `Room ${config.room} (${initialScrape.stageName ?? "SLAM"}) 対戦中`,
+    webMapDetected: initialScrape.found,
+  });
+  uiBus.updateScores({
+    estimatedTotal: 0,
+    estimatedAction: 0,
+    estimatedItem: 0,
+    liveOfficial: initialScrape.liveScore,
+    roomHighScore: roomProfileBefore.highScore,
+    holeRevisits: 0,
+    hazardHits: 0,
+  });
+  uiBus.updateMap(worldMap.buildUiMapState(null));
+
+  const turnLogs: TurnRecord[] = [];
+  const commandCounts: Record<string, number> = {};
+  let gameOverReason: string | null = null;
+
+  const incCommand = (cmd: string | null) => {
+    if (!cmd) return;
+    commandCounts[cmd] = (commandCounts[cmd] ?? 0) + 1;
+  };
+
+  try {
+    for (let turn = 1; ; turn++) {
+      if (uiBus.getState().stopRequested) {
+        gameOverReason = "Stopped by user from WebUI";
+        break;
+      }
+      if (config.maxTurns !== null && turn > config.maxTurns) {
+        gameOverReason = `Reached --max-turns (${config.maxTurns})`;
+        break;
+      }
+      if (client.getStatus.game.phase === "GAME_OVER") {
+        gameOverReason = "Phase is GAME_OVER";
+        break;
+      }
+
+      let cmd1: string | null = null;
+      let cmd1Reason: string | null = null;
+      let cmd1Values: number[] | null = null;
+      let cmd2: string | null = null;
+      let cmd2Reason: string | null = null;
+      let cmd2Values: number[] | null = null;
+      let turnCompleted = false;
+      let gameOver = false;
+      let turnGameOverReason: string | null = null;
+      let usedFallback = false;
+      let usedHarness = false;
+      let cmd1Source: "main" | "solver" | null = null;
+      let cmd2Source: "main" | "solver" | null = null;
+      const mainLatencyMs: number[] = [];
+      const solverFallbackNotes: string[] = [];
+      const breakpointReasons: string[] = [];
+
+      /** ソルバー候補 → メインエージェント判断 → 送信 → 観測反映 を1フェーズ分行う */
+      const playPhase = async (phase: "CMD1" | "CMD2"): Promise<{ command: string; reason: string; values: number[] | null; source: "main" | "solver" }> => {
+        uiBus.patchState({ turn, phase: phase === "CMD1" ? "READY_CMD1" : "READY_CMD2" });
+        const decideSolver = await loadActiveSolver();
+        const solverDecision: SolverDecision =
+          phase === "CMD1" && turn === 1 && !worldMap.getLastGrid()
+            ? { command: "gr", reason: "Initial 3x3 observation on turn 1", confidence: 1.0 }
+            : decideSolver(worldMap, phase, turn);
+        const events = evaluateBreakpoint({ turn, worldMap, solverDecision }).reasons;
+        for (const r of events) if (!breakpointReasons.includes(r)) breakpointReasons.push(r);
+        syncUiPredictionAndMap(worldMap, turn, phase, solverDecision, "solver", events);
+
+        let decision = solverDecision;
+        let source: "main" | "solver" = "solver";
+        if (mainAgent) {
+          uiBus.patchState({ status: "claude_in_game", statusMessage: `T${turn} ${phase} メインエージェント判断中` });
+          const res = await mainAgent.decide({ turn, phase, worldMap, solver: solverDecision, events });
+          reloadTilesKnowledge();
+          if (res.durationMs !== null) mainLatencyMs.push(res.durationMs);
+          decision = res.decision;
+          source = res.source;
+          if (source === "solver") solverFallbackNotes.push(`${phase}: ${res.note}`);
+          if (source === "main") {
+            decision = { ...decision, reason: `[main] ${decision.reason} (${res.note})` };
+          } else {
+            decision = { ...decision, reason: `${decision.reason} [solver: ${res.note}]` };
+          }
+          syncUiPredictionAndMap(worldMap, turn, phase, decision, source, events);
+          uiBus.patchState({ status: "playing", statusMessage: `Room ${config.room} 対戦中` });
+        }
+
+        const r = phase === "CMD1" ? await client.command1(decision.command) : await client.command2(decision.command);
+        worldMap.applyObservation(phase, decision.command, r.values, turn);
+        if (worldMap.getLastEventFlags().warped && initialScrape.found) {
+          const rescraped = await scrapeRoomWebMap({ room: config.room, webMapUrl: config.webMapUrl });
+          if (rescraped.found && rescraped.grid) {
+            worldMap.setGlobalGrid(rescraped.grid, rescraped.playerPos, rescraped.stageName);
+            if (rescraped.liveScore) uiBus.updateScores({ liveOfficial: rescraped.liveScore });
+          }
+        }
+        return { command: decision.command, reason: decision.reason, values: r.values, source };
+      };
+
+      try {
+        const p1 = await playPhase("CMD1");
+        cmd1 = p1.command;
+        cmd1Reason = p1.reason;
+        cmd1Values = p1.values;
+        cmd1Source = p1.source;
+
+        if (client.getStatus.game.phase === "READY_CMD2") {
+          const p2 = await playPhase("CMD2");
+          cmd2 = p2.command;
+          cmd2Reason = p2.reason;
+          cmd2Values = p2.values;
+          cmd2Source = p2.source;
+          await client.command3("#");
+          turnCompleted = true;
+        }
+      } catch (err) {
+        if (err instanceof GameOver) {
+          gameOver = true;
+          turnGameOverReason = err.message;
+          turnCompleted = true;
+        } else {
+          throw err;
+        }
+      }
+      usedHarness = cmd1Source === "main" || cmd2Source === "main";
+
+      // 耐障害フォールバック
+      if (!turnCompleted && !gameOver) {
+        usedFallback = true;
+        try {
+          if (client.getStatus.game.phase === "READY_CMD1") {
+            const fb1 = worldMap.pickSafeFallback("CMD1");
+            const r1 = await client.command1(fb1);
+            worldMap.applyObservation("CMD1", fb1, r1.values, turn);
+            cmd1 = fb1;
+            cmd1Reason = "fallback";
+            cmd1Values = r1.values;
+          }
+          if (client.getStatus.game.phase === "READY_CMD2") {
+            const fb2 = worldMap.pickSafeFallback("CMD2");
+            const r2 = await client.command2(fb2);
+            worldMap.applyObservation("CMD2", fb2, r2.values, turn);
+            cmd2 = fb2;
+            cmd2Reason = "fallback";
+            cmd2Values = r2.values;
+          }
+          if (client.getStatus.game.phase === "READY_CMD3") {
+            await client.command3("#");
+            turnCompleted = true;
+          }
+        } catch (fbErr) {
+          if (fbErr instanceof GameOver) {
+            gameOver = true;
+            turnGameOverReason = fbErr.message;
+            turnCompleted = true;
+          } else {
+            throw fbErr;
+          }
+        }
+      }
+
+      incCommand(cmd1);
+      incCommand(cmd2);
+
+      const curStats = worldMap.getStats();
+      const record: TurnRecord = {
+        turn,
+        cmd1,
+        cmd1Reason,
+        cmd1Values,
+        cmd2,
+        cmd2Reason,
+        cmd2Values,
+        usedFallback,
+        usedHarness,
+        cmd1Source,
+        cmd2Source,
+        mainLatencyMs,
+        solverFallbackNotes,
+        breakpointReasons,
+        positionAfter: worldMap.getPosition(),
+        globalPositionAfter: worldMap.getGlobalPosition(),
+        estimatedScoreAfter: curStats.estimatedTotalScore,
+        gameOver,
+        gameOverReason: turnGameOverReason,
+      };
+      turnLogs.push(record);
+
+      // WebUI に最新盤面・スコア・ターン記録を即時反映
+      uiBus.updateScores({
+        estimatedTotal: curStats.estimatedTotalScore,
+        estimatedAction: curStats.estimatedActionScore,
+        estimatedItem: curStats.estimatedItemScore,
+        holeRevisits: curStats.holeRevisits,
+        hazardHits: curStats.hazardHits,
+      });
+      uiBus.updateMap(worldMap.buildUiMapState(null));
+      uiBus.pushTurnRecord(record);
+
+      await Bun.write(
+        path.join(runDir, "turns.jsonl"),
+        turnLogs.map((r) => JSON.stringify(r)).join("\n") + "\n",
+      );
+
+      logger.info(
+        {
+          turn,
+          cmd1: record.cmd1,
+          cmd2: record.cmd2,
+          pos: record.positionAfter,
+          globalPos: record.globalPositionAfter,
+          estScore: record.estimatedScoreAfter,
+          claudeIntervened: record.usedHarness,
+          fallback: record.usedFallback,
+        },
+        "Turn finished",
+      );
+
+      if (gameOver) {
+        gameOverReason = turnGameOverReason ?? "Game Over";
+        break;
+      }
+    }
+  } catch (err) {
+    gameOverReason = err instanceof Error ? err.message : String(err);
+  }
+
+  const finishedAt = new Date().toISOString();
+  const stats = worldMap.getStats();
+  const officialResult = await fetchLatestResult(config.room);
+  const fallbackTurns = turnLogs.filter((r) => r.usedFallback).length;
+  const harnessTurns = turnLogs.filter((r) => r.usedHarness).length;
+  const phaseSources = turnLogs.flatMap((r) => [r.cmd1Source, r.cmd2Source]).filter((s) => s !== null);
+  const latencies = turnLogs.flatMap((r) => r.mainLatencyMs);
+
+  const summary: RunSummary = {
+    runId,
+    runDir,
+    startedAt,
+    finishedAt,
+    room: config.room,
+    model: config.model ?? null,
+    webMapDetected: initialScrape.found,
+    webMapUrl: initialScrape.sourceUrl,
+    turns: turnLogs.length,
+    gameOverReason,
+    estimatedScore: stats,
+    officialResult,
+    tilePickups: stats.pickups,
+    commandCounts,
+    holeRevisits: stats.holeRevisits,
+    hazardHits: stats.hazardHits,
+    fallbackTurns,
+    harnessTurns,
+    agent: {
+      enabled: mainAgent !== null,
+      model: config.model ?? null,
+      subModel: config.subModel ?? null,
+      effort: config.effort ?? null,
+      turnBudgetSec: config.turnBudgetSec,
+      mainDecisionRate: phaseSources.length > 0 ? phaseSources.filter((s) => s === "main").length / phaseSources.length : null,
+      avgLatencyMs: latencies.length > 0 ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null,
+      maxLatencyMs: latencies.length > 0 ? Math.max(...latencies) : null,
+    },
+    unknownTiles: stats.unknownTiles,
+  };
+
+  const diagnosis = analyzeMatchRun(summary, turnLogs, officialResult);
+  summary.diagnosis = diagnosis;
+
+  const updatedProfile = getRoomProfile(config.room);
+  uiBus.updateScores({
+    lastOfficialTotal: officialResult?.totalScore ?? null,
+    roomHighScore: updatedProfile.highScore,
+  });
+  uiBus.patchState({
+    diagnosisMarkdown: diagnosis.markdownReport,
+  });
+
+  await Bun.write(path.join(runDir, "final-map.txt"), worldMap.renderAscii(15));
+  await Bun.write(path.join(runDir, "summary.json"), JSON.stringify(summary, null, 2));
+  await Bun.write(path.join(runDir, "diagnosis.md"), diagnosis.markdownReport);
+
+  const solverPath = SOLVER_PATH;
+  if (existsSync(solverPath)) {
+    copyFileSync(solverPath, path.join(runDir, "solver-snapshot.ts"));
+  }
+
+  return summary;
+}

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun *)",
+      "Read(**)",
+      "Edit(src/**)",
+      "Write(src/**)",
+      "Glob(**)",
+      "Grep(**)"
+    ],
+    "deny": []
+  },
+  "skipDangerousModePermissionPrompt": true
+}

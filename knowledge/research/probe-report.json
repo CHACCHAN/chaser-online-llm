@@ -1,0 +1,515 @@
+{
+  "probedAt": "2026-11-20T03:51:13.568Z",
+  "llm": {
+    "ok": true,
+    "model": "gpt-6.2-sol",
+    "reasoningEffort": "xhigh",
+    "elapsedMs": 5660,
+    "finishReason": "tool_calls",
+    "toolCallsCount": 1,
+    "toolNames": [
+      "choose_move"
+    ],
+    "contentPreview": null,
+    "usage": {
+      "completion_tokens": 93,
+      "prompt_tokens": 113,
+      "total_tokens": 206,
+      "completion_tokens_details": {
+        "reasoning_tokens": 53
+      },
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "cache_creation_tokens": 0
+      },
+      "attribution": {
+        "items": {
+          "fc_0f90eee03f76689b016affc36f9fe087d0815c37e1292f6f1b": {
+            "input_tokens": 0,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 40
+          },
+          "msg_0f90eee03f76689b016affc36c4b1087d0b9127b39a25f76c6": {
+            "input_tokens": 37,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0,
+            "content": [
+              {
+                "input_tokens": 37,
+                "cached_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 0
+              }
+            ]
+          },
+          "rs_0f90eee03f76689b016affc36f4dfc87d0a6612b6375929ff5": {
+            "input_tokens": 2,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 53
+          }
+        },
+        "request_fields": {
+          "instructions": {
+            "input_tokens": 20,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0
+          },
+          "tools": {
+            "input_tokens": 54,
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0
+          }
+        }
+      }
+    },
+    "error": null
+  },
+  "chaser": {
+    "roomNumber": 3,
+    "enterTextLines": [
+      "CHaserOnline003",
+      "CHaserOnline",
+      "ver 20260217",
+      "ユーザ処理",
+      "command1=",
+      "(c)2012 CHaserOnline by zenjouken.com",
+      "Powered by",
+      "SAKURA Internet"
+    ],
+    "totalTurns": 6,
+    "gameOverReason": "Timeout waiting for CommandCheck",
+    "uniqueTileValues": [
+      0,
+      3,
+      12,
+      1000
+    ],
+    "testedFamilies": [
+      "gr",
+      "w",
+      "d",
+      "p2w",
+      "p3s",
+      "p3l",
+      "kei",
+      "s"
+    ],
+    "officialResult": {
+      "score": null,
+      "room": null,
+      "rawLines": [
+        "CHaserOnline003",
+        "CHaserOnline",
+        "ver 20260217",
+        "サーバ画面",
+        "開始日",
+        "終了日",
+        "開始時間",
+        "終了時間",
+        "ルーム番号",
+        "接続順",
+        "最小",
+        "最大",
+        "アクションポイント",
+        "アイテムポイント",
+        "Putポイント",
+        "Putダメージ",
+        "総ポイント",
+        "残ターン数",
+        "取得ターン数",
+        "最小",
+        "最大",
+        "(c)2012 CHaserOnline by zenjouken.com",
+        "Powered by",
+        "SAKURA Internet"
+      ]
+    },
+    "turns": [
+      {
+        "turn": 1,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd1RawReturnCode": "0,0,0,0,1000,0,0,0,0",
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,0,0,1000,0,0,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "wr",
+        "cmd2Values": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd2RawReturnCode": "0,0,0,0,0,0,0,0,0",
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=0,0,0,0,0,0,0,0,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1720,
+        "cmd2Ms": 1632,
+        "cmd3Ms": 1133
+      },
+      {
+        "turn": 2,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd1RawReturnCode": "0,0,0,0,1000,0,0,0,0",
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,0,0,1000,0,0,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "dr",
+        "cmd2Values": [
+          0,
+          0,
+          12,
+          0,
+          0,
+          12,
+          3,
+          0,
+          12
+        ],
+        "cmd2RawReturnCode": "0,0,12,0,0,12,3,0,12",
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=0,0,12,0,0,12,3,0,12",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1746,
+        "cmd2Ms": 1623,
+        "cmd3Ms": 1137
+      },
+      {
+        "turn": 3,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          3
+        ],
+        "cmd1RawReturnCode": "0,0,0,0,1000,0,0,0,3",
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,0,0,1000,0,0,0,3",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "pl2wr",
+        "cmd2Values": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          3,
+          0
+        ],
+        "cmd2RawReturnCode": "0,0,0,0,0,0,0,3,0",
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=0,0,0,0,0,0,0,3,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1740,
+        "cmd2Ms": 1949,
+        "cmd3Ms": 1139
+      },
+      {
+        "turn": 4,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          3,
+          0
+        ],
+        "cmd1RawReturnCode": "0,0,0,0,1000,0,0,3,0",
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,0,0,1000,0,0,3,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "pr3sr",
+        "cmd2Values": [
+          0,
+          12,
+          12,
+          12
+        ],
+        "cmd2RawReturnCode": "0,12,12,12",
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=0,12,12,12",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1728,
+        "cmd2Ms": 1932,
+        "cmd3Ms": 1134
+      },
+      {
+        "turn": 5,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          3,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd1RawReturnCode": "0,0,3,0,1000,0,0,0,0",
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,3,0,1000,0,0,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "pr3lr",
+        "cmd2Values": [
+          3,
+          12,
+          12,
+          0,
+          12,
+          12,
+          0,
+          12,
+          12
+        ],
+        "cmd2RawReturnCode": "3,12,12,0,12,12,0,12,12",
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=3,12,12,0,12,12,0,12,12",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1746,
+        "cmd2Ms": 1935,
+        "cmd3Ms": 1136
+      },
+      {
+        "turn": 6,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          3,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd1RawReturnCode": "0,0,3,0,1000,0,0,0,0",
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,3,0,1000,0,0,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "keiru",
+        "cmd2Values": [
+          0,
+          0,
+          12,
+          0,
+          3,
+          12,
+          0,
+          3,
+          12
+        ],
+        "cmd2RawReturnCode": "0,0,12,0,3,12,0,3,12",
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=0,0,12,0,3,12,0,3,12",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1730,
+        "cmd2Ms": 1620,
+        "cmd3Ms": 1136
+      }
+    ]
+  }
+}

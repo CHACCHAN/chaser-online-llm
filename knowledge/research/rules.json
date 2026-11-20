@@ -1,0 +1,58 @@
+{
+  "serverVersion": "CHaserOnline003 ver 20260217",
+  "scoreFormula": "totalScore = 300 * acquiredTurns + actionPoint + itemPoint + putPoint + putDamage",
+  "tiles": {
+    "0": { "name": "hole", "label": "穴(既通過)", "score": -20, "passable": true, "hazard": false, "symbol": "." },
+    "1": { "name": "target", "label": "ターゲット", "score": 50, "passable": true, "hazard": false, "symbol": "T" },
+    "2": { "name": "soil", "label": "土", "score": 10, "passable": true, "hazard": false, "symbol": "," },
+    "3": { "name": "item", "label": "アイテム", "score": 30, "passable": true, "hazard": false, "symbol": "*" },
+    "4": { "name": "geode", "label": "ジオード", "score": -1000, "passable": true, "hazard": true, "symbol": "!" },
+    "5": { "name": "fossil_1", "label": "化石1", "score": 125, "passable": true, "hazard": false, "symbol": "F" },
+    "6": { "name": "fossil_2", "label": "化石2", "score": 150, "passable": true, "hazard": false, "symbol": "F" },
+    "7": { "name": "fossil_3", "label": "化石3", "score": 175, "passable": true, "hazard": false, "symbol": "F" },
+    "8": { "name": "fossil_4", "label": "化石4", "score": 200, "passable": true, "hazard": false, "symbol": "F" },
+    "9": { "name": "ammonite", "label": "アンモナイト", "score": 100, "passable": true, "hazard": false, "symbol": "A" },
+    "10": { "name": "bedrock", "label": "岩盤", "score": -10, "passable": false, "hazard": false, "symbol": "#" },
+    "12": { "name": "abyss", "label": "奈落", "score": -600, "passable": true, "hazard": true, "symbol": "X" },
+    "20-53": { "name": "warp", "label": "ワープ(10/5/6/15マス)", "score": 5, "passable": true, "hazard": false, "symbol": "W" },
+    "60-63": { "name": "blackstar", "label": "ブラックスター", "score": 5, "passable": true, "hazard": false, "symbol": "B" },
+    "70-79": { "name": "geometal", "label": "ジオーメタル", "score": 400, "passable": true, "hazard": false, "symbol": "G" },
+    "1000-8000": { "name": "client", "label": "プレイヤー駒", "score": 0, "passable": false, "hazard": false, "symbol": "P" }
+  },
+  "commands": {
+    "CMD1": {
+      "gr": { "move": [0, 0], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -10, "note": "移動せず周囲3x3取得(中央1000)" },
+      "gru": { "move": [0, -1], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -15, "note": "上1歩移動+周囲3x3取得(中央1000)" },
+      "grd": { "move": [0, 1], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -15, "note": "下1歩移動+周囲3x3取得(中央1000)" },
+      "grl": { "move": [-1, 0], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -15, "note": "左1歩移動+周囲3x3取得(中央1000)" },
+      "grr": { "move": [1, 0], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -15, "note": "右1歩移動+周囲3x3取得(中央1000)" }
+    },
+    "CMD2": {
+      "wu": { "move": [0, -1], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -15, "highFatigue": false },
+      "wd": { "move": [0, 1], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -15, "highFatigue": false },
+      "wl": { "move": [-1, 0], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -15, "highFatigue": false },
+      "wr": { "move": [1, 0], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -15, "highFatigue": false },
+      "du": { "move": [0, 0], "obsOffset": [0, -2], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "dd": { "move": [0, 0], "obsOffset": [0, 2], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "dl": { "move": [0, 0], "obsOffset": [-2, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "dr": { "move": [0, 0], "obsOffset": [2, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "pu2wd": { "move": [0, 1], "putDir": "u", "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "pd2wu": { "move": [0, -1], "putDir": "d", "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "pl2wr": { "move": [1, 0], "putDir": "l", "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "pr2wl": { "move": [-1, 0], "putDir": "r", "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "pu3su": { "move": [1, 0], "put3Dir": "u", "rayDir": "u", "obsShape": "ray", "estActionCost": -250, "highFatigue": true },
+      "pd3sd": { "move": [-1, 0], "put3Dir": "d", "rayDir": "d", "obsShape": "ray", "estActionCost": -250, "highFatigue": true },
+      "pl3sl": { "move": [0, -1], "put3Dir": "l", "rayDir": "l", "obsShape": "ray", "estActionCost": -250, "highFatigue": true },
+      "pr3sr": { "move": [0, 1], "put3Dir": "r", "rayDir": "r", "obsShape": "ray", "estActionCost": -250, "highFatigue": true },
+      "pu3lu": { "move": [1, 0], "put3Dir": "u", "obsOffset": [0, -2], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "pd3ld": { "move": [-1, 0], "put3Dir": "d", "obsOffset": [0, 2], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "pl3ll": { "move": [0, -1], "put3Dir": "l", "obsOffset": [-2, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "pr3lr": { "move": [0, 1], "put3Dir": "r", "obsOffset": [2, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "keilu": { "move": [-1, -2], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "keiru": { "move": [1, -2], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "keild": { "move": [-1, 2], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true },
+      "keird": { "move": [1, 2], "obsOffset": [0, 0], "obsShape": "3x3", "estActionCost": -250, "highFatigue": true }
+    }
+  },
+  "rejectedExamples": ["su", "sd", "sl", "sr", "lu", "ld", "ll", "lr"]
+}

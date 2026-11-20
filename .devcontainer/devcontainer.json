@@ -1,0 +1,38 @@
+{
+    "name": "CHaserOnline LLM Dev",
+    "remoteUser": "vscode",
+    "updateRemoteUserUID": true,
+    "image": "mcr.microsoft.com/devcontainers/base:trixie",
+    "features": {
+        "ghcr.io/chacchan/devcontainer-features/my-assets:latest": {},
+        "ghcr.io/shyim/devcontainers-features/bun:0": {},
+        "ghcr.io/devcontainers/features/python:1": { "version": "3.13", "installTools": false }
+    },
+    "workspaceFolder": "/${localWorkspaceFolderBasename}",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "oven.bun-vscode",
+                "biomejs.biome",
+                "usernamehw.errorlens",
+                "editorconfig.editorconfig",
+                "yoavbls.pretty-ts-errors",
+                "eamodio.gitlens"
+            ],
+            "settings": {
+                "editor.tabSize": 2,
+                "editor.formatOnSave": true,
+                "editor.codeActionsOnSave": {
+                    "source.organizeImports.biome": "explicit",
+                    "quickfix.biome": "explicit"
+                },
+                "js/ts.tsdk.path": "node_modules/typescript/lib",
+                "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+                "files.eol": "\n",
+                "files.insertFinalNewline": true,
+                "files.trimTrailingWhitespace": true
+            }
+        }
+    }
+}

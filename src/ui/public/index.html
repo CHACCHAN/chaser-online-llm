@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CHaser 解析</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --bg: #e9ecee;
+  --panel: #f6f7f8;
+  --sunk: #e0e4e7;
+  --ink: #1b2229;
+  --ink2: #56626d;
+  --ink3: #8794a0;
+  --line: #cfd5da;
+  --line2: #dde1e5;
+  --main: #3447c9;
+  --main-bg: rgba(52, 71, 201, .10);
+  --solver: #b06a00;
+  --solver-bg: rgba(176, 106, 0, .12);
+  --pos: #1d7a4a;
+  --neg: #c2392f;
+  --unk: #cdd3d8;
+  --s1: #0f8a8f; --s2: #a63f8a; --s3: #6f8a14; --s4: #7a63c9; --s5: #c0572a;
+  --focus: #3447c9;
+  --font: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic UI", "Noto Sans CJK JP", "Noto Sans JP", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0f1316;
+  --panel: #161b1f;
+  --sunk: #0c1013;
+  --ink: #dfe5ea;
+  --ink2: #94a1ac;
+  --ink3: #66737e;
+  --line: #28323a;
+  --line2: #1f282f;
+  --main: #8a9cff;
+  --main-bg: rgba(138, 156, 255, .13);
+  --solver: #e3a53f;
+  --solver-bg: rgba(227, 165, 63, .13);
+  --pos: #4cc38a;
+  --neg: #f07067;
+  --unk: #1b2227;
+  --s1: #3cc0c6; --s2: #e07cc0; --s3: #a8c43a; --s4: #a692f0; --s5: #f09064;
+  --focus: #8a9cff;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1316; --panel: #161b1f; --sunk: #0c1013; --ink: #dfe5ea; --ink2: #94a1ac; --ink3: #66737e;
+    --line: #28323a; --line2: #1f282f; --main: #8a9cff; --main-bg: rgba(138,156,255,.13);
+    --solver: #e3a53f; --solver-bg: rgba(227,165,63,.13); --pos: #4cc38a; --neg: #f07067; --unk: #1b2227;
+    --s1: #3cc0c6; --s2: #e07cc0; --s3: #a8c43a; --s4: #a692f0; --s5: #f09064; --focus: #8a9cff;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font: 13px/1.5 var(--font);
+  display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.mono { font-family: var(--mono); }
+.dim { color: var(--ink2); }
+.faint { color: var(--ink3); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- 上部バー ---------- */
+.top { background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+.top-row { display: flex; align-items: center; gap: 14px; padding: 7px 16px; min-width: 0; }
+.top-row + .top-row { border-top: 1px solid var(--line2); background: var(--bg); }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; letter-spacing: .02em; flex: none; }
+.glyph { display: grid; grid-template-columns: 7px 7px; gap: 2px; }
+.glyph i { width: 7px; height: 7px; background: var(--ink3); display: block; }
+.glyph i:nth-child(1) { background: var(--main); }
+.glyph i:nth-child(4) { background: var(--solver); }
+.status { display: flex; align-items: center; gap: 7px; flex: none; font-weight: 500; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink3); flex: none; }
+.dot.on { background: var(--pos); animation: pulse 1.6s ease-in-out infinite; }
+.dot.think { background: var(--main); animation: pulse 1s ease-in-out infinite; }
+.dot.evo { background: var(--s2); animation: pulse 1.2s ease-in-out infinite; }
+.dot.warn { background: var(--solver); }
+.dot.err { background: var(--neg); }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .dot { animation: none !important; } }
+.status-msg { color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 0; }
+.live-nums { display: flex; gap: 18px; flex: none; }
+.ln { display: flex; flex-direction: column; line-height: 1.15; align-items: flex-end; }
+.ln b { font-size: 16px; font-weight: 600; }
+.ln span { font-size: 11px; color: var(--ink3); }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 3px; padding: 4px 12px; font-weight: 500; }
+.btn:hover { border-color: var(--ink3); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.danger { color: var(--neg); border-color: var(--neg); background: transparent; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--ink2); padding: 4px 8px; }
+.btn.ghost:hover { color: var(--ink); background: var(--sunk); }
+.btn[hidden] { display: none; }
+.field { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.field > label { color: var(--ink2); font-size: 12px; white-space: nowrap; }
+.field input, .field select {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 3px 7px; min-width: 0; height: 26px;
+}
+.field input:hover, .field select:hover { border-color: var(--ink3); }
+#inMain, #inSub { width: 170px; }
+#selRoom { width: 204px; }
+#selEffort { width: 92px; }
+#inBudget { width: 62px; -moz-appearance: textfield; }
+#inBudget::-webkit-inner-spin-button, #inMax::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#inMax { width: 84px; }
+.field.chk label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+.sep { flex: 1; }
+.hint { font-size: 11px; color: var(--ink3); white-space: nowrap; }
+
+/* ---------- 3 カラム ---------- */
+.work { flex: 1; display: grid; grid-template-columns: 268px minmax(0, 1fr) 328px; min-height: 0; }
+.col { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.col.rail { border-right: 1px solid var(--line); background: var(--panel); }
+.col.right { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+.col.center { overflow-y: auto; }
+.tbl-wrap { overflow: auto; flex: 1 0 220px; min-height: 0; }
+.sec-h { display: flex; align-items: center; gap: 10px; padding: 8px 14px; min-height: 36px; flex: none; }
+.sec-h h2 { margin: 0; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.sec-h { flex-wrap: wrap; }
+.sec-h .right-end { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 2px 10px; font-size: 12px; color: var(--ink2); border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.link { background: none; border: 0; color: var(--ink2); padding: 0; text-decoration: underline; text-underline-offset: 2px; font-size: 12px; }
+.link:hover { color: var(--ink); }
+
+/* ---------- 試合一覧 ---------- */
+.runs { overflow-y: auto; flex: 1; border-top: 1px solid var(--line); }
+.run { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; padding: 8px 12px 8px 10px; border-bottom: 1px solid var(--line2); border-left: 3px solid transparent; cursor: pointer; align-items: start; }
+.run:hover { background: var(--sunk); }
+.run[aria-current="true"] { background: var(--sunk); border-left-color: var(--ink); }
+.run input { margin: 3px 0 0; accent-color: var(--ink); }
+.run-t { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.run-t b { font-weight: 600; }
+.run-m { display: flex; gap: 8px; align-items: center; color: var(--ink2); font-size: 12px; margin-top: 2px; white-space: nowrap; }
+.run-s { text-align: right; line-height: 1.2; }
+.run-s b { font-size: 15px; font-weight: 600; display: block; }
+.run-s small { font-size: 11px; color: var(--ink3); }
+.up { color: var(--pos); } .down { color: var(--neg); }
+.tag { font-size: 11px; border: 1px solid var(--line); border-radius: 2px; padding: 0 4px; color: var(--ink2); line-height: 1.5; }
+.tag.best { border-color: var(--solver); color: var(--solver); }
+.tag.evo { border-color: var(--s2); color: var(--s2); }
+.tag.live { border-color: var(--pos); color: var(--pos); }
+.mbar { display: inline-block; width: 34px; height: 5px; background: var(--solver-bg); position: relative; vertical-align: middle; }
+.mbar i { position: absolute; inset: 0 auto 0 0; background: var(--main); }
+.empty { padding: 18px 14px; color: var(--ink3); }
+
+/* ---------- 中央 ---------- */
+.chart-wrap { border-bottom: 1px solid var(--line); background: var(--panel); flex: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0 14px 6px; min-height: 22px; }
+.lg { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink2); }
+.lg i { width: 14px; height: 0; border-top: 2px solid; display: inline-block; }
+.lg b { color: var(--ink); font-weight: 500; }
+.lg button { border: 0; background: none; color: var(--ink3); padding: 0 2px; }
+.lg button:hover { color: var(--neg); }
+.chart { position: relative; padding: 0 6px 6px 0; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart text { font-family: var(--font); font-size: 11px; fill: var(--ink3); }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); padding: 5px 8px; border-radius: 3px; font-size: 12px; line-height: 1.45; white-space: nowrap; z-index: 5; }
+.tip .k { display: inline-block; width: 8px; height: 8px; margin-right: 5px; }
+.run-head { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; padding: 10px 14px 6px; border-bottom: 1px solid var(--line2); }
+.run-head h2 { margin: 0 8px 0 0; font-size: 14px; font-weight: 600; }
+.kv { display: inline-flex; gap: 5px; align-items: baseline; }
+.kv span { color: var(--ink3); font-size: 12px; }
+.kv b { font-weight: 600; }
+.tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--bg); align-items: flex-end; flex: none; }
+.tabs button { border: 0; background: transparent; padding: 7px 12px 6px; color: var(--ink2); border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tabs .tools { margin-left: auto; display: flex; gap: 10px; align-items: center; padding-bottom: 4px; }
+.key { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; color: var(--ink2); }
+.key i { width: 9px; height: 9px; display: inline-block; }
+.key .m { background: var(--main); } .key .s { background: var(--solver); }
+.tbl-wrap { background: var(--panel); }
+table.turns { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.turns th { text-align: left; font-weight: 500; color: var(--ink3); font-size: 12px; padding: 5px 6px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; white-space: nowrap; }
+.turns td { padding: 3px 6px; border-bottom: 1px solid var(--line2); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turns .r { text-align: right; }
+.turns tr.row { cursor: pointer; }
+.turns tr.row:hover td { background: var(--sunk); }
+.turns tr.hi td { background: var(--main-bg) !important; }
+.turns tr.bad td:first-child { box-shadow: inset 3px 0 0 var(--neg); }
+.cmd { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-left: 3px solid var(--ink3); background: var(--sunk); display: inline-block; min-width: 38px; }
+.cmd.main { border-color: var(--main); background: var(--main-bg); }
+.cmd.solver { border-color: var(--solver); background: var(--solver-bg); }
+.cmd.none { color: var(--ink3); }
+.who { font-size: 12px; font-weight: 500; }
+.who.main { color: var(--main); } .who.solver { color: var(--solver); } .who.mix { color: var(--ink2); }
+.ev { display: inline-block; font-size: 11px; border: 1px solid var(--line); padding: 0 5px; border-radius: 2px; margin-right: 4px; color: var(--ink2); }
+.ev.bad { color: var(--neg); border-color: var(--neg); }
+.detail td { background: var(--sunk); white-space: normal; padding: 8px 12px 10px 28px; }
+.detail dl { margin: 0; display: grid; grid-template-columns: 60px 1fr; gap: 3px 10px; }
+.detail dt { color: var(--ink3); font-size: 12px; }
+.detail dd { margin: 0; overflow-wrap: anywhere; }
+.report { padding: 12px 18px 30px; max-width: 78ch; }
+.report h1, .report h2, .report h3, .report h4 { margin: 1.1em 0 .4em; line-height: 1.3; }
+.report h1 { font-size: 15px; } .report h2 { font-size: 14px; } .report h3, .report h4 { font-size: 13px; }
+.report p { margin: .4em 0; } .report ul { margin: .3em 0; padding-left: 1.3em; }
+.report li { margin: .15em 0; }
+.report code { font-family: var(--mono); font-size: 12px; background: var(--sunk); padding: 0 3px; }
+.report pre { background: var(--sunk); padding: 8px 10px; overflow-x: auto; font-family: var(--mono); font-size: 12px; }
+.report .part { border-left: 3px solid var(--line); padding-left: 12px; margin-bottom: 18px; }
+.report .part > .ph { font-weight: 600; margin: 8px 0 0; font-size: 12px; color: var(--ink2); }
+.report .part.evo { border-left-color: var(--s2); }
+
+/* ---------- 右 ---------- */
+.block { border-bottom: 1px solid var(--line); flex: none; }
+.decide { padding: 0 14px 12px; }
+.now { display: flex; gap: 10px; align-items: center; }
+.big { font-family: var(--mono); font-size: 26px; font-weight: 500; line-height: 1; padding: 6px 12px; border-left: 4px solid var(--ink3); background: var(--sunk); min-width: 80px; }
+.big.main { border-color: var(--main); background: var(--main-bg); }
+.big.solver { border-color: var(--solver); background: var(--solver-bg); }
+.big.fallback { border-color: var(--neg); }
+.chip { font-weight: 600; font-size: 12px; }
+.chip.main { color: var(--main); } .chip.solver { color: var(--solver); } .chip.fallback { color: var(--neg); }
+.why { margin: 8px 0 0; color: var(--ink); max-height: 5.2em; overflow-y: auto; overflow-wrap: anywhere; }
+.meter { height: 4px; background: var(--sunk); margin: 5px 0 2px; position: relative; }
+.meter i { position: absolute; inset: 0 auto 0 0; background: var(--main); }
+.meter.over i { background: var(--solver); }
+.prev { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 12px; color: var(--ink2); }
+details.cand { margin-top: 8px; font-size: 12px; }
+details summary { cursor: pointer; color: var(--ink2); }
+details.cand ul { margin: 4px 0 0; padding: 0; list-style: none; }
+details.cand li { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+.mapbox { padding: 0 14px 12px; position: relative; }
+.mapbox canvas[hidden] { display: none; }
+.mapbox canvas { display: block; image-rendering: pixelated; border: 1px solid var(--line); background: var(--unk); max-width: 100%; }
+.mapinfo { font-size: 12px; color: var(--ink2); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.maptip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; padding: 2px 6px; border-radius: 3px; white-space: nowrap; z-index: 4; }
+.log-block { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 140px; border-bottom: 0; }
+.log { padding: 0 0 8px; overflow-y: auto; max-height: 360px; }
+.log-block.collapsed .log { display: none; }
+.lg-ev { border-top: 1px solid var(--line2); }
+.lg-ev summary { list-style: none; padding: 4px 14px; display: grid; grid-template-columns: 52px 54px 1fr; gap: 6px; align-items: baseline; }
+.lg-ev summary::-webkit-details-marker { display: none; }
+.lg-ev summary:hover { background: var(--sunk); }
+.lg-ev .t { color: var(--ink3); font-size: 11px; }
+.lg-ev .k { font-size: 11px; font-weight: 600; }
+.lg-ev .k.thinking { color: var(--s4); } .lg-ev .k.tool_use { color: var(--solver); } .lg-ev .k.tool_result { color: var(--ink3); }
+.lg-ev .k.error { color: var(--neg); } .lg-ev .k.text { color: var(--main); } .lg-ev .k.system { color: var(--ink3); }
+.lg-ev .c { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg-ev .ctx { font-size: 11px; color: var(--ink3); }
+.lg-ev pre { margin: 0; padding: 4px 14px 8px 112px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); max-height: 260px; overflow-y: auto; }
+.lg-ev.tool pre { font-family: var(--mono); font-size: 11px; }
+
+/* ---------- ダイアログ ---------- */
+dialog { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 4px; padding: 0; width: min(760px, 94vw); max-height: 86vh; }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+.dlg-h { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); gap: 10px; }
+.dlg-h h2 { margin: 0; font-size: 14px; }
+.dlg-b { padding: 12px 16px; overflow-y: auto; max-height: calc(86vh - 120px); }
+.dlg-b h3 { font-size: 12px; margin: 14px 0 6px; color: var(--ink2); font-weight: 600; }
+.dlg-b h3:first-child { margin-top: 0; }
+.envrow { display: grid; grid-template-columns: 200px 1fr auto; gap: 8px; align-items: center; padding: 3px 0; }
+.envrow input { background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 3px 7px; height: 26px; width: 100%; font-family: var(--mono); font-size: 12px; }
+.envrow .d { font-size: 11px; color: var(--ink3); grid-column: 1 / -1; margin-top: -2px; }
+.dlg-f { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); align-items: center; }
+
+@media (max-width: 1100px) {
+  .work { grid-template-columns: 230px minmax(0,1fr) 280px; }
+  #inMain, #inSub { width: 130px; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-row">
+    <div class="brand"><span class="glyph" aria-hidden="true"><i></i><i></i><i></i><i></i></span>CHaser 解析</div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusLabel">接続中</span></div>
+    <div class="status-msg" id="statusMsg"></div>
+    <div class="live-nums">
+      <div class="ln"><b id="nTurn" class="num">0</b><span id="nTurnSub">ターン</span></div>
+      <div class="ln"><b id="nEst" class="num">0</b><span>推定スコア</span></div>
+      <div class="ln"><b id="nOff" class="num">-</b><span>公式(途中)</span></div>
+      <div class="ln"><b id="nBest" class="num">-</b><span id="nBestSub">ルーム最高</span></div>
+    </div>
+    <button class="btn primary" id="btnStart" type="button">開始</button>
+    <button class="btn" id="btnPause" type="button" hidden>試合後に一時停止</button>
+    <button class="btn danger" id="btnStop" type="button" hidden>停止</button>
+    <button class="btn ghost" id="btnTheme" type="button" title="ライト/ダーク切替" aria-label="テーマ切替">テーマ</button>
+    <button class="btn ghost" id="btnSettings" type="button" title="環境変数・操作">設定</button>
+  </div>
+  <div class="top-row">
+    <div class="field"><label for="selRoom">ルーム</label><select id="selRoom"></select></div>
+    <div class="field"><label for="inMain">メイン</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
+    <div class="field"><label for="inSub">サブ</label><input id="inSub" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
+    <div class="field"><label for="selEffort">effort</label><select id="selEffort"></select></div>
+    <div class="field"><label for="inBudget" title="メインが1手に使える思考時間。超えると solver が代わりに打つ">思考予算</label><input id="inBudget" type="number" min="3" step="1" /><span class="dim">秒</span></div>
+    <div class="field"><label for="inMax">最大ターン</label><input id="inMax" type="number" min="1" step="1" placeholder="無制限" /></div>
+    <div class="field chk"><label><input type="checkbox" id="chkAuto" />試合後に自動で次へ</label></div>
+    <span class="sep"></span>
+    <span class="hint" id="modelHint"></span>
+    <datalist id="dlModels"></datalist>
+  </div>
+</header>
+
+<div class="work">
+  <!-- 左: 試合一覧 -->
+  <aside class="col rail" aria-label="試合一覧">
+    <div class="sec-h">
+      <h2>試合</h2>
+      <div class="right-end">
+        <div class="seg" role="group" aria-label="表示範囲">
+          <button type="button" id="rfRoom" aria-pressed="true">このルーム</button>
+          <button type="button" id="rfAll" aria-pressed="false">全部</button>
+        </div>
+      </div>
+    </div>
+    <div class="runs" id="runs"></div>
+  </aside>
+
+  <!-- 中央: 推移と履歴 -->
+  <main class="col center" id="center">
+    <section class="chart-wrap">
+      <div class="sec-h">
+        <h2 id="chartTitle">スコア推移</h2>
+        <div class="seg" role="group" aria-label="グラフの種類">
+          <button type="button" id="cmTurns" aria-pressed="true">ターンごと</button>
+          <button type="button" id="cmRuns" aria-pressed="false">試合ごと</button>
+        </div>
+        <div class="right-end"><span class="hint" id="chartHint"></span></div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="chart" id="chart"></div>
+    </section>
+
+    <section class="run-head" id="runHead"></section>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tabTurns" aria-selected="true">ターン履歴</button>
+      <button type="button" role="tab" id="tabReport" aria-selected="false">診断と進化レポート</button>
+      <div class="tools" id="tblTools">
+        <span class="key"><i class="m"></i>main</span>
+        <span class="key"><i class="s"></i>solver</span>
+        <div class="seg" role="group" aria-label="絞り込み">
+          <button type="button" data-tf="all" aria-pressed="true">全て</button>
+          <button type="button" data-tf="main" aria-pressed="false">main</button>
+          <button type="button" data-tf="solver" aria-pressed="false">solver</button>
+          <button type="button" data-tf="event" aria-pressed="false">イベント</button>
+        </div>
+      </div>
+    </div>
+    <div class="tbl-wrap" id="tblWrap"></div>
+  </main>
+
+  <!-- 右: 判断・マップ・思考 -->
+  <aside class="col right" aria-label="現在の判断">
+    <section class="block">
+      <div class="sec-h"><h2>いまの判断</h2><div class="right-end faint" id="decWhen"></div></div>
+      <div class="decide" id="decide"></div>
+    </section>
+    <section class="block">
+      <div class="sec-h"><h2>マップ</h2><div class="right-end faint" id="mapSrc"></div></div>
+      <div class="mapbox" id="mapbox"><canvas id="map" width="10" height="10"></canvas><div class="maptip" id="maptip" hidden></div><div class="mapinfo" id="mapinfo"></div></div>
+    </section>
+    <section class="block log-block" id="logBlock">
+      <div class="sec-h">
+        <h2 title="Claude Code の思考・ツール呼び出しログ">思考ログ</h2>
+        <span class="faint" id="logCount"></span>
+        <div class="right-end">
+          <div class="seg" role="group" aria-label="種別">
+            <button type="button" data-lf="all" aria-pressed="true">全て</button>
+            <button type="button" data-lf="in_game" aria-pressed="false">対戦</button>
+            <button type="button" data-lf="evolution" aria-pressed="false">進化</button>
+          </div>
+          <button type="button" class="link" id="logToggle" aria-expanded="true">折りたたむ</button>
+        </div>
+      </div>
+      <div class="log" id="log"></div>
+    </section>
+  </aside>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-h"><h2>設定と操作</h2><span class="sep"></span><button class="btn ghost" id="dlgClose" type="button">閉じる</button></div>
+  <div class="dlg-b">
+    <h3>操作</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn" id="btnPreview" type="button">選択ルームのマップを取得</button>
+      <button class="btn" id="btnVerify" type="button">ソルバーを検証</button>
+      <button class="btn" id="btnModels" type="button">モデル一覧を再取得</button>
+      <span class="hint" id="opMsg"></span>
+    </div>
+    <h3>.env</h3>
+    <div id="envBody" class="dim">読み込み中...</div>
+  </div>
+  <div class="dlg-f"><button class="btn primary" id="envSave" type="button">.env を保存</button><button class="btn" id="envAdd" type="button">変数を追加</button><span class="hint" id="envMsg"></span></div>
+</dialog>
+
+<script>
+"use strict";
+/* ============ ユーティリティ ============ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = (n) => (n === null || n === undefined || Number.isNaN(n) ? "-" : (Math.round(n) + 0).toLocaleString("ja-JP"));
+const sec = (ms) => (ms > 0 ? (ms / 1000).toFixed(1) + "秒" : "-");
+const pct = (r) => (r === null ? "-" : Math.round(r * 100) + "%");
+const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const load = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+const STATUS = {
+  idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], claude_in_game: ["メインが思考中", "think"],
+  evolving: ["進化中(ソルバー改修)", "evo"], cooldown: ["次の試合を準備中", "warn"], paused: ["一時停止", "warn"], error: ["エラー", "err"],
+};
+const SERIES_VARS = ["--s1", "--s2", "--s3", "--s4", "--s5"];
+
+/* ============ 状態 ============ */
+const S = {
+  st: null, runs: [], rooms: {}, runTurns: {}, evo: {}, diag: {},
+  liveTurns: [], liveRunId: null,
+  focus: "live", compare: [], compareInit: false,
+  chartMode: "turns", tab: "turns", tf: "all", lf: "all", roomAll: false,
+  hiTurn: null, expanded: new Set(), models: [], logCollapsed: false,
+  imgs: new Map(), tileFiles: null, mapHit: null,
+};
+{ const t = load("chaser.roomAll"); if (t === "1") S.roomAll = true; if (load("chaser.logCollapsed") === "1") S.logCollapsed = true; }
+
+/* ============ 再描画スケジューラ ============ */
+const dirty = new Set(); let raf = 0;
+function mark(...ks) { ks.forEach((k) => dirty.add(k)); if (!raf) raf = requestAnimationFrame(flush); }
+function flush() {
+  raf = 0; const d = [...dirty]; dirty.clear();
+  const R = { head: renderHead, settings: syncSettings, rail: renderRail, chart: renderChart, runhead: renderRunHead, table: renderMain,
+    decide: renderDecide, map: renderMap, log: renderLog };
+  for (const k of ["head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log"]) if (d.includes(k)) { try { R[k](); } catch (e) { console.error(k, e); } }
+}
+
+/* ============ ターン記録の正規化 ============ */
+function srcOf(t, n) {
+  const s = t["cmd" + n + "Source"];
+  if (s === "main" || s === "solver") return s;
+  return t["cmd" + n] ? (t.usedHarness ? "main" : "solver") : null;   // 旧ログ: usedHarness から推定
+}
+const derived = (t) => t.cmd1Source === undefined && t.cmd2Source === undefined;
+function latencyOf(t) { return Array.isArray(t.mainLatencyMs) ? t.mainLatencyMs.reduce((a, b) => a + (Number(b) || 0), 0) : 0; }
+function whoOf(t) {
+  const a = srcOf(t, 1), b = srcOf(t, 2);
+  if (a && b && a !== b) return "mix";
+  return a || b || null;
+}
+function statsOf(turns) {
+  if (!turns || !turns.length) return null;
+  let dec = 0, main = 0, lat = 0, latN = 0;
+  for (const t of turns) {
+    for (const n of [1, 2]) { const s = srcOf(t, n); if (s) { dec++; if (s === "main") main++; } }
+    const l = latencyOf(t); if (l > 0) { lat += l; latN++; }
+  }
+  const last = turns[turns.length - 1];
+  return { turns: turns.length, mainRate: dec ? main / dec : null, avgLat: latN ? lat / latN : null, lastScore: last.estimatedScoreAfter };
+}
+function scoreDelta(turns, i) { return turns[i].estimatedScoreAfter - (i > 0 ? turns[i - 1].estimatedScoreAfter : 0); }
+
+/* ============ 試合一覧のデータ ============ */
+function normRun(r) {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/.exec(r.runId || "");
+  const start = m ? new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`) : null;
+  const official = r.officialTotalScore ?? null, est = r.estimatedTotalScore ?? null;
+  return { id: r.runId, room: r.room, turns: r.turns, official, est, score: official ?? est, isOfficial: official !== null,
+    start, finished: r.finishedAt ? new Date(r.finishedAt) : start };
+}
+function runLabel(r) { return r.start ? r.start.toLocaleString("ja-JP", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : r.id; }
+function runsForView() {
+  const room = S.st?.room;
+  return S.runs.filter((r) => S.roomAll || r.room === room);
+}
+function prevOf(r) {   // 同ルームの直前の試合
+  const same = S.runs.filter((x) => x.room === r.room && x.id < r.id);
+  return same.length ? same[0] : null;
+}
+function turnsOfRun(id) { return S.runTurns[id] || null; }
+function statsOfRun(id) { return statsOf(S.runTurns[id]); }
+const hasEvo = (id) => !!(S.evo[id] && S.evo[id].length > 0);
+function bestId(room) { return S.rooms[String(room)]?.bestRunId || null; }
+function getFocusTurns() { return S.focus === "live" ? S.liveTurns : turnsOfRun(S.focus) || []; }
+function focusRun() { return S.focus === "live" ? null : S.runs.find((r) => r.id === S.focus) || null; }
+
+/* ============ 取得系 ============ */
+async function jget(url) { const r = await fetch(url); return r.json(); }
+async function fetchRuns() {
+  try {
+    const d = await jget("/api/runs");
+    S.rooms = d.rooms || S.rooms;
+    S.runs = (d.runs || []).map(normRun).sort((a, b) => (a.id < b.id ? 1 : -1));
+    mark("rail", "chart", "settings", "head");
+    prefetchRuns();
+  } catch { $("#runs").innerHTML = `<div class="empty">試合一覧を取得できません。サーバの状態を確認してください。</div>`; }
+}
+const queue = []; let active = 0;
+function prefetchRuns() {
+  for (const r of S.runs) {
+    if (!S.runTurns[r.id]) queue.push(() => fetchTurns(r.id));
+    if (S.evo[r.id] === undefined) queue.push(() => fetchDiag(r.id));
+  }
+  pump();
+}
+function pump() {
+  while (active < 4 && queue.length) {
+    const job = queue.shift(); active++;
+    job().catch(() => {}).finally(() => { active--; pump(); });
+  }
+}
+async function fetchTurns(id) {
+  if (S.runTurns[id]) return;
+  const d = await jget(`/api/runs/${encodeURIComponent(id)}/turns`);
+  S.runTurns[id] = d.turns || [];
+  mark("rail", "chart", "runhead", "table");
+}
+async function fetchDiag(id) {
+  if (S.diag[id]) return;
+  const d = await jget(`/api/runs/${encodeURIComponent(id)}/diagnosis`);
+  S.diag[id] = d; S.evo[id] = d.evolution || "";
+  mark("rail", "chart", "runhead");
+  if (S.focus === id && S.tab === "report") mark("table");
+}
+async function loadModels() {
+  $("#modelHint").textContent = "モデル一覧を取得中...";
+  try {
+    const d = await jget("/api/models");
+    S.models = d.models || [];
+    $("#dlModels").innerHTML = S.models.map((m) => `<option value="${esc(m)}"></option>`).join("");
+    const eff = d.efforts || ["low", "medium", "high", "xhigh", "max"];
+    S.efforts = eff; syncSettings(true);
+    $("#modelHint").textContent = d.error ? `モデル一覧: ${d.error}` : `モデル ${S.models.length} 件(入力で絞り込み)`;
+  } catch { $("#modelHint").textContent = "モデル一覧を取得できません"; }
+}
+
+/* ============ 上部バー ============ */
+function render_status() {
+  const st = S.st; if (!st) return;
+  const [label, cls] = STATUS[st.status] || [st.status, ""];
+  $("#statusLabel").textContent = label; $("#dot").className = "dot " + cls;
+  $("#statusMsg").textContent = st.statusMessage || ""; $("#statusMsg").title = st.statusMessage || "";
+}
+function renderHead() {
+  const st = S.st; if (!st) return;
+  render_status();
+  $("#btnStart").hidden = st.running; $("#btnPause").hidden = !st.running; $("#btnStop").hidden = !st.running;
+  $("#btnPause").disabled = !!st.pauseRequested; $("#btnPause").textContent = st.pauseRequested ? "一時停止を予約済み" : "試合後に一時停止";
+  $("#nTurn").textContent = st.turn || 0;
+  $("#nTurnSub").textContent = st.maxTurns ? `/ ${st.maxTurns} ターン` : "ターン";
+  $("#nEst").textContent = fmt(st.scores.estimatedTotal);
+  const live = st.scores.liveOfficial ? st.scores.liveOfficial.totalScore : st.scores.lastOfficialTotal;
+  $("#nOff").textContent = fmt(live);
+  const hs = st.scores.roomHighScore ?? S.rooms[String(st.room)]?.highScore ?? null;
+  $("#nBest").textContent = fmt(hs); $("#nBestSub").textContent = `Room ${st.room} 最高`;
+}
+function syncSettings(force) {
+  const st = S.st; if (!st) return;
+  const set = (el, v) => { if (document.activeElement !== el || force) el.value = v; };
+  // ルーム
+  const ids = new Set([3, st.room, ...Object.keys(S.rooms).map(Number), ...Object.keys(st.roomProfiles || {}).map(Number)].filter(Boolean));
+  const sel = $("#selRoom");
+  if (document.activeElement !== sel) {
+    sel.innerHTML = [...ids].sort((a, b) => a - b).map((id) => {
+      const hs = (S.rooms[String(id)] || st.roomProfiles?.[String(id)])?.highScore;
+      return `<option value="${id}">Room ${id}${hs != null ? `  最高 ${fmt(hs)}` : "  未プレイ"}</option>`;
+    }).join("") + `<option value="__new">番号を指定...</option>`;
+    sel.value = String(st.room);
+  }
+  const eff = S.efforts || ["low", "medium", "high", "xhigh", "max"];
+  const es = $("#selEffort");
+  if (document.activeElement !== es) {
+    es.innerHTML = `<option value="">既定</option>` + eff.map((e) => `<option>${esc(e)}</option>`).join("");
+    es.value = st.effort || "";
+  }
+  set($("#inMain"), st.model || ""); set($("#inSub"), st.subModel || "");
+  set($("#inBudget"), st.turnBudgetSec ?? ""); set($("#inMax"), st.maxTurns ?? "");
+  $("#chkAuto").checked = !!st.autoContinue;
+}
+function settingsPayload() {
+  const room = Number($("#selRoom").value) || S.st?.room || 3;
+  const mx = $("#inMax").value.trim();
+  const bud = Number($("#inBudget").value);
+  return { room, model: $("#inMain").value.trim(), subModel: $("#inSub").value.trim(), effort: $("#selEffort").value,
+    ...(bud >= 3 ? { turnBudgetSec: bud } : {}), maxTurns: mx ? Number(mx) : null, autoContinue: $("#chkAuto").checked };
+}
+async function control(body) {
+  try { await fetch("/api/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); } catch {}
+}
+$("#selRoom").addEventListener("change", (e) => {
+  if (e.target.value === "__new") {
+    const v = Number(prompt("ルーム番号を入力してください", String(S.st?.room || 3)));
+    if (!Number.isInteger(v) || v <= 0) { syncSettings(true); return; }
+    const o = document.createElement("option"); o.value = String(v); o.textContent = `Room ${v}  未プレイ`; e.target.insertBefore(o, e.target.lastElementChild); e.target.value = String(v);
+  }
+  control({ action: "update_settings", ...settingsPayload() });
+});
+["inMain", "inSub", "selEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
+$("#btnStart").addEventListener("click", () => control({ action: "start", ...settingsPayload() }));
+$("#btnStop").addEventListener("click", () => control({ action: "stop" }));
+$("#btnPause").addEventListener("click", () => control({ action: "pause" }));
+
+function applyTheme(t) {
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  mark("chart", "map");
+}
+$("#btnTheme").addEventListener("click", () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark"; save("chaser.theme", next); applyTheme(next);
+});
+{ const t = load("chaser.theme"); if (t) applyTheme(t); }
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => mark("chart", "map"));
+
+/* ============ 試合一覧 ============ */
+function renderRail() {
+  const box = $("#runs");
+  $("#rfRoom").setAttribute("aria-pressed", String(!S.roomAll)); $("#rfAll").setAttribute("aria-pressed", String(S.roomAll));
+  const st = S.st; const rows = [];
+  const liveShown = st && (st.running || S.liveTurns.length > 0);
+  if (liveShown) {
+    const ls = statsOf(S.liveTurns); const sel = S.focus === "live";
+    rows.push(`<div class="run" data-id="live" tabindex="0" role="button" aria-current="${sel}">
+      <input type="checkbox" checked disabled aria-label="常に表示" />
+      <div><div class="run-t"><b>いまの試合</b><span class="tag live">${st.running ? "進行中" : "直近"}</span></div>
+      <div class="run-m"><span>Room ${st.room}</span><span>${S.liveTurns.length}T</span>${ls ? `<span title="main 判断率"><span class="mbar"><i style="width:${(ls.mainRate || 0) * 100}%"></i></span> ${pct(ls.mainRate)}</span>` : ""}</div></div>
+      <div class="run-s"><b>${fmt(st.scores.estimatedTotal)}</b><small>推定</small></div></div>`);
+  }
+  const list = runsForView().filter((r) => !(liveShown && r.id === S.liveRunId));
+  for (const r of list) {
+    const s = statsOfRun(r.id); const prev = prevOf(r);
+    const d = prev && r.score !== null && prev.score !== null ? r.score - prev.score : null;
+    const best = bestId(r.room) === r.id;
+    rows.push(`<div class="run" data-id="${esc(r.id)}" tabindex="0" role="button" aria-current="${S.focus === r.id}">
+      <input type="checkbox" data-ov="${esc(r.id)}" ${S.compare.includes(r.id) ? "checked" : ""} title="グラフに重ねる" aria-label="グラフに重ねる" />
+      <div><div class="run-t"><b>${esc(runLabel(r))}</b><span class="faint">Room ${r.room ?? "?"}</span>${best ? `<span class="tag best">最高</span>` : ""}${hasEvo(r.id) ? `<span class="tag evo" title="この試合の後にソルバー改修(進化)が行われた">進化</span>` : ""}</div>
+      <div class="run-m"><span>${r.turns}T</span><span title="main 判断率"><span class="mbar"><i style="width:${(s?.mainRate || 0) * 100}%"></i></span> ${s ? pct(s.mainRate) : "…"}</span><span title="main の平均応答時間">${s ? sec(s.avgLat) : ""}</span></div></div>
+      <div class="run-s"><b>${fmt(r.score)}</b><small>${r.isOfficial ? "公式" : "推定"}${d !== null ? ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${fmt(d)}</span>` : ""}</small></div></div>`);
+  }
+  box.innerHTML = rows.join("") || `<div class="empty">この範囲に試合がありません。開始すると、ここに試合が並びます。</div>`;
+}
+$("#runs").addEventListener("click", (e) => {
+  const ov = e.target.closest("[data-ov]");
+  if (ov) { toggleCompare(ov.dataset.ov, ov.checked); e.stopPropagation(); return; }
+  const row = e.target.closest(".run"); if (row) setFocus(row.dataset.id);
+});
+$("#runs").addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("run")) { e.preventDefault(); setFocus(e.target.dataset.id); }
+});
+function toggleCompare(id, on) {
+  S.compare = S.compare.filter((x) => x !== id); if (on) S.compare.push(id);
+  mark("rail", "chart");
+}
+function setFocus(id) {
+  S.focus = id; S.hiTurn = null;
+  if (id !== "live") { if (!S.compare.includes(id)) S.compare.push(id); fetchTurns(id).catch(() => {}); fetchDiag(id).catch(() => {}); }
+  mark("rail", "chart", "runhead", "table");
+}
+$("#rfRoom").addEventListener("click", () => { S.roomAll = false; save("chaser.roomAll", "0"); mark("rail", "chart"); });
+$("#rfAll").addEventListener("click", () => { S.roomAll = true; save("chaser.roomAll", "1"); mark("rail", "chart"); });
+
+/* ============ グラフ ============ */
+function niceTicks(min, max, n) {
+  const span = max - min || 1, raw = span / n, mag = 10 ** Math.floor(Math.log10(raw)), norm = raw / mag;
+  const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag, out = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(v);
+  return out;
+}
+function seriesList() {
+  const list = [];
+  if (S.liveTurns.length) list.push({ id: "live", label: "いまの試合", turns: S.liveTurns, color: "var(--ink)", live: true });
+  const ids = [...S.compare];
+  if (S.focus !== "live" && !ids.includes(S.focus)) ids.push(S.focus);
+  ids.forEach((id, i) => {
+    const r = S.runs.find((x) => x.id === id); if (!r) return;
+    list.push({ id, label: `${runLabel(r)} R${r.room}`, turns: turnsOfRun(id) || [], color: `var(${SERIES_VARS[i % SERIES_VARS.length]})`, run: r });
+  });
+  return list;
+}
+function renderChart() {
+  const el = $("#chart");
+  $("#cmTurns").setAttribute("aria-pressed", String(S.chartMode === "turns")); $("#cmRuns").setAttribute("aria-pressed", String(S.chartMode === "runs"));
+  if (S.chartMode === "turns") chartTurns(el); else chartRuns(el);
+}
+const CH = { padL: 52, padR: 20, padT: 8, plotH: 140, axisH: 20, ribbonH: 40 };
+function frame(el) {
+  const W = Math.max(320, el.clientWidth - 6);
+  return { W, H: CH.padT + CH.plotH + CH.axisH + CH.ribbonH + 8, x0: CH.padL, x1: W - CH.padR, y0: CH.padT, y1: CH.padT + CH.plotH, rTop: CH.padT + CH.plotH + CH.axisH + 4 };
+}
+function chartTurns(el) {
+  const ser = seriesList(), f = frame(el), st = S.st;
+  const hs = S.rooms[String(st?.room)]?.highScore ?? null;
+  const legend = $("#legend");
+  $("#chartTitle").textContent = "スコア推移(ターンごとの推定スコア)";
+  $("#chartHint").textContent = "行をクリックで比較に追加。チェックで重ね表示";
+  legend.innerHTML = ser.map((s) => {
+    const last = s.turns[s.turns.length - 1];
+    return `<span class="lg"><i style="border-color:${s.color};${S.focus === s.id ? "border-top-width:4px" : ""}"></i><b>${esc(s.label)}</b>${last ? fmt(last.estimatedScoreAfter) : "…"}${s.live ? "" : `<button type="button" data-rm="${esc(s.id)}" aria-label="${esc(s.label)}を外す">×</button>`}</span>`;
+  }).join("") + (hs != null ? `<span class="lg"><i style="border-color:var(--ink3);border-top-style:dashed"></i>Room ${st.room} の最高 ${fmt(hs)}</span>` : "");
+  if (!ser.length) { el.innerHTML = `<div class="empty">まだ描くデータがありません。左の試合を選ぶか、開始してください。</div>`; return; }
+  const all = ser.flatMap((s) => s.turns);
+  const maxT = Math.max(10, ...all.map((t) => t.turn));
+  const ys = all.map((t) => t.estimatedScoreAfter);
+  let yMin = Math.min(0, ...ys), yMax = Math.max(100, ...ys, hs ?? 0);
+  yMax += (yMax - yMin) * 0.04;
+  const X = (t) => f.x0 + ((t - 1) / Math.max(1, maxT - 1)) * (f.x1 - f.x0);
+  const Y = (v) => f.y1 - ((v - yMin) / (yMax - yMin)) * (f.y1 - f.y0);
+  let g = "";
+  for (const v of niceTicks(yMin, yMax, 5)) g += `<line x1="${f.x0}" x2="${f.x1}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line2)"/><text x="${f.x0 - 6}" y="${Y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
+  for (const v of niceTicks(1, maxT, 8)) g += `<line x1="${X(v)}" x2="${X(v)}" y1="${f.y1}" y2="${f.y1 + 4}" stroke="var(--ink3)"/><text x="${X(v)}" y="${f.y1 + 16}" text-anchor="middle">${v}</text>`;
+  g += `<line x1="${f.x0}" x2="${f.x1}" y1="${f.y1}" y2="${f.y1}" stroke="var(--ink3)"/>`;
+  if (hs != null) g += `<line x1="${f.x0}" x2="${f.x1}" y1="${Y(hs)}" y2="${Y(hs)}" stroke="var(--ink3)" stroke-dasharray="4 4"/>`;
+  const ordered = [...ser].sort((a, b) => (S.focus === a.id) - (S.focus === b.id) + (a.live ? 0.5 : 0) * 0);
+  for (const s of ordered) {
+    if (!s.turns.length) continue;
+    const w = S.focus === s.id ? 2.6 : 1.5, op = S.focus === s.id || s.live ? 1 : 0.8;
+    g += `<polyline fill="none" stroke="${s.color}" stroke-width="${w}" stroke-linejoin="round" opacity="${op}" points="${s.turns.map((t) => `${X(t.turn).toFixed(1)},${Y(t.estimatedScoreAfter).toFixed(1)}`).join(" ")}"/>`;
+  }
+  // 注目試合のイベント点(スコアが減った/ゲーム終了)
+  const ft = getFocusTurns();
+  ft.forEach((t, i) => {
+    const d = scoreDelta(ft, i);
+    if (d < 0) g += `<circle cx="${X(t.turn)}" cy="${Y(t.estimatedScoreAfter)}" r="4" fill="var(--neg)" stroke="var(--panel)" stroke-width="1.5"><title>T${t.turn} スコア減 ${fmt(d)}</title></circle>`;
+    if (t.gameOver) g += `<rect x="${X(t.turn) - 4}" y="${Y(t.estimatedScoreAfter) - 4}" width="8" height="8" fill="var(--ink)" stroke="var(--panel)"><title>T${t.turn} 終了: ${esc(t.gameOverReason || "")}</title></rect>`;
+  });
+  if (S.hiTurn != null) g += `<line x1="${X(S.hiTurn)}" x2="${X(S.hiTurn)}" y1="${f.y0}" y2="${f.rTop + CH.ribbonH}" stroke="var(--main)" stroke-width="1.5"/>`;
+  // リボン: 決めた主体と応答時間
+  const budget = (st?.turnBudgetSec || 20) * 1000;
+  const lats = ft.map(latencyOf); const scale = Math.max(budget, ...lats) || 1, rb = f.rTop + CH.ribbonH;
+  const bw = Math.max(1.5, ((f.x1 - f.x0) / Math.max(1, maxT)) * 0.78);
+  g += `<text x="${f.x0 - 6}" y="${f.rTop + 10}" text-anchor="end">応答</text><line x1="${f.x0}" x2="${f.x1}" y1="${rb}" y2="${rb}" stroke="var(--ink3)"/>`;
+  const by = rb - (budget / scale) * (CH.ribbonH - 4);
+  g += `<line x1="${f.x0}" x2="${f.x1}" y1="${by}" y2="${by}" stroke="var(--ink3)" stroke-dasharray="2 3"/><text x="${f.x1}" y="${by - 2}" text-anchor="end">予算 ${st?.turnBudgetSec ?? 20}秒</text>`;
+  ft.forEach((t, i) => {
+    const who = whoOf(t), l = lats[i], x = X(t.turn) - bw / 2;
+    if (who === "main" || who === "mix") {
+      const h = Math.max(2, (l / scale) * (CH.ribbonH - 4));
+      g += `<rect x="${x}" y="${rb - h}" width="${bw}" height="${h}" fill="var(--main)"><title>T${t.turn} main ${sec(l)}</title></rect>`;
+      if (who === "mix") g += `<rect x="${x}" y="${rb - 3}" width="${bw}" height="3" fill="var(--solver)"/>`;
+    } else if (who === "solver") g += `<rect x="${x}" y="${rb - 3}" width="${bw}" height="3" fill="var(--solver)"><title>T${t.turn} solver</title></rect>`;
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${f.W} ${f.H}" height="${f.H}" role="img" aria-label="スコア推移">${g}<rect id="hit" x="${f.x0}" y="${f.y0}" width="${f.x1 - f.x0}" height="${f.rTop + CH.ribbonH - f.y0}" fill="transparent" style="cursor:crosshair"/></svg><div class="tip" hidden></div>`;
+  const hit = $("#hit", el), tip = $(".tip", el), svg = $("svg", el);
+  hit.addEventListener("mousemove", (e) => {
+    const r = svg.getBoundingClientRect(), px = ((e.clientX - r.left) / r.width) * f.W;
+    const t = Math.max(1, Math.min(maxT, Math.round(1 + ((px - f.x0) / (f.x1 - f.x0)) * (maxT - 1))));
+    const rows = ser.map((s) => { const x = s.turns.find((q) => q.turn === t); return x ? `<div><span class="k" style="background:${s.color}"></span>${esc(s.label)} <b>${fmt(x.estimatedScoreAfter)}</b></div>` : ""; }).join("");
+    const cur = ft.find((q) => q.turn === t);
+    tip.hidden = false;
+    tip.innerHTML = `<div>ターン ${t}</div>${rows}${cur ? `<div>${esc(cur.cmd1 || "-")} / ${esc(cur.cmd2 || "-")} (${whoOf(cur) || "?"} ${sec(latencyOf(cur))})</div>` : ""}`;
+    const tx = (X(t) / f.W) * r.width + 12; tip.style.left = Math.min(tx, r.width - tip.offsetWidth - 4) + "px"; tip.style.top = "6px";
+  });
+  hit.addEventListener("mouseleave", () => { tip.hidden = true; });
+  hit.addEventListener("click", (e) => {
+    const r = svg.getBoundingClientRect(), px = ((e.clientX - r.left) / r.width) * f.W;
+    const t = Math.round(1 + ((px - f.x0) / (f.x1 - f.x0)) * (maxT - 1));
+    S.hiTurn = t; S.tab = "turns"; mark("chart", "table"); requestAnimationFrame(() => { $(`tr[data-turn="${t}"]`)?.scrollIntoView({ block: "center" }); });
+  });
+}
+function chartRuns(el) {
+  const f = frame(el), st = S.st;
+  const runs = runsForView().filter((r) => r.score !== null).slice().reverse();
+  $("#chartTitle").textContent = `試合ごとの最終スコア${S.roomAll ? "(全ルーム)" : `(Room ${st?.room})`}`;
+  $("#chartHint").textContent = "点をクリックでその試合を開く";
+  $("#legend").innerHTML = `<span class="lg"><b style="color:var(--ink)">●</b>公式スコア</span><span class="lg"><b style="color:var(--ink)">○</b>推定のみ</span><span class="lg"><i style="border-color:var(--ink3);border-top-style:dashed"></i>それまでの最高</span><span class="lg"><b style="color:var(--s2)">▲</b>この試合の後に進化(ソルバー改修)</span>`;
+  if (!runs.length) { el.innerHTML = `<div class="empty">過去の試合がまだありません。</div>`; return; }
+  const n = runs.length, ys = runs.map((r) => r.score);
+  const yMin = Math.min(0, ...ys), yMax0 = Math.max(100, ...ys), yMax = yMax0 + (yMax0 - yMin) * 0.06;
+  const X = (i) => f.x0 + ((i + 0.5) / n) * (f.x1 - f.x0), Y = (v) => f.y1 - ((v - yMin) / (yMax - yMin)) * (f.y1 - f.y0);
+  let g = "";
+  for (const v of niceTicks(yMin, yMax, 5)) g += `<line x1="${f.x0}" x2="${f.x1}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line2)"/><text x="${f.x0 - 6}" y="${Y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
+  g += `<line x1="${f.x0}" x2="${f.x1}" y1="${f.y1}" y2="${f.y1}" stroke="var(--ink3)"/>`;
+  const every = Math.ceil(n / 10);
+  runs.forEach((r, i) => { if (i % every === 0 || i === n - 1) g += `<text x="${X(i)}" y="${f.y1 + 16}" text-anchor="middle">${esc(runLabel(r).slice(0, 5))}</text>`; });
+  let best = -Infinity, bp = "";
+  runs.forEach((r, i) => { best = Math.max(best, r.score); const x0 = f.x0 + (i / n) * (f.x1 - f.x0), x1 = f.x0 + ((i + 1) / n) * (f.x1 - f.x0); bp += `${i ? "L" : "M"}${x0},${Y(best)}L${x1},${Y(best)}`; });
+  g += `<path d="${bp}" fill="none" stroke="var(--ink3)" stroke-dasharray="4 4"/>`;
+  g += `<polyline fill="none" stroke="var(--ink2)" stroke-width="1.5" points="${runs.map((r, i) => `${X(i)},${Y(r.score)}`).join(" ")}"/>`;
+  runs.forEach((r, i) => {
+    const sel = S.focus === r.id;
+    g += `<circle data-id="${esc(r.id)}" cx="${X(i)}" cy="${Y(r.score)}" r="${sel ? 6 : 4.5}" fill="${r.isOfficial ? "var(--ink)" : "var(--panel)"}" stroke="${sel ? "var(--main)" : "var(--ink)"}" stroke-width="${sel ? 3 : 1.6}" style="cursor:pointer"><title>${esc(runLabel(r))} Room ${r.room}: ${fmt(r.score)} ${r.isOfficial ? "(公式)" : "(推定)"}</title></circle>`;
+    if (hasEvo(r.id)) g += `<path d="M${X(i)},${f.y1 - 2}l-5,-9h10z" fill="var(--s2)"><title>この試合の後に進化(ソルバー改修)</title></path>`;
+  });
+  const rb = f.rTop + CH.ribbonH;
+  g += `<text x="${f.x0 - 6}" y="${f.rTop + 10}" text-anchor="end">main率</text><line x1="${f.x0}" x2="${f.x1}" y1="${rb}" y2="${rb}" stroke="var(--ink3)"/>`;
+  const bw = Math.min(26, ((f.x1 - f.x0) / n) * 0.6);
+  runs.forEach((r, i) => {
+    const s = statsOfRun(r.id); if (!s || s.mainRate === null) return;
+    const h = Math.max(1, s.mainRate * (CH.ribbonH - 4));
+    g += `<rect x="${X(i) - bw / 2}" y="${rb - h}" width="${bw}" height="${h}" fill="var(--main)"><title>${esc(runLabel(r))} main ${pct(s.mainRate)} 平均応答 ${sec(s.avgLat)}</title></rect>`;
+    g += `<rect x="${X(i) - bw / 2}" y="${rb - (CH.ribbonH - 4)}" width="${bw}" height="${CH.ribbonH - 4 - h}" fill="var(--solver-bg)"/>`;
+  });
+  el.innerHTML = `<svg viewBox="0 0 ${f.W} ${f.H}" height="${f.H}" role="img" aria-label="試合ごとのスコア">${g}</svg>`;
+  $$("circle[data-id]", el).forEach((c) => c.addEventListener("click", () => setFocus(c.dataset.id)));
+}
+$("#legend").addEventListener("click", (e) => { const b = e.target.closest("[data-rm]"); if (b) { S.compare = S.compare.filter((x) => x !== b.dataset.rm); if (S.focus === b.dataset.rm) S.focus = "live"; mark("rail", "chart", "runhead", "table"); } });
+$("#cmTurns").addEventListener("click", () => { S.chartMode = "turns"; mark("chart"); });
+$("#cmRuns").addEventListener("click", () => { S.chartMode = "runs"; mark("chart"); });
+new ResizeObserver(() => mark("chart", "map")).observe($("#chart"));
+
+/* ============ 選択中の試合の見出し ============ */
+function renderRunHead() {
+  const el = $("#runHead"), turns = getFocusTurns(), s = statsOf(turns);
+  let title, off = null, est = null, d = null, room = S.st?.room;
+  if (S.focus === "live") { title = `いまの試合${S.st?.runId ? ` (${S.st.runId})` : ""}`; est = S.st?.scores.estimatedTotal ?? s?.lastScore ?? null; off = S.st?.scores.liveOfficial?.totalScore ?? null; }
+  else {
+    const r = focusRun();
+    title = r ? `${runLabel(r)} の試合` : S.focus; room = r?.room; off = r?.official; est = r?.est ?? s?.lastScore ?? null;
+    const p = r && prevOf(r); if (p && r.score !== null && p.score !== null) d = r.score - p.score;
+  }
+  const kv = (k, v, cls = "") => `<span class="kv"><span>${k}</span><b class="${cls}">${v}</b></span>`;
+  el.innerHTML = `<h2>${esc(title)}</h2>${kv("Room", room ?? "-")}${kv("公式", fmt(off))}${kv("推定", fmt(est))}${d !== null ? kv("前の試合比", (d >= 0 ? "+" : "") + fmt(d), d >= 0 ? "up" : "down") : ""}${kv("ターン", turns.length)}${kv("main 判断率", s ? pct(s.mainRate) : "-")}${kv("main 平均応答", s ? sec(s.avgLat) : "-")}${S.focus !== "live" && hasEvo(S.focus) ? `<span class="tag evo">この試合の後に進化あり</span>` : ""}`;
+}
+
+/* ============ ターン履歴 / レポート ============ */
+function eventsOf(t, i, turns) {
+  const ev = [];
+  const d = scoreDelta(turns, i);
+  if (d < 0) ev.push(["bad", `スコア ${fmt(d)}`]);
+  (t.breakpointReasons || []).forEach((b) => ev.push(["", b]));
+  if (t.usedFallback) ev.push(["bad", "fallback"]);
+  if (t.gameOver) ev.push(["bad", `終了 ${t.gameOverReason || ""}`]);
+  return ev;
+}
+function renderMain() {
+  const wrap = $("#tblWrap");
+  $("#tabTurns").setAttribute("aria-selected", String(S.tab === "turns")); $("#tabReport").setAttribute("aria-selected", String(S.tab === "report"));
+  $("#tblTools").style.display = S.tab === "turns" ? "" : "none";
+  $$("[data-tf]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tf === S.tf)));
+  if (S.tab === "report") return renderReport(wrap);
+  const turns = getFocusTurns();
+  if (!turns.length) { wrap.innerHTML = `<div class="empty">${S.focus === "live" ? "まだターンがありません。「開始」で対戦が始まると、1手ごとにここへ記録されます。" : "ターン記録を読み込み中、または記録がありません。"}</div>`; return; }
+  const near = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
+  const rows = [];
+  turns.forEach((t, i) => {
+    const who = whoOf(t), ev = eventsOf(t, i, turns);
+    if (S.tf === "main" && who !== "main" && who !== "mix") return;
+    if (S.tf === "solver" && who !== "solver" && who !== "mix") return;
+    if (S.tf === "event" && !ev.length) return;
+    const c1 = srcOf(t, 1), c2 = srcOf(t, 2), l = latencyOf(t), d = scoreDelta(turns, i), open = S.expanded.has(t.turn);
+    rows.push(`<tr class="row${S.hiTurn === t.turn ? " hi" : ""}${d < 0 ? " bad" : ""}" data-turn="${t.turn}">
+      <td class="r faint">${t.turn}</td>
+      <td><span class="cmd ${c1 || "none"}" title="${c1 ? c1 + (derived(t) ? "(旧ログから推定)" : "") : ""}">${esc(t.cmd1 || "-")}</span></td>
+      <td><span class="cmd ${c2 || "none"}" title="${c2 ? c2 + (derived(t) ? "(旧ログから推定)" : "") : ""}">${esc(t.cmd2 || "-")}</span></td>
+      <td><span class="who ${who || ""}">${who === "mix" ? "main+solver" : who || "-"}</span></td>
+      <td class="r">${l > 0 ? sec(l) : "-"}</td>
+      <td class="r ${d < 0 ? "down" : ""}">${i === 0 && d === 0 ? "-" : (d >= 0 ? "+" : "") + fmt(d)}</td>
+      <td class="r">${fmt(t.estimatedScoreAfter)}</td>
+      <td>${ev.map(([k, v]) => `<span class="ev ${k}">${esc(v)}</span>`).join("") || `<span class="faint">${esc((t.cmd2Reason || t.cmd1Reason || "").slice(0, 60))}</span>`}</td></tr>`);
+    if (open) rows.push(`<tr class="detail"><td colspan="8"><dl>
+      <dt>CMD1</dt><dd>${esc(t.cmd1 || "-")}  ${esc(t.cmd1Reason || "(理由なし)")}</dd>
+      <dt>CMD2</dt><dd>${esc(t.cmd2 || "-")}  ${esc(t.cmd2Reason || "(理由なし)")}</dd>
+      <dt>応答</dt><dd>${Array.isArray(t.mainLatencyMs) && t.mainLatencyMs.length ? t.mainLatencyMs.map((x) => sec(x)).join(" + ") : "なし"}${derived(t) ? "  旧ログのため main/solver は usedHarness からの推定" : ""}</dd>
+      <dt>位置</dt><dd>(${(t.positionAfter || []).join(", ")})${t.globalPositionAfter ? ` 全体 (${t.globalPositionAfter.join(", ")})` : ""}</dd>
+      ${t.breakpointReasons?.length ? `<dt>停止点</dt><dd>${esc(t.breakpointReasons.join(" / "))}</dd>` : ""}</dl></td></tr>`);
+  });
+  wrap.innerHTML = `<table class="turns"><colgroup><col style="width:38px"><col style="width:66px"><col style="width:76px"><col style="width:86px"><col style="width:58px"><col style="width:56px"><col style="width:62px"><col></colgroup>
+    <thead><tr><th class="r">T</th><th>CMD1</th><th>CMD2</th><th>決めた主体</th><th class="r">応答</th><th class="r">増減</th><th class="r">推定</th><th>イベント / 理由</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  if (S.focus === "live" && near && S.hiTurn == null) wrap.scrollTop = wrap.scrollHeight;
+}
+$("#tblWrap").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.row"); if (!tr) return;
+  const n = Number(tr.dataset.turn); S.expanded.has(n) ? S.expanded.delete(n) : S.expanded.add(n); S.hiTurn = n; mark("table", "chart");
+});
+$("#tabTurns").addEventListener("click", () => { S.tab = "turns"; mark("table"); });
+$("#tabReport").addEventListener("click", () => { S.tab = "report"; if (S.focus !== "live") fetchDiag(S.focus).catch(() => {}); mark("table"); });
+$$("[data-tf]").forEach((b) => b.addEventListener("click", () => { S.tf = b.dataset.tf; mark("table"); }));
+
+function md(src) {
+  const lines = String(src || "").split("\n"); let out = "", list = false, code = false;
+  const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<i>$1</i>");
+  for (const ln of lines) {
+    if (/^```/.test(ln)) { out += code ? "</pre>" : (list ? "</ul>" : "") + "<pre>"; if (!code) list = false; code = !code; continue; }
+    if (code) { out += esc(ln) + "\n"; continue; }
+    const h = /^(#{1,4})\s+(.*)/.exec(ln);
+    if (h) { if (list) { out += "</ul>"; list = false; } out += `<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`; continue; }
+    const li = /^\s*[-*]\s+(.*)/.exec(ln);
+    if (li) { if (!list) { out += "<ul>"; list = true; } out += `<li>${inline(li[1])}</li>`; continue; }
+    if (list) { out += "</ul>"; list = false; }
+    if (ln.trim()) out += `<p>${inline(ln)}</p>`;
+  }
+  return out + (list ? "</ul>" : "") + (code ? "</pre>" : "");
+}
+function renderReport(wrap) {
+  let diag = "", evo = "";
+  if (S.focus === "live") diag = S.st?.diagnosisMarkdown || "";
+  else { const d = S.diag[S.focus]; if (!d) { wrap.innerHTML = `<div class="empty">読み込み中...</div>`; return; } diag = d.diagnosis; evo = d.evolution; }
+  wrap.innerHTML = `<div class="report">
+    <div class="part"><div class="ph">診断(この試合で何が起きたか)</div>${diag ? md(diag) : `<p class="faint">診断はまだありません。試合が終わると作られます。</p>`}</div>
+    <div class="part evo"><div class="ph">進化レポート(この後のソルバー改修)</div>${evo ? md(evo) : `<p class="faint">この試合の後に進化は行われていません。</p>`}</div></div>`;
+}
+
+/* ============ いまの判断 ============ */
+function renderDecide() {
+  const st = S.st, p = st?.prediction, el = $("#decide");
+  if (!st) return;
+  const turns = S.liveTurns, last = turns[turns.length - 1];
+  $("#decWhen").textContent = p ? `ターン ${p.turn}  ${p.phase}` : "";
+  if (!p) { el.innerHTML = `<div class="faint">対戦が始まると、1手ごとの判断がここに出ます。</div>`; return; }
+  const src = p.source, srcLabel = src === "main" ? "main が決定" : src === "solver" ? "solver が決定" : "fallback";
+  const budget = (st.turnBudgetSec || 20) * 1000, lat = last ? latencyOf(last) : 0;
+  let why = "";
+  if (src !== "main") {
+    const bits = [];
+    if (p.breakpointReasons?.length) bits.push(`停止点: ${p.breakpointReasons.join(", ")}`);
+    if (lat >= budget) bits.push(`直前の応答が予算 ${st.turnBudgetSec}秒 を超過(時間切れの可能性)`);
+    else if (!lat && last && srcOf(last, 1) === "solver") bits.push("直前ターンはメインの応答なし(多忙または未呼び出し)");
+    why = `<div class="dim" style="margin-top:6px;font-size:12px">solver の理由(推定): ${esc(bits.join(" / ") || "記録なし")}</div>`;
+  } else if (p.breakpointReasons?.length) why = `<div class="dim" style="margin-top:6px;font-size:12px">停止点: ${esc(p.breakpointReasons.join(", "))}</div>`;
+  const ratio = Math.min(1, lat / budget);
+  const cands = (p.topTargets || []).slice(0, 3).map((t) => `<li><span>${esc(t.tileLabel)} (${t.x},${t.y}) 距離${t.distance}</span><span class="mono">${esc(t.recommendedCmd2)}</span></li>`).join("");
+  const fr = (p.nearestFrontiers || []).slice(0, 3).map((t) => `<li><span>未探索 (${t.x},${t.y}) 距離${t.distance}</span><span class="mono">${esc(t.recommendedCmd2)}</span></li>`).join("");
+  const chip = (t, n) => `<span class="cmd ${srcOf(t, n) || "none"}">${esc(t["cmd" + n] || "-")}</span>`;
+  el.innerHTML = `
+    <div class="now"><div class="big ${src}">${esc(p.command)}</div><div><div class="chip ${src}">${srcLabel}</div><div class="faint" style="font-size:12px">確信度 ${Math.round((p.confidence ?? 0) * 100)}%</div></div></div>
+    <p class="why">${esc(p.reason || "")}</p>${why}
+    <div style="margin-top:10px;font-size:12px" class="dim">メイン応答(直前ターン) <b style="color:var(--ink)">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
+    <div class="meter ${lat >= budget ? "over" : ""}"><i style="width:${ratio * 100}%"></i></div>
+    ${last ? `<div class="prev"><span>直前 T${last.turn}</span>${chip(last, 1)}${chip(last, 2)}<span>${fmt(last.estimatedScoreAfter)}点</span></div>` : ""}
+    ${cands || fr ? `<details class="cand"><summary>候補ルート</summary><ul>${cands}${fr}</ul></details>` : ""}`;
+}
+
+/* ============ マップ ============ */
+const TILE_NAMES = { 0: "穴 -20", 1: "ターゲット +50", 2: "土 +10", 3: "アイテム +30", 4: "ジオード -1000", 5: "化石1 +125", 6: "化石2 +150", 7: "化石3 +175", 8: "化石4 +200", 9: "アンモナイト +100", 10: "岩盤(通行不可)", 12: "奈落 -600" };
+function tileName(v) {
+  if (v === null || v === undefined) return "未探索";
+  if (TILE_NAMES[v]) return TILE_NAMES[v];
+  if (v >= 1000) return `プレイヤー ${v}`;
+  if (v >= 70 && v <= 79) return `ジオーメタル ${v} +400`;
+  if (v >= 60 && v <= 63) return `ブラックスター ${v}`;
+  if (v >= 20 && v <= 53) return `ワープ ${v}`;
+  return `未知 ${v}`;
+}
+function fallbackStyle(v) {
+  if (v === 0) return ["#2b2f33", "#7c858c", "o"]; if (v === 1) return ["#14532d", "#bbf7d0", "T"]; if (v === 2) return ["#6a5238", "#e2cdb0", ","];
+  if (v === 3) return ["#15803d", "#ecfdf5", "*"]; if (v === 4) return ["#991b1b", "#fecaca", "!"]; if (v >= 5 && v <= 8) return ["#a16207", "#fef08a", "F"];
+  if (v === 9) return ["#0f766e", "#ccfbf1", "A"]; if (v === 10) return ["#4b5258", "#c5ccd2", "#"]; if (v === 12) return ["#5c191b", "#fca5a5", "X"];
+  if (v >= 20 && v <= 53) return ["#6b21a8", "#f3e8ff", "W"]; if (v >= 60 && v <= 63) return ["#7e22ce", "#faf5ff", "B"];
+  if (v >= 70 && v <= 79) return ["#c2410c", "#ffedd5", "G"]; if (v >= 1000) return ["#1d4ed8", "#ffffff", "P"];
+  return ["#374151", "#f3f4f6", "?"];
+}
+function tileImg(v) {
+  const name = (v >= 1000 ? String(v).padStart(6, "0") : String(v).padStart(3, "0")) + ".gif";
+  if (S.tileFiles && !S.tileFiles.has(name)) return null;
+  let rec = S.imgs.get(name);
+  if (!rec) {
+    rec = { ok: false, img: new Image() };
+    rec.img.onload = () => { rec.ok = true; mark("map"); };
+    rec.img.onerror = () => { rec.ok = false; rec.failed = true; };
+    rec.img.src = "/assets/tiles/" + name; S.imgs.set(name, rec);
+  }
+  return rec.ok ? rec.img : null;
+}
+fetch("/assets/tiles/manifest.json").then((r) => r.json()).then((m) => {
+  S.tileFiles = new Set((m.files || []).map((f) => String(f.file).split("/").pop())); mark("map");
+}).catch(() => {});
+function renderMap() {
+  const map = S.st?.map, cv = $("#map"), info = $("#mapinfo");
+  $("#mapSrc").textContent = map ? (map.source === "web_map" ? "Web マップ" : "SLAM(推測)") : "";
+  if (!map || !map.grid?.length) {
+    cv.hidden = true; info.innerHTML = `<span class="faint">盤面はまだありません。設定の「選択ルームのマップを取得」か、開始すると表示されます。</span>`; return;
+  }
+  cv.hidden = false;
+  const w = map.width, h = map.height, avail = $("#mapbox").clientWidth - 28 || 296;
+  const cell = Math.max(6, Math.min(24, Math.floor(Math.min(avail / w, 340 / h))));
+  const dpr = 1; cv.width = w * cell * dpr; cv.height = h * cell * dpr; cv.style.width = w * cell + "px"; cv.style.height = h * cell + "px";
+  const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.clearRect(0, 0, cv.width, cv.height);
+  c.fillStyle = cssVar("--unk"); c.fillRect(0, 0, cv.width, cv.height);
+  const hatch = cssVar("--ink3");
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = map.grid[y]?.[x]; const px = x * cell, py = y * cell;
+    if (v === null || v === undefined) { c.strokeStyle = hatch; c.globalAlpha = .35; c.lineWidth = 1; c.beginPath(); c.moveTo(px + 1, py + cell - 1); c.lineTo(px + cell - 1, py + 1); c.stroke(); c.globalAlpha = 1; continue; }
+    const img = tileImg(v);
+    if (img) c.drawImage(img, px, py, cell, cell);
+    else {
+      const [bg, fg, ch] = fallbackStyle(v); c.fillStyle = bg; c.fillRect(px, py, cell, cell);
+      if (cell >= 11) { c.fillStyle = fg; c.font = `600 ${Math.floor(cell * .6)}px ${cssVar("--mono")}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(ch, px + cell / 2, py + cell / 2 + 1); }
+    }
+  }
+  const mid = (p) => [p[0] * cell + cell / 2, p[1] * cell + cell / 2];
+  if (map.trail?.length > 1) { c.strokeStyle = "rgba(255,255,255,.85)"; c.lineWidth = Math.max(4, cell * .38); c.lineJoin = "round"; c.beginPath(); map.trail.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke();
+    c.strokeStyle = "#3447c9"; c.lineWidth = Math.max(2, cell * .22); c.beginPath(); map.trail.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke(); }
+  if (map.plannedPath?.length) { c.setLineDash([4, 3]); c.strokeStyle = "#111"; c.lineWidth = Math.max(4, cell * .38); c.beginPath(); map.plannedPath.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke();
+    c.strokeStyle = "#ffd23f"; c.lineWidth = Math.max(2, cell * .22); c.beginPath(); map.plannedPath.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke(); c.setLineDash([]); }
+  if (map.nextLandingPos) { const [x, y] = map.nextLandingPos; c.strokeStyle = "#ffd23f"; c.lineWidth = 2; c.strokeRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2); }
+  if (map.playerPos) { const [x, y] = map.playerPos; c.strokeStyle = "#fff"; c.lineWidth = 4; c.strokeRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4); c.strokeStyle = "#3447c9"; c.lineWidth = 2.5; c.strokeRect(x * cell + 2, y * cell + 2, cell - 4, cell - 4); }
+  S.mapHit = { cell, w, h };
+  info.innerHTML = `<span>${w} × ${h}</span>${map.playerPos ? `<span>自機 (${map.playerPos.join(", ")})</span>` : ""}<span>青線 軌跡</span><span>黄点線 予測ルート</span>`;
+}
+{
+  const cv = $("#map"), tip = $("#maptip");
+  cv.addEventListener("mousemove", (e) => {
+    const map = S.st?.map; if (!map || !S.mapHit) return;
+    const r = cv.getBoundingClientRect(), x = Math.floor((e.clientX - r.left) / S.mapHit.cell), y = Math.floor((e.clientY - r.top) / S.mapHit.cell);
+    if (x < 0 || y < 0 || x >= map.width || y >= map.height) { tip.hidden = true; return; }
+    const v = map.grid[y]?.[x]; tip.hidden = false; tip.textContent = `(${x}, ${y}) ${tileName(v)}`;
+    const box = $("#mapbox").getBoundingClientRect(); tip.style.left = Math.min(e.clientX - box.left + 10, box.width - tip.offsetWidth - 4) + "px"; tip.style.top = (e.clientY - box.top - 26) + "px";
+  });
+  cv.addEventListener("mouseleave", () => { tip.hidden = true; });
+}
+
+/* ============ 思考ログ ============ */
+let logSig = "";
+function renderLog() {
+  const list = (S.st?.claudeStream || []).filter((e) => S.lf === "all" || e.context === S.lf);
+  $("#logCount").textContent = `${list.length} 件`;
+  $$("[data-lf]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lf === S.lf)));
+  $("#logBlock").classList.toggle("collapsed", S.logCollapsed);
+  $("#logToggle").textContent = S.logCollapsed ? "開く" : "折りたたむ"; $("#logToggle").setAttribute("aria-expanded", String(!S.logCollapsed));
+  const sig = S.lf + "|" + list.length + "|" + (list[list.length - 1]?.id ?? 0); if (sig === logSig) return; logSig = sig;
+  const box = $("#log"); const near = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  const opened = new Set($$("details[open]", box).map((d) => d.dataset.id));
+  box.innerHTML = list.length ? list.map((e) => {
+    const first = (e.title ? e.title + ": " : "") + e.content.replace(/\s+/g, " ").slice(0, 140);
+    return `<details class="lg-ev ${e.kind.startsWith("tool") ? "tool" : ""}" data-id="${e.id}" ${opened.has(String(e.id)) ? "open" : ""}><summary><span class="t">${esc((e.timestamp || "").slice(11, 19))}</span><span class="k ${e.kind}">${esc({ thinking: "思考", text: "発言", tool_use: "ツール", tool_result: "結果", system: "システム", error: "エラー" }[e.kind] || e.kind)}</span><span class="c">${esc(first)} <span class="ctx">${e.context === "evolution" ? "進化" : e.context === "in_game" ? "" : ""}</span></span></summary><pre>${esc(e.content)}</pre></details>`;
+  }).join("") : `<div class="empty">この種別のログはまだありません。</div>`;
+  if (near) box.scrollTop = box.scrollHeight;
+}
+$$("[data-lf]").forEach((b) => b.addEventListener("click", () => { S.lf = b.dataset.lf; logSig = ""; mark("log"); }));
+$("#logToggle").addEventListener("click", () => { S.logCollapsed = !S.logCollapsed; save("chaser.logCollapsed", S.logCollapsed ? "1" : "0"); mark("log"); });
+
+/* ============ 設定ダイアログ ============ */
+const dlg = $("#dlg"); let envRows = [];
+$("#btnSettings").addEventListener("click", () => { dlg.showModal(); loadEnv(); });
+$("#dlgClose").addEventListener("click", () => dlg.close());
+async function loadEnv() {
+  try { const d = await jget("/api/env"); envRows = d.entries || []; renderEnv(); } catch { $("#envBody").textContent = ".env を取得できません"; }
+}
+function renderEnv() {
+  const groups = [["chaser", "CHaserOnline 接続"], ["llm", "LLM ゲートウェイ"], ["other", "その他"]];
+  $("#envBody").innerHTML = groups.map(([g, title]) => {
+    const rows = envRows.map((e, i) => [e, i]).filter(([e]) => e.group === g); if (!rows.length) return "";
+    return `<h3>${title}</h3>` + rows.map(([e, i]) => `<div class="envrow">${g === "other" ? `<input data-k="${i}" value="${esc(e.key)}" placeholder="KEY" />` : `<span class="mono" style="font-size:12px">${esc(e.key)}</span>`}
+      <input data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" />${g === "other" ? `<button class="btn ghost" data-del="${i}" type="button" aria-label="削除">×</button>` : e.secret ? `<button class="btn ghost" data-sec="${i}" type="button">表示</button>` : "<span></span>"}
+      ${e.description ? `<div class="d">${esc(e.description)}</div>` : ""}</div>`).join("");
+  }).join("");
+}
+$("#envBody").addEventListener("input", (e) => { const t = e.target; if (t.dataset.k) envRows[+t.dataset.k].key = t.value; if (t.dataset.v) envRows[+t.dataset.v].value = t.value; });
+$("#envBody").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.del) { envRows.splice(+b.dataset.del, 1); renderEnv(); }
+  if (b.dataset.sec) { const i = $(`[data-v="${b.dataset.sec}"]`); i.type = i.type === "password" ? "text" : "password"; b.textContent = i.type === "password" ? "表示" : "隠す"; }
+});
+$("#envAdd").addEventListener("click", () => { envRows.push({ key: "", value: "", group: "other", secret: false, description: "" }); renderEnv(); });
+$("#envSave").addEventListener("click", async () => {
+  const entries = envRows.filter((e) => e.key && e.key.trim()).map((e) => ({ key: e.key.trim(), value: e.value ?? "" }));
+  try {
+    const d = await (await fetch("/api/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) })).json();
+    $("#envMsg").textContent = d.ok ? "保存しました。実行中のプロセスにも反映済みです" : `保存できません: ${d.error || ""}`;
+    if (d.ok) { envRows = d.entries || envRows; renderEnv(); }
+  } catch { $("#envMsg").textContent = "保存に失敗しました"; }
+});
+async function op(url, body, label) {
+  $("#opMsg").textContent = `${label}...`;
+  try { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }); const d = await r.json(); $("#opMsg").textContent = `${label}: ${d.ok === false ? "失敗" : "完了"}(詳細は思考ログ)`; } catch { $("#opMsg").textContent = `${label}: 通信エラー`; }
+}
+$("#btnPreview").addEventListener("click", () => op("/api/action/preview-map", { room: Number($("#selRoom").value) || S.st?.room }, "マップ取得"));
+$("#btnVerify").addEventListener("click", () => op("/api/action/verify-solver", {}, "ソルバー検証"));
+$("#btnModels").addEventListener("click", loadModels);
+
+/* ============ ライブ状態 ============ */
+function applyState(st) {
+  const prevRun = S.liveRunId, prevStatus = S.st?.status, prevRunning = S.st?.running;
+  S.st = st;
+  if (st.roomProfiles && Object.keys(st.roomProfiles).length) S.rooms = { ...S.rooms, ...st.roomProfiles };
+  if (st.runId !== prevRun) {
+    S.liveRunId = st.runId; S.liveTurns = [...(st.recentTurns || [])];
+    if (st.runId && st.running) { S.focus = "live"; S.hiTurn = null; }
+    if (st.runId) fetch(`/api/runs/${encodeURIComponent(st.runId)}/turns`).then((r) => r.json()).then((d) => {
+      if (st.runId !== S.liveRunId) return;
+      const m = new Map((d.turns || []).map((t) => [t.turn, t])); S.liveTurns.forEach((t) => m.set(t.turn, t));
+      S.liveTurns = [...m.values()].sort((a, b) => a.turn - b.turn); mark("rail", "chart", "runhead", "table");
+    }).catch(() => {});
+    if (prevRun !== null || S.runs.length) fetchRuns();
+  } else if (S.liveTurns.length === 0 && st.recentTurns?.length) S.liveTurns = [...st.recentTurns];
+  if (prevStatus !== undefined && (prevStatus !== st.status && (st.status === "idle" || st.status === "cooldown" || st.status === "evolving") || prevRunning && !st.running)) fetchRuns();
+  if (!S.compareInit && S.runs.length) initCompare();
+  mark("head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log");
+}
+function initCompare() {
+  S.compareInit = true;
+  const b = bestId(S.st?.room); if (b && S.runs.some((r) => r.id === b)) S.compare = [b];
+  else { const first = runsForView()[0]; if (first) S.compare = [first.id]; }
+  S.compare.forEach((id) => fetchTurns(id).catch(() => {}));
+  if (!S.liveTurns.length && !S.st?.running) { const f = S.compare[0]; if (f) { S.focus = f; fetchDiag(f).catch(() => {}); } }
+}
+function connect() {
+  const es = new EventSource("/api/events");
+  es.addEventListener("state", (e) => applyState(JSON.parse(e.data)));
+  es.addEventListener("map", (e) => { if (S.st) { S.st.map = JSON.parse(e.data); mark("map"); } });
+  es.addEventListener("prediction", (e) => { if (S.st) { S.st.prediction = JSON.parse(e.data); mark("decide"); } });
+  es.addEventListener("scores", (e) => { if (S.st) { S.st.scores = JSON.parse(e.data); mark("head", "rail", "runhead"); } });
+  es.addEventListener("turn", (e) => {
+    const t = JSON.parse(e.data); const i = S.liveTurns.findIndex((x) => x.turn === t.turn);
+    if (i >= 0) S.liveTurns[i] = t; else S.liveTurns.push(t);
+    if (S.st) S.st.turn = t.turn;
+    mark("head", "rail", "chart", "runhead", "decide", "table");
+  });
+  es.addEventListener("claude", (e) => {
+    if (!S.st) return; const ev = JSON.parse(e.data); S.st.claudeStream = [...(S.st.claudeStream || []).slice(-199), ev]; mark("log");
+  });
+  es.onerror = () => { $("#statusLabel").textContent = "サーバに再接続中"; $("#dot").className = "dot warn"; };
+}
+(async function boot() {
+  connect();
+  await fetchRuns();
+  try { const st = await jget("/api/state"); if (!S.st) applyState(st); } catch {}
+  if (S.st && !S.compareInit) initCompare();
+  loadModels();
+})();
+</script>
+</body>
+</html>

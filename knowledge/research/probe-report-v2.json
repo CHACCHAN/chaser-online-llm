@@ -1,0 +1,1500 @@
+{
+  "probedAt": "2026-11-20T03:59:25.508Z",
+  "serverPages": {
+    "root": {
+      "url": "",
+      "finalUrl": "http://www7019ug.sakura.ne.jp/CHaserOnline003/Server/",
+      "status": 200,
+      "forms": [],
+      "links": [
+        "MapView.jsp (マップ表示)",
+        "vsResultView.jsp (結果表示)",
+        "vsResultViewWorld.jsp (World表示)",
+        "Ranking.jsp (合計得点ランキング)",
+        "http://www.sakura.ad.jp (SAKURA Internet)"
+      ],
+      "textLines": [
+        "CHaserOnline003",
+        "CHaserOnline",
+        "ver 20260217",
+        "サーバ画面",
+        "マップ表示",
+        "結果表示",
+        "World表示",
+        "合計得点ランキング",
+        "(c)2012 CHaserOnline by zenjouken.com",
+        "Powered by",
+        "SAKURA Internet"
+      ]
+    },
+    "mapViewInitial": {
+      "url": "MapView.jsp",
+      "finalUrl": "http://www7019ug.sakura.ne.jp/CHaserOnline003/Server/MapView.jsp",
+      "status": 200,
+      "forms": [],
+      "links": [
+        "MapView.jsp (マップ表示)",
+        "vsResultView.jsp (結果表示)",
+        "vsResultViewWorld.jsp (World表示)",
+        "Ranking.jsp (合計得点ランキング)",
+        "http://www.sakura.ad.jp (SAKURA Internet)"
+      ],
+      "textLines": [
+        "CHaserOnline003",
+        "CHaserOnline",
+        "ver 20260217",
+        "サーバ画面",
+        "マップ表示",
+        "結果表示",
+        "World表示",
+        "合計得点ランキング",
+        "(c)2012 CHaserOnline by zenjouken.com",
+        "Powered by",
+        "SAKURA Internet"
+      ]
+    },
+    "mapViewLoggedIn": null,
+    "mapViewWithRoom": null,
+    "vsResultInitial": {
+      "url": "vsResultView.jsp",
+      "finalUrl": "http://www7019ug.sakura.ne.jp/CHaserOnline003/Server/vsResultView.jsp",
+      "status": 200,
+      "forms": [
+        {
+          "action": "UserCheck",
+          "method": null,
+          "inputs": [
+            {
+              "type": "text",
+              "name": "user",
+              "value": null
+            },
+            {
+              "type": "text",
+              "name": "pass",
+              "value": null
+            },
+            {
+              "type": "hidden",
+              "name": "select",
+              "value": "vsresultview"
+            },
+            {
+              "type": "submit",
+              "name": null,
+              "value": "Go"
+            }
+          ],
+          "selects": []
+        }
+      ],
+      "links": [
+        "http://www.sakura.ad.jp (SAKURA Internet)"
+      ],
+      "textLines": [
+        "CHaserOnline003",
+        "CHaserOnline",
+        "ver 20260217",
+        "サーバ画面",
+        "user=",
+        "pass=",
+        "(c)2012 CHaserOnline by zenjouken.com",
+        "Powered by",
+        "SAKURA Internet"
+      ]
+    },
+    "vsResultLoggedIn": {
+      "url": "http://www7019ug.sakura.ne.jp/CHaserOnline003/Server/UserCheck",
+      "finalUrl": "http://www7019ug.sakura.ne.jp/CHaserOnline003/Server/UserCheck",
+      "status": 200,
+      "forms": [
+        {
+          "action": "listvsresult",
+          "method": null,
+          "inputs": [
+            {
+              "type": "TEXT",
+              "name": "minStartDate",
+              "value": "Fri"
+            },
+            {
+              "type": "TEXT",
+              "name": "minEndDate",
+              "value": "Fri"
+            },
+            {
+              "type": "TEXT",
+              "name": "minStartTime",
+              "value": "00:00:00"
+            },
+            {
+              "type": "TEXT",
+              "name": "minEndTime",
+              "value": "00:00:00"
+            },
+            {
+              "type": "TEXT",
+              "name": "minRoomNumber",
+              "value": "1"
+            },
+            {
+              "type": "TEXT",
+              "name": "minTurnNumber",
+              "value": "1"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxStartDate",
+              "value": "Fri"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxEndDate",
+              "value": "Fri"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxStartTime",
+              "value": "23:59:59"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxEndTime",
+              "value": "23:59:59"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxRoomNumber",
+              "value": "10000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxTurnNumber",
+              "value": "8"
+            },
+            {
+              "type": "TEXT",
+              "name": "minActionPoint",
+              "value": "-1000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minItemPoint",
+              "value": "-1000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minPutPoint",
+              "value": "0"
+            },
+            {
+              "type": "TEXT",
+              "name": "minPutDamage",
+              "value": "-20000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minTotalPoint",
+              "value": "-30000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minRemTurn",
+              "value": "-10000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minGetTurn",
+              "value": "0"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxActionPoint",
+              "value": "1000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxItemPoint",
+              "value": "1000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxPutPoint",
+              "value": "20000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxPutDamage",
+              "value": "0"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxTotalPoint",
+              "value": "20000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxRemTurn",
+              "value": "10000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxGetTurn",
+              "value": "10000"
+            },
+            {
+              "type": "SUBMIT",
+              "name": null,
+              "value": "Go"
+            }
+          ],
+          "selects": []
+        }
+      ],
+      "links": [
+        "http://www.sakura.ad.jp (SAKURA Internet)"
+      ],
+      "textLines": [
+        "CHaserOnline003",
+        "CHaserOnline",
+        "ver 20260217",
+        "サーバ画面",
+        "開始日",
+        "終了日",
+        "開始時間",
+        "終了時間",
+        "ルーム番号",
+        "接続順",
+        "最小",
+        "最大",
+        "アクションポイント",
+        "アイテムポイント",
+        "Putポイント",
+        "Putダメージ",
+        "総ポイント",
+        "残ターン数",
+        "取得ターン数",
+        "最小",
+        "最大",
+        "(c)2012 CHaserOnline by zenjouken.com",
+        "Powered by",
+        "SAKURA Internet"
+      ]
+    }
+  },
+  "game": {
+    "roomNumber": 3,
+    "enterTextLines": [
+      "CHaserOnline003",
+      "CHaserOnline",
+      "ver 20260217",
+      "ユーザ処理",
+      "command1=",
+      "(c)2012 CHaserOnline by zenjouken.com",
+      "Powered by",
+      "SAKURA Internet"
+    ],
+    "totalTurns": 10,
+    "gameOverReason": "HTTP 500",
+    "tileHistogram": {
+      "0": 97,
+      "2": 2,
+      "3": 14,
+      "12": 55,
+      "1000": 10
+    },
+    "commandResults": [
+      {
+        "phase": "CMD1",
+        "command": "gr",
+        "status": "ACCEPTED",
+        "turn": 1,
+        "elapsedMs": 1725,
+        "beforeGr": null,
+        "cmdValues": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rawReturnCode": "0,0,0,0,1000,0,0,0,0",
+        "afterGr": null,
+        "error": null
+      },
+      {
+        "phase": "CMD2",
+        "command": "wu",
+        "status": "ACCEPTED",
+        "turn": 1,
+        "elapsedMs": 1634,
+        "beforeGr": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmdValues": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rawReturnCode": "0,0,0,0,0,0,0,0,0",
+        "afterGr": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "error": null
+      },
+      {
+        "phase": "CMD2",
+        "command": "du",
+        "status": "ACCEPTED",
+        "turn": 2,
+        "elapsedMs": 1642,
+        "beforeGr": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmdValues": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          0,
+          0,
+          0
+        ],
+        "rawReturnCode": "12,12,12,12,12,12,0,0,0",
+        "afterGr": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "error": null
+      },
+      {
+        "phase": "CMD2",
+        "command": "pd2wu",
+        "status": "ACCEPTED",
+        "turn": 3,
+        "elapsedMs": 1934,
+        "beforeGr": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmdValues": [
+          12,
+          12,
+          12,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rawReturnCode": "12,12,12,0,0,0,0,0,0",
+        "afterGr": [
+          12,
+          12,
+          12,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "error": null
+      },
+      {
+        "phase": "CMD2",
+        "command": "pr3sr",
+        "status": "ACCEPTED",
+        "turn": 4,
+        "elapsedMs": 1939,
+        "beforeGr": [
+          12,
+          12,
+          12,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmdValues": [
+          0,
+          0,
+          0,
+          0,
+          12,
+          12,
+          12
+        ],
+        "rawReturnCode": "0,0,0,0,12,12,12",
+        "afterGr": [
+          0,
+          0,
+          3,
+          0,
+          1000,
+          0,
+          0,
+          2,
+          0
+        ],
+        "error": null
+      },
+      {
+        "phase": "CMD2",
+        "command": "pu3lu",
+        "status": "ACCEPTED",
+        "turn": 5,
+        "elapsedMs": 1945,
+        "beforeGr": [
+          0,
+          0,
+          3,
+          0,
+          1000,
+          0,
+          0,
+          2,
+          0
+        ],
+        "cmdValues": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          3,
+          3,
+          0
+        ],
+        "rawReturnCode": "12,12,12,12,12,12,3,3,0",
+        "afterGr": [
+          3,
+          3,
+          0,
+          0,
+          1000,
+          0,
+          2,
+          0,
+          0
+        ],
+        "error": null
+      },
+      {
+        "phase": "CMD2",
+        "command": "keiru",
+        "status": "ACCEPTED",
+        "turn": 6,
+        "elapsedMs": 1620,
+        "beforeGr": [
+          3,
+          3,
+          0,
+          0,
+          1000,
+          0,
+          2,
+          0,
+          0
+        ],
+        "cmdValues": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          3,
+          0,
+          0
+        ],
+        "rawReturnCode": "12,12,12,12,12,12,3,0,0",
+        "afterGr": [
+          12,
+          12,
+          12,
+          12,
+          1000,
+          12,
+          3,
+          0,
+          0
+        ],
+        "error": null
+      },
+      {
+        "phase": "CMD2",
+        "command": "sd",
+        "status": "REJECTED",
+        "turn": 7,
+        "elapsedMs": 4973,
+        "beforeGr": [
+          12,
+          12,
+          12,
+          12,
+          1000,
+          12,
+          3,
+          0,
+          0
+        ],
+        "cmdValues": null,
+        "rawReturnCode": null,
+        "afterGr": null,
+        "error": "Timeout waiting for CommandCheck"
+      },
+      {
+        "phase": "CMD1",
+        "command": "gru",
+        "status": "ACCEPTED",
+        "turn": 8,
+        "elapsedMs": 1730,
+        "beforeGr": [
+          12,
+          12,
+          12,
+          12,
+          1000,
+          12,
+          3,
+          0,
+          0
+        ],
+        "cmdValues": [
+          12,
+          12,
+          12,
+          12,
+          1000,
+          12,
+          3,
+          0,
+          0
+        ],
+        "rawReturnCode": "12,12,12,12,1000,12,3,0,0",
+        "afterGr": null,
+        "error": null
+      },
+      {
+        "phase": "CMD2",
+        "command": "lu",
+        "status": "REJECTED",
+        "turn": 9,
+        "elapsedMs": 4963,
+        "beforeGr": [
+          12,
+          0,
+          12,
+          3,
+          1000,
+          0,
+          12,
+          0,
+          0
+        ],
+        "cmdValues": null,
+        "rawReturnCode": null,
+        "afterGr": null,
+        "error": "Timeout waiting for CommandCheck"
+      },
+      {
+        "phase": "CMD1",
+        "command": "grr",
+        "status": "ACCEPTED",
+        "turn": 10,
+        "elapsedMs": 1717,
+        "beforeGr": [
+          12,
+          0,
+          12,
+          3,
+          1000,
+          0,
+          12,
+          0,
+          0
+        ],
+        "cmdValues": [
+          12,
+          0,
+          12,
+          0,
+          1000,
+          0,
+          12,
+          0,
+          0
+        ],
+        "rawReturnCode": "12,0,12,0,1000,0,12,0,0",
+        "afterGr": null,
+        "error": null
+      }
+    ],
+    "vsResultAfterGame": {
+      "url": "UserCheck",
+      "finalUrl": "http://www7019ug.sakura.ne.jp/CHaserOnline003/Server/UserCheck",
+      "status": 200,
+      "forms": [
+        {
+          "action": "listvsresult",
+          "method": null,
+          "inputs": [
+            {
+              "type": "TEXT",
+              "name": "minStartDate",
+              "value": "Fri"
+            },
+            {
+              "type": "TEXT",
+              "name": "minEndDate",
+              "value": "Fri"
+            },
+            {
+              "type": "TEXT",
+              "name": "minStartTime",
+              "value": "00:00:00"
+            },
+            {
+              "type": "TEXT",
+              "name": "minEndTime",
+              "value": "00:00:00"
+            },
+            {
+              "type": "TEXT",
+              "name": "minRoomNumber",
+              "value": "1"
+            },
+            {
+              "type": "TEXT",
+              "name": "minTurnNumber",
+              "value": "1"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxStartDate",
+              "value": "Fri"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxEndDate",
+              "value": "Fri"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxStartTime",
+              "value": "23:59:59"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxEndTime",
+              "value": "23:59:59"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxRoomNumber",
+              "value": "10000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxTurnNumber",
+              "value": "8"
+            },
+            {
+              "type": "TEXT",
+              "name": "minActionPoint",
+              "value": "-1000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minItemPoint",
+              "value": "-1000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minPutPoint",
+              "value": "0"
+            },
+            {
+              "type": "TEXT",
+              "name": "minPutDamage",
+              "value": "-20000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minTotalPoint",
+              "value": "-30000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minRemTurn",
+              "value": "-10000"
+            },
+            {
+              "type": "TEXT",
+              "name": "minGetTurn",
+              "value": "0"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxActionPoint",
+              "value": "1000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxItemPoint",
+              "value": "1000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxPutPoint",
+              "value": "20000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxPutDamage",
+              "value": "0"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxTotalPoint",
+              "value": "20000000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxRemTurn",
+              "value": "10000"
+            },
+            {
+              "type": "TEXT",
+              "name": "maxGetTurn",
+              "value": "10000"
+            },
+            {
+              "type": "SUBMIT",
+              "name": null,
+              "value": "Go"
+            }
+          ],
+          "selects": []
+        }
+      ],
+      "links": [
+        "http://www.sakura.ad.jp (SAKURA Internet)"
+      ],
+      "textLines": [
+        "CHaserOnline003",
+        "CHaserOnline",
+        "ver 20260217",
+        "サーバ画面",
+        "開始日",
+        "終了日",
+        "開始時間",
+        "終了時間",
+        "ルーム番号",
+        "接続順",
+        "最小",
+        "最大",
+        "アクションポイント",
+        "アイテムポイント",
+        "Putポイント",
+        "Putダメージ",
+        "総ポイント",
+        "残ターン数",
+        "取得ターン数",
+        "最小",
+        "最大",
+        "(c)2012 CHaserOnline by zenjouken.com",
+        "Powered by",
+        "SAKURA Internet"
+      ]
+    },
+    "turns": [
+      {
+        "turn": 1,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,0,0,1000,0,0,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "wu",
+        "cmd2Values": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=0,0,0,0,0,0,0,0,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1725,
+        "cmd2Ms": 1634,
+        "cmd3Ms": 1135,
+        "rejectedInTurn": []
+      },
+      {
+        "turn": 2,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,0,0,1000,0,0,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "du",
+        "cmd2Values": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          0,
+          0,
+          0
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=12,12,12,12,12,12,0,0,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1743,
+        "cmd2Ms": 1642,
+        "cmd3Ms": 1134,
+        "rejectedInTurn": []
+      },
+      {
+        "turn": 3,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          0,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,0,0,1000,0,0,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "pd2wu",
+        "cmd2Values": [
+          12,
+          12,
+          12,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=12,12,12,0,0,0,0,0,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1741,
+        "cmd2Ms": 1934,
+        "cmd3Ms": 1133,
+        "rejectedInTurn": []
+      },
+      {
+        "turn": 4,
+        "cmd1": "gr",
+        "cmd1Values": [
+          12,
+          12,
+          12,
+          0,
+          1000,
+          0,
+          0,
+          0,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=12,12,12,0,1000,0,0,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "pr3sr",
+        "cmd2Values": [
+          0,
+          0,
+          0,
+          0,
+          12,
+          12,
+          12
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=0,0,0,0,12,12,12",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1728,
+        "cmd2Ms": 1939,
+        "cmd3Ms": 1137,
+        "rejectedInTurn": []
+      },
+      {
+        "turn": 5,
+        "cmd1": "gr",
+        "cmd1Values": [
+          0,
+          0,
+          3,
+          0,
+          1000,
+          0,
+          0,
+          2,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=0,0,3,0,1000,0,0,2,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "pu3lu",
+        "cmd2Values": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          3,
+          3,
+          0
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=12,12,12,12,12,12,3,3,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1724,
+        "cmd2Ms": 1946,
+        "cmd3Ms": 1137,
+        "rejectedInTurn": []
+      },
+      {
+        "turn": 6,
+        "cmd1": "gr",
+        "cmd1Values": [
+          3,
+          3,
+          0,
+          0,
+          1000,
+          0,
+          2,
+          0,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=3,3,0,0,1000,0,2,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "keiru",
+        "cmd2Values": [
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          3,
+          0,
+          0
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=12,12,12,12,12,12,3,0,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1721,
+        "cmd2Ms": 1620,
+        "cmd3Ms": 1136,
+        "rejectedInTurn": []
+      },
+      {
+        "turn": 7,
+        "cmd1": "gr",
+        "cmd1Values": [
+          12,
+          12,
+          12,
+          12,
+          1000,
+          12,
+          3,
+          0,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=12,12,12,12,1000,12,3,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "wd",
+        "cmd2Values": [
+          12,
+          0,
+          12,
+          3,
+          0,
+          0,
+          12,
+          0,
+          0
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=12,0,12,3,0,0,12,0,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 2808,
+        "cmd2Ms": 6593,
+        "cmd3Ms": 1135,
+        "rejectedInTurn": [
+          {
+            "phase": "CMD2",
+            "command": "sd",
+            "error": "Timeout waiting for CommandCheck"
+          }
+        ]
+      },
+      {
+        "turn": 8,
+        "cmd1": "gru",
+        "cmd1Values": [
+          12,
+          12,
+          12,
+          12,
+          1000,
+          12,
+          3,
+          0,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=12,12,12,12,1000,12,3,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "wd",
+        "cmd2Values": [
+          12,
+          0,
+          12,
+          3,
+          0,
+          0,
+          12,
+          0,
+          0
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=12,0,12,3,0,0,12,0,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1730,
+        "cmd2Ms": 1622,
+        "cmd3Ms": 1133,
+        "rejectedInTurn": []
+      },
+      {
+        "turn": 9,
+        "cmd1": "gr",
+        "cmd1Values": [
+          12,
+          0,
+          12,
+          3,
+          1000,
+          0,
+          12,
+          0,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=12,0,12,3,1000,0,12,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "wl",
+        "cmd2Values": [
+          12,
+          12,
+          0,
+          3,
+          3,
+          0,
+          0,
+          12,
+          0
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=12,12,0,3,3,0,0,12,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "command1=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd1Ms": 1726,
+        "cmd2Ms": 6582,
+        "cmd3Ms": 1135,
+        "rejectedInTurn": [
+          {
+            "phase": "CMD2",
+            "command": "lu",
+            "error": "Timeout waiting for CommandCheck"
+          }
+        ]
+      },
+      {
+        "turn": 10,
+        "cmd1": "grr",
+        "cmd1Values": [
+          12,
+          0,
+          12,
+          0,
+          1000,
+          0,
+          12,
+          0,
+          0
+        ],
+        "cmd1TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "GetReady ReturnCode=12,0,12,0,1000,0,12,0,0",
+          "command2=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd2": "wl",
+        "cmd2Values": [
+          12,
+          12,
+          0,
+          3,
+          0,
+          0,
+          0,
+          12,
+          0
+        ],
+        "cmd2TextLines": [
+          "CHaserOnline003",
+          "CHaserOnline",
+          "ver 20260217",
+          "ユーザ処理",
+          "Action ReturnCode=12,12,0,3,0,0,0,12,0",
+          "command3=",
+          "(c)2012 CHaserOnline by zenjouken.com",
+          "Powered by",
+          "SAKURA Internet"
+        ],
+        "cmd3TextLines": null,
+        "cmd1Ms": 1717,
+        "cmd2Ms": 1619,
+        "cmd3Ms": 1561,
+        "rejectedInTurn": []
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-11-20",
+  "version": "20260217",
+  "topUrl": "http://www7019ug.sakura.ne.jp/CHaserOnline003/",
+  "turnTimeLimitSec": {
+    "official": null,
+    "observedSafeAtLeast": 25,
+    "note": "公開情報に記載なし。過去ログで Claude 介入(最大25秒)を挟んだターンでも切断されなかった（単独ルーム）。SETUP.md §1-4 の実測で更新する"
+  },
+  "tileScoresOfficial": false
+}

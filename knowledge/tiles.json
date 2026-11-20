@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-20T07:25:00.000Z",
+  "tiles": {
+    "0": {
+      "name": "hole",
+      "label": "穴",
+      "score": -20,
+      "passable": true,
+      "hazard": false,
+      "symbol": ".",
+      "known": true,
+      "source": "verified"
+    },
+    "1": {
+      "name": "target",
+      "label": "ターゲット",
+      "score": 50,
+      "passable": true,
+      "hazard": false,
+      "symbol": "T",
+      "known": true,
+      "source": "verified"
+    },
+    "2": {
+      "name": "soil",
+      "label": "土",
+      "score": 10,
+      "passable": true,
+      "hazard": false,
+      "symbol": ",",
+      "known": true,
+      "source": "verified"
+    },
+    "3": {
+      "name": "item",
+      "label": "アイテム",
+      "score": 30,
+      "passable": true,
+      "hazard": false,
+      "symbol": "*",
+      "known": true,
+      "source": "verified"
+    },
+    "4": {
+      "name": "geode",
+      "label": "ジオード",
+      "score": -1000,
+      "passable": true,
+      "hazard": true,
+      "symbol": "!",
+      "known": true,
+      "source": "verified"
+    },
+    "5": {
+      "name": "fossil_1",
+      "label": "化石1",
+      "score": 125,
+      "passable": true,
+      "hazard": false,
+      "symbol": "F",
+      "known": true,
+      "source": "verified"
+    },
+    "6": {
+      "name": "fossil_2",
+      "label": "化石2",
+      "score": 150,
+      "passable": true,
+      "hazard": false,
+      "symbol": "F",
+      "known": true,
+      "source": "verified"
+    },
+    "7": {
+      "name": "fossil_3",
+      "label": "化石3",
+      "score": 175,
+      "passable": true,
+      "hazard": false,
+      "symbol": "F",
+      "known": true,
+      "source": "verified"
+    },
+    "8": {
+      "name": "fossil_4",
+      "label": "化石4",
+      "score": 200,
+      "passable": true,
+      "hazard": false,
+      "symbol": "F",
+      "known": true,
+      "source": "verified"
+    },
+    "9": {
+      "name": "ammonite",
+      "label": "アンモナイト",
+      "score": 100,
+      "passable": true,
+      "hazard": false,
+      "symbol": "A",
+      "known": true,
+      "source": "verified"
+    },
+    "10": {
+      "name": "bedrock",
+      "label": "岩盤",
+      "score": -10,
+      "passable": false,
+      "hazard": false,
+      "symbol": "#",
+      "known": true,
+      "source": "verified"
+    },
+    "12": {
+      "name": "abyss",
+      "label": "奈落",
+      "score": -600,
+      "passable": true,
+      "hazard": true,
+      "symbol": "X",
+      "known": true,
+      "source": "verified"
+    }
+  }
+}
