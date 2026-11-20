@@ -763,6 +763,42 @@ export class WorldMap {
     }
   }
 
+  /**
+   * 指定マス (ローカル座標) への最安経路の最初の1歩を返す。目標が未知マスでもよい（隣まで既知なら到達可能とみなす）。
+   * 到達済みなら "here"、経路が無ければ null。メインエージェントの作戦 (plan.target) 追従に使う。
+   */
+  public firstStepTowards(tx: number, ty: number, maxSteps = 60): { dir: Dir; distance: number } | "here" | null {
+    if (tx === this.x && ty === this.y) return "here";
+    const targetKey = coordKey(tx, ty);
+    const walkCost = -CMD2_SPECS.wu.estActionCost;
+    const dist = new Map([[coordKey(this.x, this.y), 0]]);
+    const queue: { x: number; y: number; cost: number; steps: number; first: Dir | null }[] = [
+      { x: this.x, y: this.y, cost: 0, steps: 0, first: null },
+    ];
+    while (queue.length > 0) {
+      queue.sort((a, b) => a.cost - b.cost || a.steps - b.steps);
+      const cur = queue.shift()!;
+      if (cur.steps >= maxSteps) continue;
+      for (const dir of DIRS) {
+        const [dx, dy] = DIR_DELTA[dir];
+        const nx = cur.x + dx;
+        const ny = cur.y + dy;
+        const nKey = coordKey(nx, ny);
+        const first = cur.first ?? dir;
+        if (nKey === targetKey) return { dir: first, distance: cur.steps + 1 };
+        const rec = this.currentMap.get(nKey);
+        if (!rec) continue;
+        const info = getTileInfo(rec.value);
+        if (!info.passable || info.hazard) continue;
+        const nextCost = cur.cost + walkCost + Math.max(0, -info.score) + getHoleRevisitPenalty(rec);
+        if (nextCost >= (dist.get(nKey) ?? Infinity)) continue;
+        dist.set(nKey, nextCost);
+        queue.push({ x: nx, y: ny, cost: nextCost, steps: cur.steps + 1, first });
+      }
+    }
+    return null;
+  }
+
   public findPathTargets(maxSteps = 35): {
     topValueTargets: PathTarget[];
     nearestFrontiers: PathTarget[];

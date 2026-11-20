@@ -30,6 +30,10 @@ export interface TurnRecord {
   mainLatencyMs: number[];
   /** ソルバー手を採用した理由（時間切れ・多忙など）。main が決めたフェーズは含まない */
   solverFallbackNotes: string[];
+  /** メインの返答種別 (例: "CMD1:continue", "CMD2:plan") */
+  mainActions: string[];
+  /** サブへ依頼した仕事 */
+  delegations: string[];
   breakpointReasons: string[];
   positionAfter: [number, number];
   globalPositionAfter: [number, number] | null;
@@ -211,6 +215,8 @@ export async function runAgentMatch(
       let cmd2Source: "main" | "solver" | null = null;
       const mainLatencyMs: number[] = [];
       const solverFallbackNotes: string[] = [];
+      const mainActions: string[] = [];
+      const delegations: string[] = [];
       const breakpointReasons: string[] = [];
 
       /** ソルバー候補 → メインエージェント判断 → 送信 → 観測反映 を1フェーズ分行う */
@@ -220,7 +226,7 @@ export async function runAgentMatch(
         const solverDecision: SolverDecision =
           phase === "CMD1" && turn === 1 && !worldMap.getLastGrid()
             ? { command: "gr", reason: "Initial 3x3 observation on turn 1", confidence: 1.0 }
-            : decideSolver(worldMap, phase, turn);
+            : decideSolver(worldMap, phase, turn, mainAgent?.currentPlan ?? null);
         const events = evaluateBreakpoint({ turn, worldMap, solverDecision }).reasons;
         for (const r of events) if (!breakpointReasons.includes(r)) breakpointReasons.push(r);
         syncUiPredictionAndMap(worldMap, turn, phase, solverDecision, "solver", events);
@@ -229,7 +235,18 @@ export async function runAgentMatch(
         let source: "main" | "solver" = "solver";
         if (mainAgent) {
           uiBus.patchState({ status: "claude_in_game", statusMessage: `T${turn} ${phase} メインエージェント判断中` });
-          const res = await mainAgent.decide({ turn, phase, worldMap, solver: solverDecision, events });
+          const res = await mainAgent.decide({
+            turn,
+            phase,
+            worldMap,
+            events,
+            solve: (plan) =>
+              phase === "CMD1" && turn === 1 && !worldMap.getLastGrid()
+                ? solverDecision
+                : decideSolver(worldMap, phase, turn, plan),
+          });
+          if (res.action) mainActions.push(`${phase}:${res.action}`);
+          if (res.delegated) delegations.push(res.delegated);
           reloadTilesKnowledge();
           if (res.durationMs !== null) mainLatencyMs.push(res.durationMs);
           decision = res.decision;
@@ -336,6 +353,8 @@ export async function runAgentMatch(
         cmd2Source,
         mainLatencyMs,
         solverFallbackNotes,
+        mainActions,
+        delegations,
         breakpointReasons,
         positionAfter: worldMap.getPosition(),
         globalPositionAfter: worldMap.getGlobalPosition(),

@@ -12,6 +12,12 @@ import {
   type WorldMap,
 } from "../memory/world-map";
 
+/** メインエージェントが決める作戦。ソルバーは目標マスへ向かう手を優先する */
+export interface AgentPlan {
+  target: [number, number];
+  note?: string;
+}
+
 export interface SolverDecision {
   command: Cmd1Command | Cmd2Command;
   reason: string;
@@ -28,8 +34,12 @@ export function decideTurnAction(
   worldMap: WorldMap,
   phase: "CMD1" | "CMD2",
   _turn: number,
+  plan: AgentPlan | null = null,
 ): SolverDecision {
   const [x, y] = worldMap.getPosition();
+  const planStepRaw = plan ? worldMap.firstStepTowards(plan.target[0], plan.target[1]) : null;
+  const planStep = planStepRaw && planStepRaw !== "here" ? planStepRaw : null;
+  const planTag = plan && planStep ? `plan(@${plan.target[0]},${plan.target[1]} d=${planStep.distance})` : null;
   const events = worldMap.getLastEventFlags();
 
   if (events.newUnknownTiles.length > 0) {
@@ -52,9 +62,10 @@ export function decideTurnAction(
     let bestScore = stayCost;
 
     const preferredFirstStep =
-      topValueTargets[0] && topValueTargets[0].estimatedNetGain > -35
+      planStep?.dir ??
+      (topValueTargets[0] && topValueTargets[0].estimatedNetGain > -35
         ? topValueTargets[0].firstStep
-        : nearestFrontiers[0]?.firstStep ?? null;
+        : nearestFrontiers[0]?.firstStep ?? null);
 
     for (const dir of DIRS) {
       const [dx, dy] = DIR_DELTA[dir];
@@ -100,7 +111,7 @@ export function decideTurnAction(
       const cmd = `gr${bestDir}` as Cmd1Command;
       return {
         command: cmd,
-        reason: `Double-collect adjacent positive tile via ${cmd} (estNet=${bestScore})`,
+        reason: `${planTag && preferredFirstStep === bestDir ? `${planTag} ` : ""}Forward ${cmd} (estNet=${bestScore})`,
         confidence: 0.92,
       };
     }
@@ -146,11 +157,14 @@ export function decideTurnAction(
       allNeighborsAreHolesOrBlocked = false;
     }
 
-    const immediateScore = val !== null ? getTileInfo(val).score - 15 : 0;
+    const immediateScore = val !== null ? getTileInfo(val).score + CMD2_SPECS[`w${dir}` as Cmd2Command].estActionCost : 0;
     let routeBonus = 0;
     let reasonTag = "walk";
 
-    if (bestTarget && bestTarget.firstStep === dir) {
+    if (planStep && planStep.dir === dir) {
+      routeBonus += 400;
+      reasonTag = planTag!;
+    } else if (bestTarget && bestTarget.firstStep === dir) {
       routeBonus += 260 + Math.max(-60, bestTarget.estimatedNetGain);
       reasonTag = `target(${bestTarget.tileLabel}@${bestTarget.x},${bestTarget.y} d=${bestTarget.distance})`;
     } else if (bestFrontier && bestFrontier.firstStep === dir) {

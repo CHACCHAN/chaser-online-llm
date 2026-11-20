@@ -27,6 +27,8 @@ export interface ClaudeSessionOptions extends ClaudeModelSettings {
   /** --agents に渡すサブエージェント定義 */
   agents?: Record<string, { description: string; prompt: string; model?: string }>;
   context?: ClaudeContext;
+  /** UI の思考ログに付ける名前 (main / sub) */
+  label?: string;
 }
 
 /**
@@ -161,7 +163,7 @@ export class ClaudeSession {
   }
 
   private emit(kind: "thinking" | "text" | "tool_use" | "tool_result" | "system" | "error", title: string, content: string): void {
-    uiBus.pushClaudeEvent({ context: this.context, kind, title, content });
+    uiBus.pushClaudeEvent({ context: this.context, kind, title: this.options.label ? `[${this.options.label}] ${title}` : title, content });
   }
 
   private async pump(stream: ReadableStream<Uint8Array>, onLine: (line: string) => void): Promise<void> {
