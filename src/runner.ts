@@ -36,8 +36,8 @@ export interface TurnRecord {
   delegations: string[];
   /** このターンにエージェント全体（メイン・サブ・要約）が使ったトークン */
   agentTokens?: number;
-  /** ターン終了時点のメインの会話の大きさ（トークン） */
-  mainContextTokens?: number | null;
+  /** このターン最後のメイン問い合わせ1回の入力トークン（キャッシュ込み） */
+  mainInputTokens?: number | null;
   breakpointReasons: string[];
   positionAfter: [number, number];
   globalPositionAfter: [number, number] | null;
@@ -354,7 +354,7 @@ export async function runAgentMatch(
         mainActions,
         delegations,
         ...(mainAgent
-          ? { agentTokens: mainAgent.usage().totalTokens - tokensAtTurnStart, mainContextTokens: mainAgent.usage().mainContextTokens }
+          ? { agentTokens: mainAgent.usage().totalTokens - tokensAtTurnStart, mainInputTokens: mainAgent.usage().lastCallInputTokens }
           : {}),
         breakpointReasons,
         positionAfter: worldMap.getPosition(),
@@ -442,7 +442,7 @@ export async function runAgentMatch(
       mainDecisionRate: phaseSources.length > 0 ? phaseSources.filter((s) => s === "main").length / phaseSources.length : null,
       avgLatencyMs: latencies.length > 0 ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null,
       maxLatencyMs: latencies.length > 0 ? Math.max(...latencies) : null,
-      ...(mainAgent ? { usage: mainAgent.usage() } : {}),
+      ...(mainAgent ? { usage: mainAgent.usage(), finalMemo: mainAgent.currentMemo } : {}),
     },
     unknownTiles: stats.unknownTiles,
   };

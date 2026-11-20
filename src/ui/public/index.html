@@ -282,6 +282,7 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .sub-block .sub-n { flex: 1; min-width: 0; flex-wrap: wrap; }
 .sub-block .sub-body { max-height: 300px; overflow-y: auto; padding-bottom: 6px; }
 .sub-block.collapsed .sub-body { display: none; }
+.memo-block .memo-body { margin: 0; padding: 8px 10px 10px; white-space: pre-wrap; word-break: break-word; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink2); max-height: 220px; overflow-y: auto; }
 .sub-block .sub-n { display: inline-flex; gap: 8px; font-size: 12px; color: var(--ink2); }
 .st-t { border-top: 1px solid var(--line2); }
 .st-t summary { list-style: none; display: grid; grid-template-columns: 18px 1fr auto; gap: 6px; align-items: baseline; padding: 4px 14px; }
@@ -419,6 +420,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <section class="block">
       <div class="sec-h"><h2>マップ</h2><div class="right-end faint" id="mapSrc"></div></div>
       <div class="mapbox" id="mapbox"><canvas id="map" width="10" height="10"></canvas><div class="maptip" id="maptip" hidden></div><div class="mapinfo" id="mapinfo"></div></div>
+    </section>
+    <section class="block memo-block" id="memoBlock">
+      <div class="sec-h"><h2 title="メインは毎フェーズ前の会話なしで呼ばれる。次のフェーズへ引き継ぐのはこのメモと直近の経過・現在の状況だけ">メインのメモ</h2><div class="right-end faint" id="memoLen"></div></div>
+      <pre class="memo-body" id="memoBody">(まだない)</pre>
     </section>
     <section class="block sub-block" id="subBlock">
       <div class="sec-h">
@@ -661,6 +666,8 @@ function renderHead() {
   $("#nTurnSub").textContent = st.maxTurns ? `/ ${st.maxTurns} ターン` : "ターン";
   $("#nEst").textContent = fmt(st.scores.estimatedTotal);
   renderUsage(st.agentUsage);
+  $("#memoBody").textContent = st.agentMemo || "(まだない)";
+  $("#memoLen").textContent = st.agentMemo ? `${st.agentMemo.length}字` : "";
   const live = st.scores.liveOfficial ? st.scores.liveOfficial.totalScore : st.scores.lastOfficialTotal;
   $("#nOff").textContent = fmt(live);
   const hs = st.scores.roomHighScore ?? S.rooms[String(st.room)]?.highScore ?? null;
@@ -1092,11 +1099,11 @@ function renderUsage(u) {
   b.textContent = fmtTok(u.totalTokens) + (u.limitTokens ? ` / ${fmtTok(u.limitTokens)}` : "");
   const ratio = u.limitTokens ? u.totalTokens / u.limitTokens : 0;
   b.style.color = u.limitReached ? "#c0392b" : ratio > 0.8 ? "#b7791f" : "";
-  sub.textContent = u.limitReached ? "上限到達・ソルバーのみ" : `会話 ${fmtTok(u.mainContextTokens)}${u.compacting ? " · 要約中" : ""}${u.compactions ? ` · 要約${u.compactions}回` : ""}`;
+  sub.textContent = u.limitReached ? "上限到達・ソルバーのみ" : `1回 ${fmtTok(u.lastCallInputTokens)}`;
   box.title = [
     `合計 ${(u.totalTokens || 0).toLocaleString()} トークン（上限 ${u.limitTokens ? u.limitTokens.toLocaleString() : "なし"}）`,
-    `メイン ${fmtTok(sumTok(u.main))} / サブ ${fmtTok(sumTok(u.sub))} / 要約 ${fmtTok(sumTok(u.compact))}`,
-    `メインの会話 ${u.mainContextTokens == null ? "-" : u.mainContextTokens.toLocaleString()}（${u.compactAtTokens ? `${u.compactAtTokens.toLocaleString()} を超えたら裏で要約` : "要約なし"}）`,
+    `メイン ${fmtTok(sumTok(u.main))}（${u.main?.calls ?? 0}回） / サブ ${fmtTok(sumTok(u.sub))}`,
+    `メインの直近1回の入力 ${u.lastCallInputTokens == null ? "-" : u.lastCallInputTokens.toLocaleString()} トークン（毎回前の会話なしで聞くので一定）`,
     u.total.costUsd ? `推定コスト ${u.total.costUsd.toFixed(2)}` : "",
   ].filter(Boolean).join("\n");
 }

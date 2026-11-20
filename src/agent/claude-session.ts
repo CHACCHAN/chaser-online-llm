@@ -28,6 +28,12 @@ interface StreamEvent {
 export interface ClaudeSessionOptions extends ClaudeModelSettings {
   /** 既定システムプロンプトの末尾に追加するテキスト */
   appendSystemPrompt?: string;
+  /** Claude Code 既定のシステムプロンプトを丸ごと置き換える（指定時は appendSystemPrompt より優先） */
+  systemPrompt?: string;
+  /** 組み込みツール。"" で全て無効（ツール定義を送らないので1回あたりのトークンが大きく減る） */
+  tools?: string;
+  /** 会話をディスクに保存しない（使い捨ての問い合わせ用） */
+  noSessionPersistence?: boolean;
   /** --agents に渡すサブエージェント定義 */
   agents?: Record<string, { description: string; prompt: string; model?: string }>;
   context?: ClaudeContext;
@@ -79,7 +85,10 @@ export class ClaudeSession {
   start(): void {
     if (this.proc) return;
     const args = [...baseClaudeArgs(this.options), "--input-format", "stream-json"];
-    if (this.options.appendSystemPrompt) args.push("--append-system-prompt", this.options.appendSystemPrompt);
+    if (this.options.systemPrompt !== undefined) args.push("--system-prompt", this.options.systemPrompt);
+    else if (this.options.appendSystemPrompt) args.push("--append-system-prompt", this.options.appendSystemPrompt);
+    if (this.options.tools !== undefined) args.push("--tools", this.options.tools);
+    if (this.options.noSessionPersistence) args.push("--no-session-persistence");
     if (this.options.agents) args.push("--agents", JSON.stringify(this.options.agents));
 
     logger.info({ model: this.options.model ?? null, effort: this.options.effort ?? null }, "Starting persistent Claude session");
@@ -124,6 +133,11 @@ export class ClaudeSession {
       this.proc!.stdin.write(`${JSON.stringify({ type: "user", message: { role: "user", content: text } })}\n`);
       this.proc!.stdin.flush();
     });
+  }
+
+  /** 処理中でもすぐ止める（使い捨ての問い合わせが予算切れになった時など。以降のトークン消費を止める） */
+  kill(): void {
+    this.proc?.kill();
   }
 
   async stop(): Promise<void> {

@@ -112,6 +112,8 @@ export interface UiDashboardState {
   subTasks: UiSubTask[];
   /** 今の試合のエージェント使用量（トークン） */
   agentUsage: AgentUsageReport | null;
+  /** メインが次のフェーズへ引き継ぐメモ */
+  agentMemo: string;
   recentTurns: TurnRecord[];
   diagnosisMarkdown: string;
   roomProfiles: Record<string, RoomProfile>;
@@ -172,6 +174,7 @@ class UiEventBus {
     claudeStream: [],
     subTasks: [],
     agentUsage: null,
+    agentMemo: "",
     recentTurns: [],
     diagnosisMarkdown: "",
     roomProfiles: {},

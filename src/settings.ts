@@ -82,17 +82,17 @@ export const SETTINGS = {
     description: "メインの1フェーズあたりの思考予算（秒、3以上）。超えたらソルバー手を送信",
     defaultValue: "20",
   },
-  AGENT_WARMUP_TIMEOUT_SEC: { group: "llm", description: "試合開始前のメイン準備の待ち上限（秒）", defaultValue: "90" },
+  AGENT_MEMO_MAX_CHARS: {
+    group: "llm",
+    description: "メインが次のフェーズへ引き継ぐメモの上限（字）。メインは毎フェーズ前の会話なしで呼ばれ、メモ・直近の経過・現在の状況だけを受け取る",
+    defaultValue: "2000",
+  },
+  AGENT_RECENT_PHASES: { group: "llm", description: "メインに渡す「直近の経過」のフェーズ数", defaultValue: "20" },
   AGENT_SUB_TASK_TIMEOUT_MIN: { group: "llm", description: "サブの1仕事あたりの上限（分）", defaultValue: "10" },
   AGENT_POST_MATCH_TIMEOUT_MIN: { group: "llm", description: "試合後の振り返り・ソルバー改修の上限（分）", defaultValue: "15" },
-  AGENT_COMPACT_AT_TOKENS: {
-    group: "llm",
-    description: "メインの会話がこのトークン数を超えたら、試合を止めずに裏で要約し、要約入りの新しいメインに入れ替える（0=しない）",
-    defaultValue: "60000",
-  },
   AGENT_MATCH_TOKEN_LIMIT: {
     group: "llm",
-    description: "1試合で使うトークンの上限（メイン・サブ・要約の合計。キャッシュ分も含む。0=無制限）。超えたら残りはソルバーのみで続ける",
+    description: "1試合で使うトークンの上限（メイン・サブの合計。キャッシュ分も含む。0=無制限）。超えたら残りはソルバーのみで続ける",
     defaultValue: "20000000",
   },
   AGENT_EVOLVE_MIN_TURNS: {
