@@ -5,6 +5,7 @@ import { numSetting } from "../settings";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
 import { ClaudeSession } from "./claude-session";
+import { type ProtectedSnapshot, restoreProtectedFiles, snapshotProtectedFiles } from "../evolution/edit-guard";
 import { addUsage, emptyUsage, type UsageTotals } from "./usage";
 
 export interface SubTask {
@@ -51,6 +52,7 @@ export class SubWorker {
   private reported = new Set<number>();
   private current: ClaudeSession | null = null;
   private usageTotals: UsageTotals = emptyUsage();
+  private guard: ProtectedSnapshot | null = null;
 
   constructor(private readonly settings: ClaudeModelSettings) {}
 
@@ -63,6 +65,8 @@ export class SubWorker {
     this.stopped = false;
     this.tasks.length = 0;
     this.reported.clear();
+    // 試合中のサブはツールを使えるが、ハーネス・ソルバー・プロンプト・方針・設定は変えさせない（試合終了時に元に戻す）
+    this.guard = snapshotProtectedFiles({ includeSolver: true });
     this.publish();
   }
 
@@ -114,6 +118,18 @@ export class SubWorker {
       }
     }
     if (changed) this.publish();
+    if (this.guard) {
+      const reverted = restoreProtectedFiles(this.guard);
+      this.guard = null;
+      if (reverted.length > 0) {
+        uiBus.pushClaudeEvent({
+          context: "in_game",
+          kind: "error",
+          title: "[sub] 編集範囲外の変更を元に戻した",
+          content: `試合中のサブが変更できるのは knowledge/・agent/tools/・assets/ 等のみ:\n${reverted.join("\n")}`,
+        });
+      }
+    }
   }
 
   private newSession(): ClaudeSession {

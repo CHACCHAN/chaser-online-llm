@@ -17,6 +17,7 @@ interface StreamEvent {
   type?: string;
   subtype?: string;
   result?: string;
+  is_error?: boolean;
   usage?: Parameters<typeof usageFromRaw>[0];
   total_cost_usd?: number;
   message?: {
@@ -98,7 +99,8 @@ export class ClaudeSession {
     if (this.options.noSessionPersistence) args.push("--no-session-persistence");
     if (this.options.agents) args.push("--agents", JSON.stringify(this.options.agents));
 
-    logger.info({ model: this.options.model ?? null, effort: this.options.effort ?? null }, "Starting persistent Claude session");
+    const log = this.options.quietLifecycle ? logger.debug.bind(logger) : logger.info.bind(logger);
+    log({ model: this.options.model ?? null, effort: this.options.effort ?? null, label: this.options.label ?? null }, "Starting Claude session");
     this.proc = Bun.spawn(args, {
       cwd: PROJECT_ROOT,
       env: buildClaudeEnv(this.options),
@@ -149,8 +151,16 @@ export class ClaudeSession {
           resolve({ status: "timeout", durationMs: Date.now() - startedAt });
         }
       }, timeoutMs);
-      this.proc!.stdin.write(`${JSON.stringify({ type: "user", message: { role: "user", content: text } })}\n`);
-      this.proc!.stdin.flush();
+      try {
+        this.proc!.stdin.write(`${JSON.stringify({ type: "user", message: { role: "user", content: text } })}\n`);
+        this.proc!.stdin.flush();
+      } catch (err) {
+        // 送る直前にプロセスが終わっていた等。例外で試合を止めず、dead として返す
+        this.pending = null;
+        this.busyFlag = false;
+        entry.timedOut = true;
+        resolve({ status: "dead", error: `送信できない: ${err instanceof Error ? err.message : String(err)}` });
+      }
     });
   }
 
@@ -223,8 +233,12 @@ export class ClaudeSession {
       this.pending = null;
       this.busyFlag = false;
       const text = typeof ev.result === "string" ? ev.result : "";
+      // API エラー（モデル名の誤り・ゲートウェイの拒否等）は応答ではないので dead として返し、思考ログにも出す
+      const apiError = ev.is_error === true || (typeof ev.subtype === "string" && ev.subtype.startsWith("error")) || /^API Error:/.test(text);
+      if (apiError) this.emit("error", "API Error", (text || ev.subtype || "unknown").slice(0, 800));
       if (entry && !entry.timedOut) {
-        entry.resolve({ status: "ok", text, durationMs: Date.now() - entry.startedAt });
+        if (apiError) entry.resolve({ status: "dead", error: (text || ev.subtype || "API error").slice(0, 300) });
+        else entry.resolve({ status: "ok", text, durationMs: Date.now() - entry.startedAt });
       } else if (entry) {
         this.emit("system", "Late Result (discarded)", text.slice(0, 600));
       }

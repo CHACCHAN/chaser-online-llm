@@ -90,7 +90,7 @@ function makeRunId(room: number): string {
   return `${stamp}_room${room}`;
 }
 
-/** 読み込み済みのソルバー（ファイルの更新時刻が変わった時だけ読み直す。毎フェーズ読み直すとモジュールが溜まり続ける） */
+/** 読み込み済みのソルバー（ファイルの更新時刻が変わった時だけ読み直す。同じものを何度も読み込むとモジュールが溜まり続ける） */
 let solverCache: { mtimeMs: number; fn: typeof defaultDecideTurnAction } | null = null;
 
 async function loadActiveSolver(): Promise<typeof defaultDecideTurnAction> {
@@ -187,6 +187,8 @@ export async function runAgentMatch(
   });
   uiBus.updateMap(worldMap.buildUiMapState(null));
 
+  // ソルバーは試合開始時に1回だけ読み込む（試合中にファイルが変わっても、この試合は同じソルバーで通す）
+  const decideSolver = await loadActiveSolver();
   const turnLogs: TurnRecord[] = [];
   const commandCounts: Record<string, number> = {};
   let gameOverReason: string | null = null;
@@ -235,7 +237,6 @@ export async function runAgentMatch(
       /** ソルバー候補 → メインエージェント判断 → 送信 → 観測反映 を1フェーズ分行う */
       const playPhase = async (phase: "CMD1" | "CMD2"): Promise<{ command: string; reason: string; values: number[] | null; source: "main" | "solver" }> => {
         uiBus.patchState({ turn, phase: phase === "CMD1" ? "READY_CMD1" : "READY_CMD2" });
-        const decideSolver = await loadActiveSolver();
         const solverDecision: SolverDecision =
           decideSolver(worldMap, phase, turn, mainAgent?.currentPlan ?? null);
         const events = evaluateBreakpoint({ turn, worldMap, solverDecision }).reasons;

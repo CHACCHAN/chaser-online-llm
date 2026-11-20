@@ -29,3 +29,16 @@ test("振り返り中のエージェントの変更は戻し、WebUI からの�
     if (origEnv !== null) writeFileSync(env, origEnv);
   }
 });
+
+test("試合中のサブ用ガードはソルバーの変更も戻す", () => {
+  const solver = path.join(PROJECT_ROOT, "src/solver/active-solver.ts");
+  const orig = readFileSync(solver, "utf-8");
+  try {
+    const snap = snapshotProtectedFiles({ includeSolver: true });
+    writeFileSync(solver, `${orig}\n// sub が勝手に編集\n`);
+    expect(restoreProtectedFiles(snap)).toContain("src/solver/active-solver.ts");
+    expect(readFileSync(solver, "utf-8")).toBe(orig);
+  } finally {
+    writeFileSync(solver, orig);
+  }
+});

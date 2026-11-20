@@ -25,6 +25,8 @@ export type ProtectedSnapshot = Map<string, string>;
 
 /** 振り返り中に取っているスナップショット（ユーザーの WebUI 編集を「正」として反映するため） */
 const activeSnapshots = new Set<ProtectedSnapshot>();
+/** ソルバーも保護するスナップショット（試合中のサブ用。試合中はソルバーも編集禁止） */
+const includesSolver = new WeakSet<ProtectedSnapshot>();
 
 /**
  * ユーザーが WebUI から保護対象（.env・作戦方針）を書き換えた時に呼ぶ。
@@ -40,19 +42,20 @@ export function noteUserEdit(absPath: string): void {
   }
 }
 
-function scanProtected(): ProtectedSnapshot {
+function scanProtected(includeSolver = false): ProtectedSnapshot {
   const snap: ProtectedSnapshot = new Map();
   for (const pattern of PROTECTED_GLOBS) {
     for (const rel of new Bun.Glob(pattern).scanSync({ cwd: PROJECT_ROOT, onlyFiles: true })) {
-      if (!ALLOWED.has(rel)) snap.set(rel, readFileSync(path.join(PROJECT_ROOT, rel), "utf-8"));
+      if (includeSolver || !ALLOWED.has(rel)) snap.set(rel, readFileSync(path.join(PROJECT_ROOT, rel), "utf-8"));
     }
   }
   return snap;
 }
 
 /** 振り返りの前に呼ぶ。restoreProtectedFiles まで WebUI からの編集を追跡する */
-export function snapshotProtectedFiles(): ProtectedSnapshot {
-  const snap = scanProtected();
+export function snapshotProtectedFiles(opts: { includeSolver?: boolean } = {}): ProtectedSnapshot {
+  const snap = scanProtected(opts.includeSolver);
+  if (opts.includeSolver) includesSolver.add(snap);
   activeSnapshots.add(snap);
   return snap;
 }
@@ -61,7 +64,7 @@ export function snapshotProtectedFiles(): ProtectedSnapshot {
 export function restoreProtectedFiles(before: ProtectedSnapshot): string[] {
   activeSnapshots.delete(before);
   const reverted: string[] = [];
-  const after = scanProtected();
+  const after = scanProtected(includesSolver.has(before));
   for (const [rel, content] of before) {
     if (after.get(rel) !== content) {
       writeFileSync(path.join(PROJECT_ROOT, rel), content, "utf-8");
