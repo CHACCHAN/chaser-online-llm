@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "cli": "bun src/cli.ts",
-    "verify-solver": "bun src/verify.ts"
+    "verify-solver": "bun src/verify.ts",
+    "play": "bun src/play.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

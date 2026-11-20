@@ -4,8 +4,15 @@
   "topUrl": "http://www7019ug.sakura.ne.jp/CHaserOnline003/",
   "turnTimeLimitSec": {
     "official": null,
-    "observedSafeAtLeast": 25,
-    "note": "公開情報に記載なし。過去ログで Claude 介入(最大25秒)を挟んだターンでも切断されなかった（単独ルーム）。SETUP.md §1-4 の実測で更新する"
+    "observedSafeAtLeast": 120,
+    "measuredAt": "2026-11-20",
+    "room": 3,
+    "method": "agent/tools/measure-turn-timeout.ts: CMD1 送信前に 5/15/30/60/90/120 秒待機 → 全て切断なし",
+    "note": "上限は未確認（120秒超は未試験）。単独ルームでの値"
   },
-  "tileScoresOfficial": false
+  "tileScoresOfficial": false,
+  "serverResponseMs": {
+    "perCommand": 1600,
+    "note": "CMD1/CMD2 とも約1.54〜1.64秒でほぼ一定（サーバ側の固定待ちと思われる）"
+  }
 }
