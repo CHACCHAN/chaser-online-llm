@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { WorldMap } from "../memory/world-map";
 import { decideTurnAction } from "../solver/active-solver";
 import { type AskResult, ClaudeSession, type ClaudeSessionOptions } from "./claude-session";
+import { readFileSync } from "node:fs";
+import { CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH } from "../paths";
 import { MainAgent } from "./main-agent";
 import { emptyUsage, type UsageTotals } from "./usage";
 
@@ -128,6 +130,9 @@ test("サブへの依頼は TODO として次のフェーズ以降のメッセ�
   expect(mains[0]!.text).not.toContain("サブへの依頼（TODO）");
   expect(mains[1]!.text).toContain("サブへの依頼（TODO）");
   expect(mains[1]!.text).toMatch(/#1 \[(待機|作業中|完了)[^\]]*\] T1 CMD1に依頼: タイル15の得点を調べる/);
+  // 人が見られるようにファイルにも書き出す
+  expect(readFileSync(CURRENT_ASK_SUB_PATH, "utf-8")).toContain("タイル15の得点を調べる");
+  expect(readFileSync(CURRENT_MEMO_PATH, "utf-8")).toContain("まで: 北へ");
   await agent.end();
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });

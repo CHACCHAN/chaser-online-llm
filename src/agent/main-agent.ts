@@ -1,14 +1,14 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CMD1_COMMANDS, CMD2_COMMANDS, type WorldMap } from "../memory/world-map";
-import { AGENT_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
+import { AGENT_DIR, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, STRATEGY_PATH, VAR_DIR } from "../paths";
 import { numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
 import { type AskResult, ClaudeSession } from "./claude-session";
 import { activePolicyPrompt } from "./policy";
-import { SubWorker } from "./sub-worker";
+import { formatSubTodoLine, SubWorker } from "./sub-worker";
 import { addUsage, emptyUsage, totalTokens, type UsageTotals } from "./usage";
 
 export const CURRENT_SNAPSHOT_PATH = path.join(VAR_DIR, "current/snapshot.json");
@@ -169,7 +169,7 @@ export class MainAgent {
     const res = await session.ask(
       [
         "[POST-MATCH] 試合が終わった。あなたは試合中のメインエージェント（作戦係）として振り返り、改善せよ。この振り返りではツールを使ってよい。",
-        `試合: ${this.matchInfo} / ログ: ${runDir}/turns.jsonl（各ターンの手・観測・判断主体）, ${runDir}/summary.json`,
+        `試合: ${this.matchInfo} / ログ: ${runDir}/turns.jsonl（各ターンの手・観測・判断主体）, ${runDir}/summary.json, ${runDir}/MEMO.md, ${runDir}/ASK_SUB.md（依頼と結果の全文）`,
         "",
         "## 試合中のあなたのメモ（最終）",
         this.memo || "(なし)",
@@ -318,6 +318,23 @@ export class MainAgent {
 
   private publish(): void {
     uiBus.patchState({ agentUsage: this.usage(), agentMemo: this.memo });
+    try {
+      mkdirSync(path.dirname(CURRENT_MEMO_PATH), { recursive: true });
+      writeFileSync(CURRENT_MEMO_PATH, `# メインのメモ\n\nハーネスが毎フェーズ書き出す。編集しても試合には反映されない。\n\n${this.memo || "(まだない)"}\n`);
+    } catch {
+      // 書き出しに失敗しても試合は続ける
+    }
+  }
+
+  /** 試合の記録フォルダへ MEMO.md / ASK_SUB.md を残す */
+  archiveFiles(runDir: string): void {
+    for (const f of [CURRENT_MEMO_PATH, CURRENT_ASK_SUB_PATH]) {
+      try {
+        if (existsSync(f)) copyFileSync(f, path.join(runDir, path.basename(f)));
+      } catch {
+        // ignore
+      }
+    }
   }
 
   /** 作戦目標への到達・到達不能を検知して作戦を解除し、次のメッセージで知らせる */
@@ -345,11 +362,7 @@ export class MainAgent {
   private formatSubTodo(): string {
     const tasks = this.sub.all();
     if (tasks.length === 0) return "";
-    const label = { queued: "待機", running: "作業中", done: "完了", failed: "失敗" } as const;
-    const rows = tasks.slice(-numSetting("AGENT_SUB_TODO_ITEMS", { min: 1, integer: true })).map((t) => {
-      const elapsed = t.status === "running" && t.startedAt ? ` ${Math.round((Date.now() - t.startedAt) / 1000)}s経過` : "";
-      return `- #${t.id} [${label[t.status]}${elapsed}] ${t.requestedAt ? `${t.requestedAt}に依頼: ` : ""}${t.request.slice(0, 120)}`;
-    });
+    const rows = tasks.slice(-numSetting("AGENT_SUB_TODO_ITEMS", { min: 1, integer: true })).map((t) => formatSubTodoLine(t));
     return ["## サブへの依頼（TODO）", ...rows].join("\n");
   }
 

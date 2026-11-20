@@ -462,6 +462,7 @@ export async function runAgentMatch(
   await Bun.write(path.join(runDir, "final-map.txt"), worldMap.renderAscii(15));
   await Bun.write(path.join(runDir, "summary.json"), JSON.stringify(summary, null, 2));
   await Bun.write(path.join(runDir, "diagnosis.md"), diagnosis.markdownReport);
+  mainAgent?.archiveFiles(runDir);
 
   const solverPath = SOLVER_PATH;
   if (existsSync(solverPath)) {

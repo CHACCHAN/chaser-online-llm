@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { AGENT_DIR } from "../paths";
+import { AGENT_DIR, CURRENT_ASK_SUB_PATH } from "../paths";
 import { numSetting } from "../settings";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
@@ -16,6 +16,25 @@ export interface SubTask {
   /** 依頼したフェーズ（メインへの TODO 表示用） */
   requestedAt?: string;
   startedAt?: number;
+}
+
+const STATUS_LABEL = { queued: "待機", running: "作業中", done: "完了", failed: "失敗" } as const;
+
+/** TODO の1行（メインへのメッセージと ASK_SUB.md で共通） */
+export function formatSubTodoLine(t: SubTask, now = Date.now()): string {
+  const elapsed = t.status === "running" && t.startedAt ? ` ${Math.round((now - t.startedAt) / 1000)}s経過` : "";
+  return `- #${t.id} [${STATUS_LABEL[t.status]}${elapsed}] ${t.requestedAt ? `${t.requestedAt}に依頼: ` : ""}${t.request.slice(0, 120)}`;
+}
+
+/** var/current/ASK_SUB.md の中身（依頼全文と結果つき） */
+export function renderAskSubFile(tasks: SubTask[]): string {
+  const lines = ["# サブへの依頼（この試合）", "", "ハーネスが自動で書き出す。編集しても試合には反映されない。", ""];
+  if (tasks.length === 0) lines.push("(まだない)");
+  for (const t of tasks) {
+    lines.push(`## #${t.id} [${STATUS_LABEL[t.status]}] ${t.requestedAt ?? ""}`.trimEnd(), "", "依頼:", t.request, "");
+    if (t.result !== null) lines.push(`結果${t.durationMs ? `（${Math.round(t.durationMs / 1000)}s）` : ""}:`, t.result, "");
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 /**
@@ -42,11 +61,19 @@ export class SubWorker {
 
   start(): void {
     this.stopped = false;
+    this.tasks.length = 0;
+    this.reported.clear();
     this.publish();
   }
 
   private publish(): void {
     uiBus.patchState({ subTasks: this.tasks.map((t) => ({ ...t })) });
+    try {
+      mkdirSync(path.dirname(CURRENT_ASK_SUB_PATH), { recursive: true });
+      writeFileSync(CURRENT_ASK_SUB_PATH, renderAskSubFile(this.tasks));
+    } catch {
+      // 書き出しに失敗しても試合は続ける
+    }
   }
 
   enqueue(request: string, requestedAt?: string): SubTask {

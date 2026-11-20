@@ -25,3 +25,9 @@ export const RUNS_DIR = path.join(VAR_DIR, "runs");
 export const ROOM_PROFILES_PATH = path.join(VAR_DIR, "room-profiles.json");
 export const BEST_SOLVERS_DIR = path.join(VAR_DIR, "best-solvers");
 export const CLAUDE_HOME_DIR = path.join(VAR_DIR, "claude-home");
+/** 試合中の現在の状態（毎フェーズ更新。試合後に var/runs/<runId>/ へコピー） */
+export const CURRENT_DIR = path.join(VAR_DIR, "current");
+/** メインが次のフェーズへ引き継ぐメモ */
+export const CURRENT_MEMO_PATH = path.join(CURRENT_DIR, "MEMO.md");
+/** サブへの依頼一覧と結果 */
+export const CURRENT_ASK_SUB_PATH = path.join(CURRENT_DIR, "ASK_SUB.md");

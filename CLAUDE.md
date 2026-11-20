@@ -23,7 +23,7 @@ CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/
 | `knowledge/` | 永続知識（tiles.json, strategy.md, research/） |
 | `agent/` | エージェント用手順書・プロンプト・`tools/`（エージェントが作るツール） |
 | `assets/` | 公式タイル GIF（`assets/tiles/manifest.json`） |
-| `var/` | 実行時データ（runs/, room-profiles.json, best-solvers/, claude-home/, current/snapshot.json）。git 管理外 |
+| `var/` | 実行時データ（runs/, room-profiles.json, best-solvers/, claude-home/, current/snapshot.json・MEMO.md・ASK_SUB.md）。git 管理外 |
 
 ## 1. CLI ツール (`bun src/cli.ts`)
 
