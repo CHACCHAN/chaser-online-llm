@@ -77,7 +77,7 @@ test("毎フェーズ使い捨ての問い合わせで、メモと直近の経�
   const mains = sent.filter((s) => s.label === "main");
   expect(mains.length).toBe(6);
   // 問い合わせごとに別プロセス（＋次の分を先に起動）、ツールなし・保存なし・システムプロンプト置き換え
-  expect(spawned).toBe(8); // サブ1 ＋ メイン6回分 ＋ 次のフェーズ用に先に起動した1
+  expect(spawned).toBe(7); // メイン6回分 ＋ 次のフェーズ用に先に起動した1（サブは仕事が来た時だけ起動）
   for (const s of mains) {
     expect(s.options.tools).toBe("");
     expect(s.options.noSessionPersistence).toBe(true);

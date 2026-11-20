@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { AGENT_DIR } from "../paths";
 import { numSetting } from "../settings";
-import type { ClaudeModelSettings } from "./claude-env";
 import { uiBus } from "../ui/event-bus";
+import type { ClaudeModelSettings } from "./claude-env";
 import { ClaudeSession } from "./claude-session";
+import { addUsage, emptyUsage, type UsageTotals } from "./usage";
 
 export interface SubTask {
   id: number;
@@ -14,36 +15,30 @@ export interface SubTask {
   durationMs: number | null;
 }
 
-
 /**
- * メインエージェントから仕事（調査・ツール作成・ログ分析）を受け取り、裏で順番に処理する常駐サブエージェント。
- * メインは待たずに毎ターン返答でき、結果は次のターンのメッセージで受け取る。
+ * メインエージェントから仕事（調査・ツール作成・ログ分析）を受け取り、裏で順番に処理するサブエージェント。
+ * 仕事ごとに新しい Claude Code セッション（ツールあり・保存なし）を起動し、返答したら閉じる。
+ * 前の仕事の会話は持ち越さない（必要な情報は依頼文・ファイル・ツールの出力で渡す）。
+ * メインは待たずに毎フェーズ返答でき、結果は後のフェーズのメッセージで受け取る。
  */
 export class SubWorker {
-  private readonly session: ClaudeSession;
   private readonly tasks: SubTask[] = [];
   private nextId = 1;
   private running = false;
+  private stopped = false;
   private reported = new Set<number>();
+  private current: ClaudeSession | null = null;
+  private usageTotals: UsageTotals = emptyUsage();
 
-  constructor(settings: ClaudeModelSettings) {
-    this.session = new ClaudeSession({
-      model: settings.subModel || settings.model,
-      subModel: settings.subModel,
-      effort: settings.subEffort || settings.effort,
-      context: "in_game",
-      label: "sub",
-      appendSystemPrompt: readFileSync(path.join(AGENT_DIR, "prompts/sub.md"), "utf-8"),
-    });
-  }
+  constructor(private readonly settings: ClaudeModelSettings) {}
 
-  /** サブの累計使用量 */
-  get usage() {
-    return this.session.usage;
+  /** サブの累計使用量（終わった仕事の分。実行中の仕事は終わった時点で加算） */
+  get usage(): UsageTotals {
+    return { ...this.usageTotals };
   }
 
   start(): void {
-    this.session.start();
+    this.stopped = false;
     this.publish();
   }
 
@@ -71,28 +66,48 @@ export class SubWorker {
     return done;
   }
 
+  /** 試合終了: 実行中の仕事は止め、待機中の仕事は流さない */
   async stop(): Promise<void> {
-    await this.session.stop();
+    this.stopped = true;
+    this.current?.kill();
+  }
+
+  private newSession(): ClaudeSession {
+    const s = new ClaudeSession({
+      model: this.settings.subModel || this.settings.model,
+      subModel: this.settings.subModel,
+      effort: this.settings.subEffort || this.settings.effort,
+      context: "in_game",
+      label: "sub",
+      appendSystemPrompt: readFileSync(path.join(AGENT_DIR, "prompts/sub.md"), "utf-8"),
+      noSessionPersistence: true,
+    });
+    s.start();
+    return s;
   }
 
   private async pump(): Promise<void> {
     if (this.running) return;
     this.running = true;
     try {
-      for (let task = this.tasks.find((t) => t.status === "queued"); task; task = this.tasks.find((t) => t.status === "queued")) {
+      for (let task = this.tasks.find((t) => t.status === "queued"); task && !this.stopped; task = this.tasks.find((t) => t.status === "queued")) {
         task.status = "running";
         this.publish();
-        const res = await this.session.ask(`[TASK #${task.id}] ${task.request}`, numSetting("AGENT_SUB_TASK_TIMEOUT_MIN", { min: 1 }) * 60_000);
+        const session = this.newSession();
+        this.current = session;
+        const res = await session.ask(`[TASK #${task.id}] ${task.request}`, numSetting("AGENT_SUB_TASK_TIMEOUT_MIN", { min: 1 }) * 60_000);
         if (res.status === "ok") {
           task.status = "done";
           task.result = res.text.slice(0, 1500);
           task.durationMs = res.durationMs;
+          await session.stop();
         } else {
           task.status = "failed";
           task.result = res.status === "dead" ? res.error : res.status;
-          // タイムアウト時はセッションが処理を続けている可能性があるので、終わるまで次を流さない
-          while (this.session.busy) await Bun.sleep(1000);
+          session.kill(); // 上限超過: 止めて以降の消費を断つ
         }
+        this.usageTotals = addUsage(this.usageTotals, session.usage);
+        this.current = null;
         this.publish();
       }
     } finally {
