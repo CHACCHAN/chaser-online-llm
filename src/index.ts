@@ -2,7 +2,7 @@ import { Client } from "./client";
 import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
 import { waitAwareClientConfig } from "./client/wait-status";
-import { boolSetting } from "./settings";
+import { boolSetting, numSetting } from "./settings";
 import { getRoomProfile, knownTotalTurns, loadRoomProfiles } from "./memory/knowledge-store";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { totalTokens } from "./agent/usage";
@@ -220,7 +220,26 @@ async function main() {
     }
     // 連続モードの次の試合など、準備が済んでいなければ入室前に準備する（直前の試合も読ませる）
     if (!isPrepared()) {
-      const ok = await doPrep();
+      let ok = await doPrep();
+      // 連続モードで準備に失敗したら（LLM の利用制限など）、待ってやり直す。止める・一時停止・連続を切ると抜ける
+      const retryMin = numSetting("AGENT_PREP_RETRY_MIN", { min: 0 });
+      const keepTrying = () => {
+        const s = uiBus.getState();
+        return retryMin > 0 && s.autoContinue && !s.stopRequested && !s.pauseRequested;
+      };
+      for (let attempt = 1; !ok && matchIndex > 0 && keepTrying(); attempt++) {
+        const until = Date.now() + retryMin * 60_000;
+        const error = uiBus.getState().prep.error ?? "不明";
+        while (Date.now() < until && keepTrying()) {
+          uiBus.patchState({
+            status: "cooldown",
+            statusMessage: `次の試合の準備に失敗（${error.slice(0, 80)}）。${Math.ceil((until - Date.now()) / 60_000)}分後にやり直します（${attempt}回目、AGENT_PREP_RETRY_MIN）`,
+          });
+          await Bun.sleep(5000);
+        }
+        if (!keepTrying()) break;
+        ok = await doPrep();
+      }
       if (!ok || uiBus.getState().stopRequested) {
         uiBus.patchState({ running: false });
         continue;

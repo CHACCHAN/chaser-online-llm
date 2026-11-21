@@ -93,6 +93,7 @@ export const SETTINGS = {
     defaultValue: "true",
   },
   AGENT_PREP_TIMEOUT_SEC: { group: "llm", description: "準備フェーズの上限（秒）。超えたらメモなしで試合を始める", defaultValue: "180" },
+  AGENT_PREP_RETRY_MIN: { group: "llm", description: "連続モードで次の試合の準備に失敗した時（LLM の利用制限・ゲートウェイの停止など）、この分だけ待って準備をやり直す（0=やり直さず止まる）", defaultValue: "5" },
   AGENT_PREP_PAST_RUNS: { group: "llm", description: "準備フェーズで読ませる、このルームの過去の試合の数（新しい順）", defaultValue: "5" },
   AGENT_MEMO_MAX_CHARS: {
     group: "llm",
@@ -142,7 +143,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC"] },
   { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_API_URL", "LLM_API_KEY", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },
   { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
-  { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_PAST_RUNS"] },
+  { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
   { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_CONCURRENCY", "AGENT_SUB_TASK_TIMEOUT_MIN"] },
   { id: "post", title: "試合後（進化・レビュー）", keys: ["AGENT_EVOLVE", "AGENT_EVOLVE_MIN_TURNS", "AGENT_POST_MATCH_TIMEOUT_MIN", "AGENT_REVIEW", "AGENT_REVIEW_TIMEOUT_SEC", "AGENT_REVIEW_KEEP"] },
   { id: "other", title: "その他", keys: ["PORT"] },
