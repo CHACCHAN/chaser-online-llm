@@ -374,8 +374,9 @@ export class MainAgent {
     this.applyMemo(reply);
     let delegated: string | null = null;
     if (reply.delegate) {
-      const task = this.sub.enqueue(reply.delegate, `T${ctx.turn} ${ctx.phase}`);
+      const { task, cancelled } = this.sub.enqueue(reply.delegate, `T${ctx.turn} ${ctx.phase}`);
       delegated = `#${task.id} ${reply.delegate.slice(0, 80)}`;
+      if (cancelled.length > 0) this.notices.push(`サブの待機 ${cancelled.map((t) => `#${t.id}`).join(",")} を取り消し、新しい依頼 #${task.id} を待機に入れた`);
     }
 
     let decision = solverNow;
@@ -550,10 +551,11 @@ export class MainAgent {
 
   /** サブに頼んだ仕事の一覧（メインは前の会話を持たないので、同じ依頼の重複を防ぐために毎回渡す） */
   private formatSubTodo(): string {
-    const tasks = this.sub.all();
+    // 取り消した依頼は一覧に出さない（取り消した時に知らせている）
+    const tasks = this.sub.all().filter((t) => t.status !== "cancelled");
     if (tasks.length === 0) return "";
     const rows = tasks.slice(-numSetting("AGENT_SUB_TODO_ITEMS", { min: 1, integer: true })).map((t) => formatSubTodoLine(t));
-    return ["## サブへの依頼（TODO）", ...rows].join("\n");
+    return [`## サブへの依頼（TODO）— ${this.sub.summary()}`, ...rows].join("\n");
   }
 
   private async writeSnapshot(worldMap: WorldMap): Promise<void> {

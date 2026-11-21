@@ -64,7 +64,7 @@ export interface UiPredictionState {
 export interface UiSubTask {
   id: number;
   request: string;
-  status: "queued" | "running" | "done" | "failed";
+  status: "queued" | "running" | "done" | "failed" | "cancelled";
   result: string | null;
   durationMs: number | null;
 }

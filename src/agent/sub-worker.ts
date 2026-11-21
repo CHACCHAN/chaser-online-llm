@@ -11,7 +11,7 @@ import { addUsage, emptyUsage, type UsageTotals } from "./usage";
 export interface SubTask {
   id: number;
   request: string;
-  status: "queued" | "running" | "done" | "failed";
+  status: "queued" | "running" | "done" | "failed" | "cancelled";
   result: string | null;
   durationMs: number | null;
   /** 依頼したフェーズ（メインへの TODO 表示用） */
@@ -19,7 +19,7 @@ export interface SubTask {
   startedAt?: number;
 }
 
-const STATUS_LABEL = { queued: "待機", running: "作業中", done: "完了", failed: "失敗" } as const;
+const STATUS_LABEL = { queued: "待機", running: "作業中", done: "完了", failed: "失敗", cancelled: "取消" } as const;
 
 /** TODO の1行（メインへのメッセージと ASK_SUB.md で共通） */
 export function formatSubTodoLine(t: SubTask, now = Date.now()): string {
@@ -80,12 +80,40 @@ export class SubWorker {
     }
   }
 
-  enqueue(request: string, requestedAt?: string): SubTask {
+  /**
+   * 仕事を足す。待機が上限（AGENT_SUB_MAX_QUEUED）を超えたら古い待機から取り消す。
+   * サブは1件ずつ処理するので、毎フェーズ依頼されると待ちが溜まり（deepseek で 106 件）、届く結果が何十ターンも前の盤面の話になっていた。
+   */
+  enqueue(request: string, requestedAt?: string): { task: SubTask; cancelled: SubTask[] } {
     const task: SubTask = { id: this.nextId++, request, status: "queued", result: null, durationMs: null, requestedAt };
+    const max = numSetting("AGENT_SUB_MAX_QUEUED", { min: 1, integer: true });
+    const queued = this.tasks.filter((t) => t.status === "queued");
+    const cancelled = queued.slice(0, Math.max(0, queued.length + 1 - max));
+    for (const t of cancelled) {
+      t.status = "cancelled";
+      t.result = `未着手のまま取り消し（${requestedAt ?? "後"}の新しい依頼 #${task.id} を優先）`;
+    }
     this.tasks.push(task);
     this.publish();
     void this.pump();
-    return task;
+    return { task, cancelled };
+  }
+
+  /** メインに見せるサブの様子（作業中・待機・1件あたりの時間） */
+  summary(now = Date.now()): string {
+    const running = this.tasks.find((t) => t.status === "running");
+    const queued = this.tasks.filter((t) => t.status === "queued").length;
+    const durations = this.tasks.filter((t) => t.status === "done" && t.durationMs).map((t) => t.durationMs!);
+    const avg = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length / 1000) : null;
+    const max = numSetting("AGENT_SUB_MAX_QUEUED", { min: 1, integer: true });
+    return [
+      running ? `作業中 #${running.id}（${running.startedAt ? Math.round((now - running.startedAt) / 1000) : 0}s経過）` : "作業中なし",
+      `待機 ${queued}件`,
+      avg !== null ? `1件あたり平均${avg}s` : "",
+      `サブは1件ずつ処理し、待機は${max}件まで（超えると古い待機を取り消す）`,
+    ]
+      .filter(Boolean)
+      .join("・");
   }
 
   /** 実行中・待機中の仕事 */
