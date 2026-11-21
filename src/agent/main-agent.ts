@@ -743,6 +743,10 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
   const timeoutSec = numSetting("AGENT_PREP_TIMEOUT_SEC", { min: 10 });
   const memoMax = numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true });
   const official = await checkOfficialVersion();
+  // バージョン確認の間に止められたら、セッションを起こさずに終える（abort の登録は起動の後なので、ここで確かめる）
+  if (signal?.aborted) {
+    return { status: "dead", error: "中止", memo: "", usage: emptyUsage(), durationMs: Date.now() - t0, official };
+  }
   const pastRuns = existsSync(RUNS_DIR)
     ? readdirSync(RUNS_DIR)
         .filter((n) => n.endsWith(`_room${room}`))
@@ -762,6 +766,7 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
   });
   session.start();
   signal?.addEventListener("abort", () => session.kill(), { once: true });
+  if (signal?.aborted) session.kill();
   const policy = activePolicyPrompt();
   const officialLine = official.changed
     ? `**公式のバージョンが変わった（記録 ${official.knownVersion} → 公式 ${official.version}）。** アイテムID・コマンド・ルールが変わった可能性がある。資料（AGENTS.md・knowledge/）の内容をうのみにせず、試合中に未知のタイル・通らないコマンド・得点のずれに注意するようメモに書け。`
