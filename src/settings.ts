@@ -102,7 +102,7 @@ export const SETTINGS = {
   AGENT_KNOWN_CELLS_RADIUS: { group: "llm", description: "試合中のメインに見せる「既知のワープ・マスのメモ」の範囲（今の位置からのマス数）", defaultValue: "12" },
   AGENT_RECENT_PHASES: { group: "llm", description: "メインに渡す「直近の経過」のフェーズ数", defaultValue: "20" },
   AGENT_SUB_TODO_ITEMS: { group: "llm", description: "メインに毎回渡す「サブへの依頼（TODO）」の件数（新しい順）", defaultValue: "10" },
-  AGENT_SUB_MAX_QUEUED: { group: "llm", description: "サブの待機の上限（件）。サブは1件ずつ処理するので、超えたら古い待機を取り消して新しい依頼を残す（盤面が変わり古い依頼は役に立たないため）", defaultValue: "1" },
+  AGENT_SUB_CONCURRENCY: { group: "llm", description: "同時に動かすサブの数（依頼ごとに別のセッション）。超えた依頼は待機し、空いたら順に始める", defaultValue: "5" },
   AGENT_SUB_TASK_TIMEOUT_MIN: { group: "llm", description: "サブの1仕事あたりの上限（分）", defaultValue: "10" },
   AGENT_POST_MATCH_TIMEOUT_MIN: { group: "llm", description: "試合後の振り返り・ソルバー改修の上限（分）", defaultValue: "15" },
   AGENT_MATCH_TOKEN_LIMIT: {
@@ -143,7 +143,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_API_URL", "LLM_API_KEY", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },
   { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_PAST_RUNS"] },
-  { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_MAX_QUEUED", "AGENT_SUB_TASK_TIMEOUT_MIN"] },
+  { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_CONCURRENCY", "AGENT_SUB_TASK_TIMEOUT_MIN"] },
   { id: "post", title: "試合後（進化・レビュー）", keys: ["AGENT_EVOLVE", "AGENT_EVOLVE_MIN_TURNS", "AGENT_POST_MATCH_TIMEOUT_MIN", "AGENT_REVIEW", "AGENT_REVIEW_TIMEOUT_SEC", "AGENT_REVIEW_KEEP"] },
   { id: "other", title: "その他", keys: ["PORT"] },
 ];

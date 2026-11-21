@@ -11,7 +11,7 @@ import { addUsage, emptyUsage, type UsageTotals } from "./usage";
 export interface SubTask {
   id: number;
   request: string;
-  status: "queued" | "running" | "done" | "failed" | "cancelled";
+  status: "queued" | "running" | "done" | "failed";
   result: string | null;
   durationMs: number | null;
   /** 依頼したフェーズ（メインへの TODO 表示用） */
@@ -19,7 +19,7 @@ export interface SubTask {
   startedAt?: number;
 }
 
-const STATUS_LABEL = { queued: "待機", running: "作業中", done: "完了", failed: "失敗", cancelled: "取消" } as const;
+const STATUS_LABEL = { queued: "待機", running: "作業中", done: "完了", failed: "失敗" } as const;
 
 /** TODO の1行（メインへのメッセージと ASK_SUB.md で共通） */
 export function formatSubTodoLine(t: SubTask, now = Date.now()): string {
@@ -39,7 +39,7 @@ export function renderAskSubFile(tasks: SubTask[]): string {
 }
 
 /**
- * メインエージェントから仕事（調査・ツール作成・ログ分析）を受け取り、裏で順番に処理するサブエージェント。
+ * メインエージェントから仕事（調査・ツール作成・ログ分析）を受け取り、裏で処理するサブエージェント（AGENT_SUB_CONCURRENCY 件まで同時）。
  * 仕事ごとに新しい Claude Code セッション（ツールあり・保存なし）を起動し、返答したら閉じる。
  * 前の仕事の会話は持ち越さない（必要な情報は依頼文・ファイル・ツールの出力で渡す）。
  * メインは待たずに毎フェーズ返答でき、結果は後のフェーズのメッセージで受け取る。
@@ -47,10 +47,11 @@ export function renderAskSubFile(tasks: SubTask[]): string {
 export class SubWorker {
   private readonly tasks: SubTask[] = [];
   private nextId = 1;
-  private running = false;
+  /** 今動いている仕事の数 */
+  private active = 0;
   private stopped = false;
   private reported = new Set<number>();
-  private current: ClaudeSession | null = null;
+  private sessions = new Set<ClaudeSession>();
   private usageTotals: UsageTotals = emptyUsage();
   private guard: ProtectedSnapshot | null = null;
 
@@ -80,37 +81,28 @@ export class SubWorker {
     }
   }
 
-  /**
-   * 仕事を足す。待機が上限（AGENT_SUB_MAX_QUEUED）を超えたら古い待機から取り消す。
-   * サブは1件ずつ処理するので、毎フェーズ依頼されると待ちが溜まり（deepseek で 106 件）、届く結果が何十ターンも前の盤面の話になっていた。
-   */
-  enqueue(request: string, requestedAt?: string): { task: SubTask; cancelled: SubTask[] } {
+  enqueue(request: string, requestedAt?: string): SubTask {
     const task: SubTask = { id: this.nextId++, request, status: "queued", result: null, durationMs: null, requestedAt };
-    const max = numSetting("AGENT_SUB_MAX_QUEUED", { min: 1, integer: true });
-    const queued = this.tasks.filter((t) => t.status === "queued");
-    const cancelled = queued.slice(0, Math.max(0, queued.length + 1 - max));
-    for (const t of cancelled) {
-      t.status = "cancelled";
-      t.result = `未着手のまま取り消し（${requestedAt ?? "後"}の新しい依頼 #${task.id} を優先）`;
-    }
     this.tasks.push(task);
     this.publish();
-    void this.pump();
-    return { task, cancelled };
+    this.pump();
+    return task;
   }
 
-  /** メインに見せるサブの様子（作業中・待機・1件あたりの時間） */
+  /** メインに見せるサブの様子（作業中・待機・1件あたりの時間）。メインは前の会話を持たないので、サブが動いていることを毎回伝える */
   summary(now = Date.now()): string {
-    const running = this.tasks.find((t) => t.status === "running");
+    const running = this.tasks.filter((t) => t.status === "running");
     const queued = this.tasks.filter((t) => t.status === "queued").length;
     const durations = this.tasks.filter((t) => t.status === "done" && t.durationMs).map((t) => t.durationMs!);
     const avg = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length / 1000) : null;
-    const max = numSetting("AGENT_SUB_MAX_QUEUED", { min: 1, integer: true });
+    const max = numSetting("AGENT_SUB_CONCURRENCY", { min: 1, integer: true });
     return [
-      running ? `作業中 #${running.id}（${running.startedAt ? Math.round((now - running.startedAt) / 1000) : 0}s経過）` : "作業中なし",
+      running.length > 0
+        ? `作業中 ${running.length}件（${running.map((t) => `#${t.id} ${t.startedAt ? Math.round((now - t.startedAt) / 1000) : 0}s`).join(", ")}）`
+        : "作業中なし",
       `待機 ${queued}件`,
       avg !== null ? `1件あたり平均${avg}s` : "",
-      `サブは1件ずつ処理し、待機は${max}件まで（超えると古い待機を取り消す）`,
+      `同時に${max}件まで`,
     ]
       .filter(Boolean)
       .join("・");
@@ -136,7 +128,7 @@ export class SubWorker {
   /** 試合終了: 実行中の仕事は止め、待機中の仕事は流さない */
   async stop(): Promise<void> {
     this.stopped = true;
-    this.current?.kill();
+    for (const s of this.sessions) s.kill();
     let changed = false;
     for (const t of this.tasks) {
       if (t.status === "queued") {
@@ -176,33 +168,46 @@ export class SubWorker {
     return s;
   }
 
-  private async pump(): Promise<void> {
-    if (this.running) return;
-    this.running = true;
+  /** 空きがある限り、待機中の仕事を始める */
+  private pump(): void {
+    const max = numSetting("AGENT_SUB_CONCURRENCY", { min: 1, integer: true });
+    while (!this.stopped && this.active < max) {
+      const task = this.tasks.find((t) => t.status === "queued");
+      if (!task) return;
+      this.active += 1;
+      void this.run(task).finally(() => {
+        this.active -= 1;
+        this.pump();
+      });
+    }
+  }
+
+  private async run(task: SubTask): Promise<void> {
+    task.status = "running";
+    task.startedAt = Date.now();
+    this.publish();
+    const session = this.newSession();
+    this.sessions.add(session);
     try {
-      for (let task = this.tasks.find((t) => t.status === "queued"); task && !this.stopped; task = this.tasks.find((t) => t.status === "queued")) {
-        task.status = "running";
-        task.startedAt = Date.now();
-        this.publish();
-        const session = this.newSession();
-        this.current = session;
-        const res = await session.ask(`[TASK #${task.id}] ${task.request}`, numSetting("AGENT_SUB_TASK_TIMEOUT_MIN", { min: 1 }) * 60_000);
-        if (res.status === "ok") {
-          task.status = "done";
-          task.result = res.text.slice(0, 1500);
-          task.durationMs = res.durationMs;
-          await session.stop();
-        } else {
-          task.status = "failed";
-          task.result = this.stopped ? "試合終了のため作業中に中止" : res.status === "dead" ? res.error : res.status;
-          session.kill(); // 上限超過: 止めて以降の消費を断つ
-        }
-        this.usageTotals = addUsage(this.usageTotals, session.usage);
-        this.current = null;
-        this.publish();
+      const res = await session.ask(`[TASK #${task.id}] ${task.request}`, numSetting("AGENT_SUB_TASK_TIMEOUT_MIN", { min: 1 }) * 60_000);
+      if (res.status === "ok") {
+        task.status = "done";
+        task.result = res.text.slice(0, 1500);
+        task.durationMs = res.durationMs;
+        await session.stop();
+      } else {
+        task.status = "failed";
+        task.result = this.stopped ? "試合終了のため作業中に中止" : res.status === "dead" ? res.error : res.status;
+        session.kill(); // 上限超過: 止めて以降の消費を断つ
       }
+    } catch (err) {
+      task.status = "failed";
+      task.result = err instanceof Error ? err.message : String(err);
+      session.kill();
     } finally {
-      this.running = false;
+      this.usageTotals = addUsage(this.usageTotals, session.usage);
+      this.sessions.delete(session);
+      this.publish();
     }
   }
 }

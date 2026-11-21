@@ -1180,13 +1180,13 @@ function renderUsage(u) {
 /* ============ サブの仕事 ============ */
 let subSig = "";
 function fmtElapsed(ms) { const s = Math.max(0, Math.round(ms / 1000)); return s >= 60 ? `${Math.floor(s / 60)}分${s % 60}秒` : `${s}秒`; }
-const SUB_LABEL = { queued: "待機", running: "実行中", done: "完了", failed: "失敗", cancelled: "取消" };
+const SUB_LABEL = { queued: "待機", running: "実行中", done: "完了", failed: "失敗" };
 function renderSub() {
   const tasks = S.st?.subTasks || [];
   $("#subBlock").classList.toggle("collapsed", S.subCollapsed);
   $("#subToggle").textContent = S.subCollapsed ? "開く" : "折りたたむ"; $("#subToggle").setAttribute("aria-expanded", String(!S.subCollapsed));
   const n = (k) => tasks.filter((t) => t.status === k).length;
-  $("#subCount").innerHTML = tasks.length ? [n("running") ? `<span style="color:var(--plan)">実行中 ${n("running")}</span>` : "", n("queued") ? `<span>待機 ${n("queued")}</span>` : "", `<span>完了 ${n("done")}</span>`, n("failed") ? `<span class="down">失敗 ${n("failed")}</span>` : "", n("cancelled") ? `<span class="faint">取消 ${n("cancelled")}</span>` : ""].filter(Boolean).join("") : "";
+  $("#subCount").innerHTML = tasks.length ? [n("running") ? `<span style="color:var(--plan)">実行中 ${n("running")}</span>` : "", n("queued") ? `<span>待機 ${n("queued")}</span>` : "", `<span>完了 ${n("done")}</span>`, n("failed") ? `<span class="down">失敗 ${n("failed")}</span>` : ""].filter(Boolean).join("") : "";
   const now = Date.now();
   for (const t of tasks) if (t.status === "running" && !S.subSeen[t.id]) S.subSeen[t.id] = now;
   const sig = JSON.stringify([tasks, [...S.subClosed]]);
@@ -1194,7 +1194,7 @@ function renderSub() {
   const box = $("#subBody");
   if (!tasks.length) { box.innerHTML = `<div class="empty">まだ仕事はありません。メインが調査・ツール作成・ログ分析を頼むと、ここに並びます。</div>`; return; }
   box.innerHTML = [...tasks].reverse().map((t) => {
-    const fin = t.status === "done" || t.status === "failed" || t.status === "cancelled";
+    const fin = t.status === "done" || t.status === "failed";
     const du = fin ? (t.durationMs != null ? sec(t.durationMs) : "") : t.status === "running" ? `<span data-since="${t.id}">${fmtElapsed(now - (S.subSeen[t.id] || now))}</span>` : "";
     const open = fin && !S.subClosed.has(t.id) && t.result;
     return `<details class="st-t ${t.status}" data-id="${t.id}" ${open ? "open" : ""}><summary><span class="st-ic ${t.status}" title="${SUB_LABEL[t.status] || t.status}"></span><span class="rq" title="${esc(t.request)}"><span class="faint">#${t.id}</span> ${esc(t.request)}</span><span class="du">${SUB_LABEL[t.status] || ""} ${du}</span></summary>${t.result ? `<pre>${esc(t.result)}</pre>` : ""}</details>`;
