@@ -251,3 +251,18 @@ test("試合中のメインには knowledge/commands.md の中身を入れ、AGE
   await agent.end();
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
+
+test("memo_add: 全文を書き直さずにメモの末尾へ1行足せる（上限を超える時は入れずに知らせる）", async () => {
+  const { parseMainReply } = await import("./main-agent");
+  const r = parseMainReply('{"turn": 3, "phase": "CMD1", "action": "continue", "memo_add": "東にワープ(23)"}', 3, "CMD1", ["gr"]);
+  expect(r?.memoAdd).toBe("東にワープ(23)");
+  const agent = new MainAgent({}, 5000) as unknown as { memo: string; notices: string[]; applyMemo(r: unknown): void };
+  Bun.env.AGENT_MEMO_MAX_CHARS = "100";
+  agent.memo = "北は回収済み";
+  agent.applyMemo({ action: "continue", memoAdd: "東にワープ(23)" });
+  expect(agent.memo).toBe("北は回収済み\n東にワープ(23)");
+  agent.applyMemo({ action: "continue", memoAdd: "x".repeat(100) });
+  expect(agent.memo).toBe("北は回収済み\n東にワープ(23)");
+  expect(agent.notices.at(-1)).toContain("memo_add はメモの上限");
+  delete Bun.env.AGENT_MEMO_MAX_CHARS;
+});

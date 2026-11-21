@@ -50,6 +50,8 @@ interface MainReply {
   note?: string;
   delegate?: string;
   memo?: string;
+  /** メモの末尾に1行足す（全文を書き直さずに済む＝出力が短く速い） */
+  memoAdd?: string;
 }
 
 function readPrompt(name: string): string {
@@ -352,9 +354,7 @@ export class MainAgent {
     const reply = parseMainReply(res.text, ctx.turn, ctx.phase, legal);
     if (!reply) return fallback("応答に有効な JSON がない", res.durationMs);
 
-    if (reply.memo !== undefined) {
-      this.memo = reply.memo.slice(0, numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true }));
-    }
+    this.applyMemo(reply);
     let delegated: string | null = null;
     if (reply.delegate) {
       const task = this.sub.enqueue(reply.delegate, `T${ctx.turn} ${ctx.phase}`);
@@ -387,6 +387,21 @@ export class MainAgent {
       note,
       delegated,
     };
+  }
+
+  /** 返答の memo（全文置き換え）・memo_add（末尾に1行）を反映する。上限を超えた時は次のフェーズに知らせる */
+  private applyMemo(reply: MainReply): void {
+    const max = numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true });
+    if (reply.memo !== undefined) {
+      if (reply.memo.length > max) this.notices.push(`memo が上限 ${max} 字を超えたので、${max} 字で切った`);
+      this.memo = reply.memo.slice(0, max);
+    }
+    const add = reply.memoAdd?.trim();
+    if (add) {
+      const next = this.memo ? `${this.memo}\n${add}` : add;
+      if (next.length > max) this.notices.push(`memo_add はメモの上限 ${max} 字を超えるので入らなかった（今 ${this.memo.length} 字）。memo で書き直せば入る`);
+      else this.memo = next;
+    }
   }
 
   /** 直近の経過に1行足す（次のフェーズのメインが流れを把握するため） */
@@ -499,8 +514,8 @@ export class MainAgent {
       ...ev.nearestFrontiers.slice(0, 3).map((t) => `未探索(${t.x},${t.y}) 距離${t.distance}`),
     ];
     const lines = [
-      `[TURN ${ctx.turn} / ${ctx.phase}] budget=${Math.round(this.turnBudgetMs / 1000)}s memo上限=${numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true })}字`,
-      "## メモ（前のフェーズまでの自分から）",
+      `[TURN ${ctx.turn} / ${ctx.phase}] budget=${Math.round(this.turnBudgetMs / 1000)}s`,
+      `## メモ（前のフェーズまでの自分から。${this.memo.length}/${numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true })}字）`,
       this.memo || "(まだない)",
       "## 直近の経過",
       this.recent.join("\n") || "(試合開始)",
@@ -656,16 +671,17 @@ export function parseMainReply(
     try {
       const obj = JSON.parse(candidates[i]!) as {
         turn?: number; phase?: string; action?: string; command?: string;
-        target?: unknown; note?: string; delegate?: string; memo?: unknown;
+        target?: unknown; note?: string; delegate?: string; memo?: unknown; memo_add?: unknown;
       };
       if (obj.turn !== undefined && obj.turn !== turn) continue;
       if (obj.phase !== undefined && obj.phase !== phase) continue;
       const delegate = typeof obj.delegate === "string" && obj.delegate.trim() ? obj.delegate.trim() : undefined;
       const note = typeof obj.note === "string" ? obj.note : undefined;
       const memo = typeof obj.memo === "string" ? obj.memo : undefined;
-      if (obj.action === "continue") return { action: "continue", note, delegate, memo };
+      const memoAdd = typeof obj.memo_add === "string" && obj.memo_add.trim() ? obj.memo_add : undefined;
+      if (obj.action === "continue") return { action: "continue", note, delegate, memo, memoAdd };
       if (obj.action === "command" && obj.command && legal.includes(obj.command)) {
-        return { action: "command", command: obj.command, note, delegate, memo };
+        return { action: "command", command: obj.command, note, delegate, memo, memoAdd };
       }
       if (
         obj.action === "plan" &&
@@ -673,7 +689,7 @@ export function parseMainReply(
         obj.target.length === 2 &&
         obj.target.every((v) => Number.isInteger(v))
       ) {
-        return { action: "plan", target: [obj.target[0] as number, obj.target[1] as number], note, delegate, memo };
+        return { action: "plan", target: [obj.target[0] as number, obj.target[1] as number], note, delegate, memo, memoAdd };
       }
     } catch {
       // 次の候補へ
