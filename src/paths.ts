@@ -12,6 +12,8 @@ export const TILES_PATH = path.join(KNOWLEDGE_DIR, "tiles.json");
 export const STRATEGY_PATH = path.join(KNOWLEDGE_DIR, "strategy.md");
 /** ゲームのコマンド（公式の全61種）の唯一の置き場。試合中のメインにはこれをそのまま渡す */
 export const COMMANDS_PATH = path.join(KNOWLEDGE_DIR, "commands.md");
+/** ゲームのルール（スコア・タイル・公式資料との食い違い）の唯一の置き場。試合中のメインにはこれもそのまま渡す */
+export const OFFICIAL_RULES_PATH = path.join(KNOWLEDGE_DIR, "official-rules.md");
 
 /** 静的素材（公式 GIF 等） */
 export const ASSETS_DIR = path.join(PROJECT_ROOT, "assets");

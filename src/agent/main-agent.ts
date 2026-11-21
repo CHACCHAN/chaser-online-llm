@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import path from "node:path";
 import { CMD1_COMMANDS, CMD1_SPECS, CMD2_COMMANDS, CMD2_SPECS, classifyTileSafety, type WorldMap } from "../memory/world-map";
 import { getRoomProfile } from "../memory/knowledge-store";
-import { AGENT_DIR, COMMANDS_PATH, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
+import { AGENT_DIR, COMMANDS_PATH, OFFICIAL_RULES_PATH, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
 import { numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
 import { uiBus } from "../ui/event-bus";
@@ -142,10 +142,12 @@ export class MainAgent {
     this.matchInfo = `room=${info.room} stage=${info.stageName ?? "unknown"} webMap=${info.webMap} roomHighScore=${info.highScore}`;
     const policy = activePolicyPrompt();
     const strategy = existsSync(STRATEGY_PATH) ? readFileSync(STRATEGY_PATH, "utf-8") : "";
-    // 試合中のメインはツールなしでファイルを読めないので、コマンドの表はここで中身を入れる（AGENTS.md は付けない）
+    // 試合中のメインはツールなしでファイルを読めないので、ルールとコマンドの表はここで中身を入れる（AGENTS.md は付けない）
     const commands = existsSync(COMMANDS_PATH) ? readFileSync(COMMANDS_PATH, "utf-8").trim() : "";
+    const rules = existsSync(OFFICIAL_RULES_PATH) ? readFileSync(OFFICIAL_RULES_PATH, "utf-8").trim() : "";
     this.systemPrompt = [
       readPrompt("main.md"),
+      rules ? `\n## ゲームのルール（knowledge/official-rules.md）\n${rules.replace(/^# .*\n/, "")}` : "",
       commands ? `\n## ゲームのコマンド（knowledge/commands.md）\n${commands.replace(/^# .*\n/, "")}` : "",
       `\n## この試合\n${this.matchInfo}`,
       policy ? `\n${policy}` : "",

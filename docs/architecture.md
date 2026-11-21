@@ -62,7 +62,7 @@ flowchart LR
 
 1. **待機**: `src/index.ts` が Web ダッシュボードを起動し、「準備」が押されるまで待つ。
 2. **準備（ルームに入らない）**: `runPrepPhase` が公式のバージョンを確認し、メインがルール・このルームの過去の試合・作戦方針を読んで試合開始時のメモを作る（status=preparing → standby）。スタンバイOK になると「開始」が押せる。
-2b. **開始**: 試合ごとに `MainAgent` を作り、`begin(info, 準備の結果)` でシステムプロンプト（main.md＋作戦方針＋strategy.md）を組み立て、準備のメモから始め、最初の問い合わせ用プロセスを先に起動する。サブは保護ファイルのスナップショットを取る。
+2b. **開始**: 試合ごとに `MainAgent` を作り、`begin(info, 準備の結果)` でシステムプロンプト（main.md＋ルール(official-rules.md)＋コマンド(commands.md)＋作戦方針＋strategy.md）を組み立て、準備のメモから始め、最初の問い合わせ用プロセスを先に起動する。サブは保護ファイルのスナップショットを取る。
 3. **入室**: `Client` が `user/` にログインし、`RoomNumberCheck` で入室する。
 4. **試合**: `runner.ts` が `playPhase` を CMD1 → CMD2 の順に回す（後述）。
 5. **試合後**: `summary.json` と `diagnosis.md` を書き、`evolve.ts` がメインに `postMatch` で改修させ、リプレイ検証する。

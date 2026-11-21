@@ -7,7 +7,7 @@
 - ゲートウェイは `LLM_API_URL` を `ANTHROPIC_BASE_URL` に渡し（末尾の `/v1` は除去）、`LLM_API_KEY` を `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` と `X-Gravitee-Api-Key` ヘッダに渡す。
 - モデル: メインは `--model` / `LLM_MODEL_NAME`。`ANTHROPIC_MODEL` と `sonnet` / `opus` の各エイリアスを選択中のモデルに差し替え、ゲートウェイにない既定モデルが裏で呼ばれないようにする。サブは `--sub-model` / `LLM_SUB_MODEL_NAME`（空ならメインと同じ）で、`haiku` 系エイリアスと `CLAUDE_CODE_SUBAGENT_MODEL` に入る。
 - effort: メインは `--effort` / `LLM_MODEL_EFFORT`、サブは `--sub-effort` / `LLM_SUB_MODEL_EFFORT`（空ならメインと同じ）。
-- 起動引数の共通部分: `-p --output-format stream-json --verbose --dangerously-skip-permissions --disable-slash-commands`、さらに `--model`, `--effort`。全て `--input-format stream-json` で起動する。試合中のメインは `--system-prompt <main.md＋方針＋strategy.md> --tools "" --no-session-persistence`（Claude Code 既定のシステムプロンプトとツール定義を送らない）、サブは `--append-system-prompt <sub.md> --no-session-persistence`。
+- 起動引数の共通部分: `-p --output-format stream-json --verbose --dangerously-skip-permissions --disable-slash-commands`、さらに `--model`, `--effort`。全て `--input-format stream-json` で起動する。試合中のメインは `--system-prompt <main.md＋ルール(official-rules.md)＋コマンド(commands.md)＋方針＋strategy.md> --tools "" --no-session-persistence`（Claude Code 既定のシステムプロンプトとツール定義を送らない）、サブは `--append-system-prompt <sub.md> --no-session-persistence`。
 - **説明書**: `CLAUDE.md` は開発者向けなので読ませない（`CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`）。エージェント向けの説明書 `agent/AGENTS.md`（役割・触ってよい範囲・CLI・スコア規則）を、全セッションのシステムプロンプトの末尾に入れる（`ClaudeSession.buildArgs`）。
 - モデル一覧は `GET /api/models`（`src/agent/models.ts`）でゲートウェイの `/v1/models` から取る。
 
@@ -30,7 +30,7 @@
 
 | メソッド | タイミング | 内容 |
 | :--- | :--- | :--- |
-| `begin(info)` | 入室前 | システムプロンプト（main.md＋作戦方針＋strategy.md）を組み立て、サブを準備する。準備フェーズの結果（「開始」より前に `runPrepPhase` でツール Read/Glob/Grep ありのセッションに資料と過去の試合を読ませて作ったメモ。`prompts/prep.md`）から始める。最後に最初の問い合わせ用プロセスを先に起動する |
+| `begin(info)` | 入室前 | システムプロンプト（main.md＋ルール(official-rules.md)＋コマンド(commands.md)＋作戦方針＋strategy.md）を組み立て、サブを準備する。準備フェーズの結果（「開始」より前に `runPrepPhase` でツール Read/Glob/Grep ありのセッションに資料と過去の試合を読ませて作ったメモ。`prompts/prep.md`）から始める。最後に最初の問い合わせ用プロセスを先に起動する |
 | `decide(ctx)` | 毎フェーズ | 盤面を `var/current/snapshot.json` に書き出し、メモ・直近の経過・サブへの依頼（TODO）・全体マップ（座標目盛り・敵・作戦目標つき）・現在の作戦・ソルバー候補・目標候補・合法手・サブ結果を1通のメッセージで渡す。返答の JSON を採用し、`memo` があればメモを置き換える |
 | `postMatch(report, runDir, timeoutMs)` | 試合後 | サブを止めて（保護ファイルを戻して）から、ツールありの新しいセッションに最終メモ・経過・TODO・診断を渡して振り返りと改修をさせる（上限 15 分） |
 

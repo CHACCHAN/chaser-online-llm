@@ -49,7 +49,7 @@ export function activePolicyPrompt(): string {
   if (!text) return "";
   return [
     `## ユーザー定義の作戦方針（${name}）— 最優先で従う`,
-    "以下はユーザーが決めた判断の方針。knowledge/ の一般則やソルバーの手と食い違う場合はこちらを優先する。",
+    "以下はユーザーが決めた判断の方針。knowledge/strategy.md の戦略やソルバーの手と食い違う場合はこちらを優先する（ゲームのルールは変えられない）。",
     "",
     text,
   ].join("\n");

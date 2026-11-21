@@ -246,6 +246,7 @@ test("試合中のメインには knowledge/commands.md の中身を入れ、AGE
   const main = sent.find((x) => x.label === "main")!;
   expect(main.options.systemPrompt).toContain("## ゲームのコマンド（knowledge/commands.md）");
   expect(main.options.systemPrompt).toContain("`w3u`");
+  expect(main.options.systemPrompt).toContain("## ゲームのルール（knowledge/official-rules.md）");
   expect(main.options.agentsGuide).toBe(false);
   await agent.end();
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
