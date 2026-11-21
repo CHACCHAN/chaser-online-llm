@@ -332,3 +332,11 @@ test("CHaser サーバが応答しない時は CHASER_HTTP_TIMEOUT_SEC で打ち
     delete Bun.env.CHASER_HTTP_TIMEOUT_SEC;
   }
 });
+
+test("公式成績は取得ターン数がこの試合と合う時だけ使う（前の対戦の行を取り違えない）", async () => {
+  const { isResultForRun } = await import("./result");
+  const r = { room: "586", startedAt: "2026-11-22 00:31:03.353", endedAt: "2026-11-22 00:51:35.025", acquiredTurns: 147, remainingTurns: 0, totalScore: 96055, actionPoint: 0, itemPoint: 0, putPoint: 0, putDamage: 0 };
+  expect(isResultForRun(r, 147)).toBe(true);
+  expect(isResultForRun(r, 148)).toBe(true);
+  expect(isResultForRun(r, 1)).toBe(false);
+});

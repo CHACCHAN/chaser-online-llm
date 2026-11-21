@@ -3,6 +3,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { BEST_SOLVERS_DIR, RUNS_DIR, SOLVER_PATH } from "./paths";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
+import { isResultForRun } from "./client/result";
 import type { AgentConfig } from "./config";
 import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
 import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
@@ -496,7 +497,12 @@ export async function runAgentMatch(
   } catch (err) {
     logger.warn({ err: err instanceof Error ? err.message : String(err) }, "タイルの得点の実測に失敗");
   }
-  const officialResult = await fetchLatestResult(config.room);
+  // 公式成績のページは最新の行を返す。この試合が記録されていなければ前の試合の成績なので、ターン数が合わなければ使わない
+  const latestResult = await fetchLatestResult(config.room);
+  const officialResult = latestResult && isResultForRun(latestResult, turnLogs.length) ? latestResult : null;
+  if (latestResult && !officialResult) {
+    logger.warn({ turns: turnLogs.length, resultTurns: latestResult.acquiredTurns, resultStartedAt: latestResult.startedAt }, "公式成績の取得ターン数がこの試合と合わない（前の対戦のもの）ので使わない");
+  }
   const fallbackTurns = turnLogs.filter((r) => r.usedFallback).length;
   const harnessTurns = turnLogs.filter((r) => r.usedHarness).length;
   const phaseSources = turnLogs.flatMap((r) => [r.cmd1Source, r.cmd2Source]).filter((s) => s !== null);

@@ -123,6 +123,15 @@ export function parseVsResultTable(
 }
 
 /**
+ * その公式成績が、この試合のものか。公式成績のページは最新の行を返すので、試合が記録されなかった時（途中で止めた等）は
+ * 前の試合の成績が返ってくる（実例: room586 で 1 ターンで止めた試合に、その前の 147 ターンの試合の 96055 点が入っていた）。
+ * サーバの時計は約26分遅れていて（room719・586 で実測）時刻では比べられないので、取得ターン数がこの試合のターン数（±1）と合うかで見る
+ */
+export function isResultForRun(result: OfficialResult, turnsPlayed: number): boolean {
+  return Math.abs(result.acquiredTurns - turnsPlayed) <= 1;
+}
+
+/**
  * Server/vsResultView.jsp → UserCheck?select=vsresultview → listvsresult の 2段階で公式スコアを取得する。
  * 取得失敗やパース不可の場合は例外を投げず null を返す。
  */
