@@ -208,7 +208,22 @@ export async function runAgentMatch(
   uiBus.updateMap(worldMap.buildUiMapState(null));
 
   // ソルバーは試合開始時に1回だけ読み込む（試合中にファイルが変わっても、この試合は同じソルバーで通す）
-  const decideSolver = await loadActiveSolver();
+  const loadedSolver = await loadActiveSolver();
+  /** ソルバーが例外を投げても試合は止めない（安全な手にして続ける。UI には最初の1回と以後100回ごとに知らせる） */
+  let solverErrors = 0;
+  const decideSolver: typeof loadedSolver = (wm, phase, turn, plan) => {
+    try {
+      return loadedSolver(wm, phase, turn, plan);
+    } catch (err) {
+      solverErrors += 1;
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ turn, phase, err: msg, count: solverErrors }, "ソルバーが例外を投げた（安全な手で続ける）");
+      if (solverErrors === 1 || solverErrors % 100 === 0) {
+        uiBus.pushClaudeEvent({ context: "system", kind: "error", title: "ソルバーの例外", content: `T${turn} ${phase}: ${msg}（${solverErrors}回目。安全な手で続けている）` });
+      }
+      return { command: wm.pickSafeFallback(phase) as SolverDecision["command"], reason: `solver error: ${msg.slice(0, 120)}`, confidence: 0 };
+    }
+  };
   const turnLogs: TurnRecord[] = [];
   const commandCounts: Record<string, number> = {};
   let gameOverReason: string | null = null;
@@ -272,13 +287,21 @@ export async function runAgentMatch(
         let source: "main" | "solver" = "solver";
         if (mainAgent) {
           uiBus.patchState({ status: "claude_in_game", statusMessage: `T${turn} ${phase} メインエージェント判断中` });
-          const res = await mainAgent.decide({
-            turn,
-            phase,
-            worldMap,
-            events,
-            solve: (plan) => decideSolver(worldMap, phase, turn, plan),
-          });
+          let res: Awaited<ReturnType<MainAgent["decide"]>>;
+          try {
+            res = await mainAgent.decide({
+              turn,
+              phase,
+              worldMap,
+              events,
+              solve: (plan) => decideSolver(worldMap, phase, turn, plan),
+            });
+          } catch (err) {
+            // メインの処理（盤面の書き出しなど）が落ちても、このフェーズはソルバーの手で続ける
+            const msg = err instanceof Error ? err.message : String(err);
+            logger.error({ turn, phase, err: msg }, "メインエージェントの処理で例外（ソルバーの手で続ける）");
+            res = { decision: solverDecision, source: "solver", note: `main error: ${msg.slice(0, 120)}`, durationMs: null, action: null, delegated: null };
+          }
           if (res.action) mainActions.push(`${phase}:${res.action}${res.planStatus ? `(${res.planStatus})` : ""}`);
           if (res.delegated) delegations.push(res.delegated);
           reloadTilesKnowledge();
@@ -341,8 +364,13 @@ export async function runAgentMatch(
           gameOver = true;
           turnGameOverReason = err.message;
           turnCompleted = true;
+        } else if (client.aborted) {
+          throw err; // 停止ボタン
         } else {
-          throw err;
+          // 通信の一時的な失敗など。下の耐障害フォールバックで、まだ送っていないフェーズを安全な手で送り直す
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn({ turn, err: msg, phase: client.getStatus.game.phase }, "ターンの途中で例外。安全な手で送り直す");
+          solverFallbackNotes.push(`error: ${msg.slice(0, 120)}`);
         }
       }
       usedHarness = cmd1Source === "main" || cmd2Source === "main";
@@ -484,6 +512,10 @@ export async function runAgentMatch(
     }
   } catch (err) {
     gameOverReason = err instanceof Error ? err.message : String(err);
+    if (!client.aborted) {
+      logger.error({ err: gameOverReason, turns: turnLogs.length }, "試合がエラーで終わった");
+      uiBus.pushClaudeEvent({ context: "system", kind: "error", title: "試合がエラーで終わった", content: `T${turnLogs.length + 1}: ${gameOverReason}` });
+    }
   }
 
   const finishedAt = new Date().toISOString();
