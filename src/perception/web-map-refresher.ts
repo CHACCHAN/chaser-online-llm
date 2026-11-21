@@ -12,6 +12,14 @@ import { scrapeRoomWebMap, type WebMapScrapeResult } from "./web-map-scraper";
  * - 取れてからは CHASER_WEB_MAP_REFRESH に従って取り直す（every_turn / warp / off）
  * - 取得開始時点の自機位置を基準に盤面を合わせるので、取得中に動いてもずれない。取得中にワープしたら捨てる
  */
+/**
+ * Webマップの `turn=` は残りターン数（このターンを含む）。取りに行った時のハーネスのターンと足して全ターン数を出す。
+ * 実測（room719、全1579ターン）: ハーネス T31 → turn=1549、T253 → turn=1327（どれも足して 1580）。
+ */
+export function totalTurnsFromWeb(t: { ourTurn: number; webTurn: number | null } | null): number | null {
+  return t && t.webTurn !== null && t.webTurn > 0 ? t.ourTurn + t.webTurn - 1 : null;
+}
+
 export class WebMapRefresher {
   private inFlight: Promise<void> | null = null;
   private found = false;

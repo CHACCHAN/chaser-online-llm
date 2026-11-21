@@ -18,3 +18,11 @@ test("knownTotalTurns: 記録が無ければ過去の公式結果（取得＋残
   expect(knownTotalTurns(557, runs)).toBeNull();
   expect(knownTotalTurns(9999, path.join(runs, "none"))).toBeNull();
 });
+
+test("Webマップの turn= は残りターン数（このターンを含む）: 自分のターンと足して全ターン数を出す", async () => {
+  const { totalTurnsFromWeb } = await import("../perception/web-map-refresher");
+  expect(totalTurnsFromWeb({ ourTurn: 31, webTurn: 1549 })).toBe(1579); // room719 の実測
+  expect(totalTurnsFromWeb({ ourTurn: 253, webTurn: 1327 })).toBe(1579);
+  expect(totalTurnsFromWeb({ ourTurn: 5, webTurn: null })).toBeNull();
+  expect(totalTurnsFromWeb(null)).toBeNull();
+});

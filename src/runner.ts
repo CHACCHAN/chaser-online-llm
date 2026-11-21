@@ -9,7 +9,7 @@ import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
 import { getRoomProfile, recordRoomWarp, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
 import { WorldMap } from "./memory/world-map";
-import { WebMapRefresher } from "./perception/web-map-refresher";
+import { totalTurnsFromWeb, WebMapRefresher } from "./perception/web-map-refresher";
 import { GameOver, logger } from "./tools";
 import { decideTurnAction as defaultDecideTurnAction, type SolverDecision } from "./solver/active-solver";
 import { type UiPredictionState, uiBus } from "./ui/event-bus";
@@ -217,6 +217,9 @@ export async function runAgentMatch(
         break;
       }
       webMap.onTurnStart(turn);
+      // Webマップの残りターン数から全ターン数が分かれば、メインの「残り」をそれに合わせる（初めてのルームでも分かる）
+      const webTotal = totalTurnsFromWeb(webMap.lastTurn);
+      if (webTotal !== null) mainAgent?.setTotalTurns(webTotal);
 
       let cmd1: string | null = null;
       let cmd1Reason: string | null = null;
@@ -487,6 +490,12 @@ export async function runAgentMatch(
   await Bun.write(path.join(runDir, "summary.json"), JSON.stringify(summary, null, 2));
   await Bun.write(path.join(runDir, "diagnosis.md"), diagnosis.markdownReport);
   mainAgent?.archiveFiles(runDir);
+  // 公式結果が取れなかった時は、Webマップの残りターン数から求めた全ターン数を残す
+  const webTotalTurns = totalTurnsFromWeb(webMap.lastTurn);
+  if (!officialResult && webTotalTurns !== null && !updatedProfile.totalTurns) {
+    updatedProfile.totalTurns = webTotalTurns;
+    saveRoomProfile(updatedProfile);
+  }
 
   // この試合で使ったソルバー（試合後の改修前）を残す。最高記録ならルームの最良ソルバーとしても保存
   const solverPath = SOLVER_PATH;

@@ -107,6 +107,11 @@ export class MainAgent {
     this.sub = new SubWorker(settings);
   }
 
+  /** 試合中に全ターン数が分かった時（Webマップの残りターン数から）に呼ぶ。見出しの「残り」に使う */
+  setTotalTurns(total: number): void {
+    if (total > 0) this.totalTurns = total;
+  }
+
   get alive(): boolean {
     return this.started;
   }
