@@ -24,6 +24,7 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 | ルームの記録（ワープの実測 `warps`・マスのメモ `cellNotes` を含む。座標は絶対座標＝Webマップの列・行） | `var/room-profiles.json` |
 | 過去の試合 | `var/runs/<runId>/`（`summary.json`、`turns.jsonl`、`diagnosis.md`、`MEMO.md`、`ASK_SUB.md`、`evolution-report.md`、`final-map.txt`） |
 | 試合中の今 | `var/current/`（`snapshot.json`、`MEMO.md`、`ASK_SUB.md`） |
+| 作業用の置き場 | `var/tmp/`（試合の写しで試す時などはここに。`var/runs/` に置くと過去の試合として数えられる） |
 
 ## CLI（`bun src/cli.ts <サブコマンド>`）
 | サブコマンド | 引数 | 内容 |

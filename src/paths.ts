@@ -31,6 +31,8 @@ export const AGENT_REVIEW_PATH = path.join(AGENT_DIR, "REVIEW.md");
 // テスト（bun test）は src/test-setup.ts が一時ディレクトリを指定し、試合中の var/ を書き換えない
 export const VAR_DIR = Bun.env.CHASER_TEST_VAR_DIR ? path.resolve(Bun.env.CHASER_TEST_VAR_DIR) : path.join(PROJECT_ROOT, "var");
 export const RUNS_DIR = path.join(VAR_DIR, "runs");
+/** var/runs/ の試合の記録のフォルダ名（<日時>_room<N>）か。エージェントが作った写し（zz-selftest など）は試合として数えない */
+export const isRunDirName = (name: string): boolean => /^\d{4}-\d{2}-\d{2}[^/]*_room\d+$/.test(name);
 /** ハーネスが起動したエージェント（準備・サブ・振り返り）のツール呼び出しの記録（使われている機能を調べるため） */
 export const AGENT_TOOL_LOG_PATH = path.join(VAR_DIR, "agent-tool-log.jsonl");
 /** 保護ファイルを元に戻す前の中身の控え（src/evolution/edit-guard.ts） */

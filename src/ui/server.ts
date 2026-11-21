@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { SETTING_SECTIONS } from "../settings";
 import path from "node:path";
-import { ASSETS_DIR, PUBLIC_DIR, RUNS_DIR } from "../paths";
+import { ASSETS_DIR, PUBLIC_DIR, isRunDirName, RUNS_DIR } from "../paths";
 import { EFFORT_LEVELS, listGatewayModels } from "../agent/models";
 import { verifySolverWithReplay } from "../evolution/replay-verifier";
 import { loadRoomProfiles } from "../memory/knowledge-store";
@@ -17,7 +17,8 @@ const PUBLIC_INDEX_PATH = path.join(PUBLIC_DIR, "index.html");
 function listRecentRuns(limit = 20) {
   if (!existsSync(RUNS_DIR)) return [];
   const dirs = readdirSync(RUNS_DIR, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    // 試合の記録だけ（<日時>_room<N>）。エージェントが調べるために作った写し（zz-selftest など）は出さない
+    .filter((d) => d.isDirectory() && isRunDirName(d.name))
     .map((d) => d.name)
     .sort()
     .reverse()

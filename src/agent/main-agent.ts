@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import path from "node:path";
 import { CMD1_COMMANDS, CMD1_SPECS, CMD2_COMMANDS, CMD2_SPECS, classifyTileSafety, type WorldMap } from "../memory/world-map";
 import { getRoomProfile, knownTotalTurns, roomCells } from "../memory/knowledge-store";
-import { AGENT_DIR, COMMANDS_PATH, CURRENT_SNAPSHOT_PATH, OFFICIAL_RULES_PATH, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
+import { AGENT_DIR, COMMANDS_PATH, CURRENT_SNAPSHOT_PATH, OFFICIAL_RULES_PATH, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, isRunDirName, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
 import { numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
 import { uiBus } from "../ui/event-bus";
@@ -749,7 +749,7 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
   }
   const pastRuns = existsSync(RUNS_DIR)
     ? readdirSync(RUNS_DIR)
-        .filter((n) => n.endsWith(`_room${room}`))
+        .filter((n) => isRunDirName(n) && n.endsWith(`_room${room}`))
         .sort()
         .reverse()
         .slice(0, numSetting("AGENT_PREP_PAST_RUNS", { min: 0, integer: true }))

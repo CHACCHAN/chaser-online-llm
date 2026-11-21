@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { ROOM_PROFILES_PATH, RUNS_DIR, TILES_PATH } from "../paths";
+import { isRunDirName, ROOM_PROFILES_PATH, RUNS_DIR, TILES_PATH } from "../paths";
 
 export interface StoredTileDefinition {
   name: string;
@@ -238,7 +238,7 @@ export function knownTotalTurns(room: number, runsDir = RUNS_DIR): number | null
   const recorded = getRoomProfile(room).totalTurns;
   if (typeof recorded === "number" && recorded > 0) return recorded;
   if (!existsSync(runsDir)) return null;
-  for (const name of readdirSync(runsDir).sort().reverse()) {
+  for (const name of readdirSync(runsDir).filter(isRunDirName).sort().reverse()) {
     const file = path.join(runsDir, name, "summary.json");
     if (!existsSync(file)) continue;
     try {
