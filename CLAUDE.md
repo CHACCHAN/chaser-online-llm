@@ -19,6 +19,7 @@ CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/
 - **パス**: `src/paths.ts` に集約。
 - **情報は1か所に**: ゲームのルール・コマンドは `knowledge/`（`commands.md`・`official-rules.md`・`tiles.json`）が唯一の置き場。`agent/AGENTS.md` は「どこを見るか」の案内で、同じ内容を書かない。ツールなしの試合中のメインには、ハーネスが必要なファイルの中身を入れて渡す（`main-agent.ts` の `begin`）。
 - **エージェントの範囲**: エージェントが読み書きするのは `agent/`（手順書・ツール）・`knowledge/`・`var/`・ソルバーだけ。試合後の振り返り・試合中のサブがそれ以外を変えると `src/evolution/edit-guard.ts` が元に戻す。エージェントに伝えたいことは `agent/AGENTS.md` か `agent/prompts/` に書く（CLAUDE.md に書いても届かない）。
+- **試合中に開発する時**: 保護対象（`src/`・`agent/prompts/` など）の変更は**コミットしておく**。試合の終わり・振り返りの後に、ガードが試合開始時の内容へ戻す。スナップショットの後のコミットは戻さない。コミットしていない変更は戻され、`var/edit-guard-backup/<日時>/` に控えが残る。
 - **チェック**: `bun run typecheck && bun test && bun run verify-solver`。テストは一時ディレクトリで動く（`src/test-setup.ts`）。
 - **セットアップ・自己レビュー**: `agent/SETUP.md` → `agent/SELF_CHECK.md`（実施後は両方を更新する）。
 - **本番サーバ**: 実際の試合はユーザーが行う。ログインだけの確認はしない。`.env` の値は表示しない。

@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { PROJECT_ROOT } from "../paths";
+import { EDIT_GUARD_BACKUP_DIR, PROJECT_ROOT } from "../paths";
 
 /**
  * 試合後の振り返りでメインエージェントが触ってよいのは
@@ -27,8 +27,44 @@ export type ProtectedSnapshot = Map<string, string>;
 
 /** 保護の基準ディレクトリ（テストでは一時ディレクトリに差し替え、本物のファイルに触れない） */
 let guardRoot = PROJECT_ROOT;
+let backupRoot = EDIT_GUARD_BACKUP_DIR;
 export function setGuardRootForTest(dir: string): void {
   guardRoot = dir;
+  backupRoot = path.join(dir, "var", "edit-guard-backup");
+}
+
+/** スナップショットを取った時の git の HEAD（その後に開発者がコミットした変更は戻さない） */
+const snapshotHeads = new WeakMap<ProtectedSnapshot, string | null>();
+
+function git(args: string[]): string | null {
+  try {
+    const r = Bun.spawnSync(["git", ...args], { cwd: guardRoot, stdout: "pipe", stderr: "ignore" });
+    return r.exitCode === 0 ? r.stdout.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 開発者がスナップショットの後にコミットした内容か（エージェントはコミットしない）。
+ * HEAD が変わっていて、今のファイルが HEAD の中身と同じなら開発者の変更として残す。
+ */
+function committedSince(snap: ProtectedSnapshot, rel: string, current: string | undefined): boolean {
+  const head0 = snapshotHeads.get(snap);
+  if (!head0) return false;
+  const head = git(["rev-parse", "HEAD"])?.trim();
+  if (!head || head === head0) return false;
+  const inHead = git(["show", `HEAD:${rel}`]);
+  return current === undefined ? inHead === null : inHead === current;
+}
+
+/** 戻す前の中身を var/edit-guard-backup/<日時>/ に残す（間違って戻しても失わない） */
+function backup(stamp: string, rel: string): void {
+  const abs = path.join(guardRoot, rel);
+  if (!existsSync(abs)) return;
+  const dest = path.join(backupRoot, stamp, rel);
+  mkdirSync(path.dirname(dest), { recursive: true });
+  writeFileSync(dest, readFileSync(abs));
 }
 
 /** 振り返り中に取っているスナップショット（ユーザーの WebUI 編集を「正」として反映するため） */
@@ -64,24 +100,34 @@ function scanProtected(includeSolver = false): ProtectedSnapshot {
 export function snapshotProtectedFiles(opts: { includeSolver?: boolean } = {}): ProtectedSnapshot {
   const snap = scanProtected(opts.includeSolver);
   if (opts.includeSolver) includesSolver.add(snap);
+  snapshotHeads.set(snap, git(["rev-parse", "HEAD"])?.trim() ?? null);
   activeSnapshots.add(snap);
   return snap;
 }
 
-/** 保護対象の変更・追加・削除を元に戻し、戻したファイルの一覧を返す */
+/**
+ * 保護対象の変更・追加・削除を元に戻し、戻したファイルの一覧を返す。
+ * スナップショットの後に開発者がコミットした変更は戻さない（試合中の開発で、試合の終わりにコミットが巻き戻されていた）。
+ * 戻す前の中身は var/edit-guard-backup/ に残す。
+ */
 export function restoreProtectedFiles(before: ProtectedSnapshot): string[] {
   activeSnapshots.delete(before);
   const reverted: string[] = [];
   const after = scanProtected(includesSolver.has(before));
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   for (const [rel, content] of before) {
-    if (after.get(rel) !== content) {
+    const now = after.get(rel);
+    if (now !== content && !committedSince(before, rel, now)) {
+      backup(stamp, rel);
+      mkdirSync(path.dirname(path.join(guardRoot, rel)), { recursive: true });
       writeFileSync(path.join(guardRoot, rel), content, "utf-8");
       reverted.push(rel);
     }
   }
-  for (const rel of after.keys()) {
-    if (!before.has(rel)) {
+  for (const [rel, content] of after) {
+    if (!before.has(rel) && !committedSince(before, rel, content)) {
       const abs = path.join(guardRoot, rel);
+      backup(stamp, rel);
       if (existsSync(abs)) rmSync(abs);
       reverted.push(`${rel} (新規作成を削除)`);
     }

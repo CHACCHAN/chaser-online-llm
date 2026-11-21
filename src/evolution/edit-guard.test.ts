@@ -51,3 +51,25 @@ test("試合中のサブ用ガードはソルバー・ハーネスの変更も�
   expect(reverted).toContain("src/new.ts (新規作成を削除)");
   expect(readFileSync(p.solver, "utf-8")).toBe("export {};\n");
 });
+
+test("スナップショットの後に開発者がコミットした変更は戻さず、戻した中身は控えを残す", () => {
+  const p = fakeProject();
+  const root = path.dirname(path.dirname(p.runner));
+  const git = (...args: string[]) => Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], { cwd: root });
+  git("init", "-q");
+  git("add", "-A");
+  git("commit", "-qm", "init");
+  const snap = snapshotProtectedFiles({ includeSolver: true });
+  writeFileSync(p.runner, "// 開発者の修正\n");
+  writeFileSync(path.join(root, "src/added.ts"), "// 開発者の新規\n");
+  git("add", "-A");
+  git("commit", "-qm", "dev");
+  writeFileSync(p.policy, "# 方針\n- サブが勝手に追加\n");
+  const reverted = restoreProtectedFiles(snap);
+  expect(reverted).toEqual(["agent/policies/default.md"]);
+  expect(readFileSync(p.runner, "utf-8")).toBe("// 開発者の修正\n");
+  expect(readFileSync(path.join(root, "src/added.ts"), "utf-8")).toBe("// 開発者の新規\n");
+  const backups = [...new Bun.Glob("var/edit-guard-backup/*/agent/policies/default.md").scanSync({ cwd: root })];
+  expect(backups.length).toBe(1);
+  expect(readFileSync(path.join(root, backups[0]!), "utf-8")).toContain("サブが勝手に追加");
+});
