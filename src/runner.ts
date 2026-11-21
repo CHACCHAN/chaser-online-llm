@@ -32,7 +32,7 @@ export interface TurnRecord {
   mainLatencyMs: number[];
   /** ソルバー手を採用した理由（時間切れ・多忙など）。main が決めたフェーズは含まない */
   solverFallbackNotes: string[];
-  /** メインの返答種別 (例: "CMD1:continue", "CMD2:plan") */
+  /** メインの返答種別 (例: "CMD1:continue", "CMD2:plan(followed)")。括弧は作戦目標に対して送った手が followed=向かう / no_route=経路なし / other=別の手 */
   mainActions: string[];
   /** サブへ依頼した仕事 */
   delegations: string[];
@@ -278,7 +278,7 @@ export async function runAgentMatch(
             events,
             solve: (plan) => decideSolver(worldMap, phase, turn, plan),
           });
-          if (res.action) mainActions.push(`${phase}:${res.action}`);
+          if (res.action) mainActions.push(`${phase}:${res.action}${res.planStatus ? `(${res.planStatus})` : ""}`);
           if (res.delegated) delegations.push(res.delegated);
           reloadTilesKnowledge();
           if (res.durationMs !== null) mainLatencyMs.push(res.durationMs);

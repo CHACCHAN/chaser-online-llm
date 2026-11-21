@@ -301,3 +301,68 @@ test("既知のワープ・マスのメモを、今の座標（[ ] に絶対座�
   };
   expect(agent.knownCellLines(noWeb)).toEqual(["この試合で入ったワープ（今の区画）: (2,0) 31番→別の区画"]);
 });
+
+test("通知・サブ結果は、メインが正常に返答したフェーズで届けたことにする（時間切れのフェーズに載ったものは次に再掲）", async () => {
+  Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
+  Bun.env.AGENT_HEDGE_SEC = "0";
+  sent.length = 0;
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
+  (agent as unknown as { notices: string[] }).notices.push("大事な知らせ");
+  const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
+  let n = 0;
+  proto.ask = async function (this: { options: ClaudeSessionOptions }, text: string): Promise<AskResult> {
+    if (this.options.label === "main" && n++ === 0) {
+      sent.push({ label: "main", text, options: this.options });
+      return { status: "timeout", durationMs: 5000 };
+    }
+    return origAsk.call(this, text);
+  };
+  await playPhases(agent, 3);
+  proto.ask = origAsk;
+  const mains = sent.filter((s) => s.label === "main");
+  expect(mains[0]!.text).toContain("大事な知らせ"); // 時間切れ
+  expect(mains[1]!.text).toContain("大事な知らせ"); // 再掲 → 正常に返答
+  expect(mains[2]!.text).not.toContain("大事な知らせ");
+  await agent.end();
+  delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
+  delete Bun.env.AGENT_HEDGE_SEC;
+});
+
+test("AGENT_HEDGE_SEC たっても返らなければ、もう1つのプロセスにも送り、先に返った方を使う", async () => {
+  Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
+  Bun.env.AGENT_HEDGE_SEC = "0.05";
+  sent.length = 0;
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
+  const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
+  let n = 0;
+  proto.ask = async function (this: { options: ClaudeSessionOptions }, text: string): Promise<AskResult> {
+    if (this.options.label === "main" && n++ === 0) {
+      await Bun.sleep(400); // 詰まった1つ目
+      return { status: "timeout", durationMs: 400 };
+    }
+    return origAsk.call(this, text);
+  };
+  const t0 = Date.now();
+  const sources = await playPhases(agent, 1);
+  proto.ask = origAsk;
+  expect(sources).toEqual(["main"]);
+  expect(Date.now() - t0).toBeLessThan(350);
+  expect(agent.usage().hedges).toBe(1);
+  await agent.end();
+  delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
+  delete Bun.env.AGENT_HEDGE_SEC;
+});
+
+test("合法手ごとの行き先のマスを、観測元つきで見せる", async () => {
+  const { landingLines } = await import("./main-agent");
+  const wm = new WorldMap();
+  wm.applyObservation("CMD1", "gr", [2, 4, 2, 2, 1000, 10, 2, 2, 2], 3);
+  const s = landingLines(wm, ["gr", "gru", "grr", "grd", "grl"], 5);
+  expect(s).toContain("gru→4罠(自2T前)");
+  expect(s).toContain("grr→10不可(自2T前)");
+  expect(s).not.toContain("gr→");
+  const s2 = landingLines(wm, ["wu", "keiru"], 3);
+  expect(s2).toContain("keiru→?");
+});

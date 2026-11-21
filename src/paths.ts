@@ -46,3 +46,5 @@ export const CURRENT_SNAPSHOT_PATH = path.join(CURRENT_DIR, "snapshot.json");
 export const CURRENT_MEMO_PATH = path.join(CURRENT_DIR, "MEMO.md");
 /** サブへの依頼一覧と結果 */
 export const CURRENT_ASK_SUB_PATH = path.join(CURRENT_DIR, "ASK_SUB.md");
+/** サブに依頼した時の盤面（依頼ごと。var/current/snapshot.json は毎フェーズ変わるので、依頼時の盤面を残す） */
+export const CURRENT_SUB_SNAPSHOT_DIR = path.join(CURRENT_DIR, "sub-snapshots");

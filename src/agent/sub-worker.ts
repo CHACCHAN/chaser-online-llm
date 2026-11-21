@@ -1,6 +1,6 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { AGENT_DIR, CURRENT_ASK_SUB_PATH } from "../paths";
+import { AGENT_DIR, CURRENT_ASK_SUB_PATH, CURRENT_SUB_SNAPSHOT_DIR } from "../paths";
 import { numSetting } from "../settings";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
@@ -17,6 +17,17 @@ export interface SubTask {
   /** 依頼したフェーズ（メインへの TODO 表示用） */
   requestedAt?: string;
   startedAt?: number;
+  /** 依頼した時の盤面（区画・座標世代・盤面のファイル）。結果が今の座標で使えるかをメインが判断するため */
+  context?: SubTaskContext;
+}
+
+export interface SubTaskContext {
+  turn: number;
+  phase: string;
+  segment: number;
+  frameVersion: number;
+  /** 依頼時の盤面（var/current/sub-snapshots/task-N.json） */
+  snapshotPath?: string;
 }
 
 const STATUS_LABEL = { queued: "待機", running: "作業中", done: "完了", failed: "失敗" } as const;
@@ -66,6 +77,7 @@ export class SubWorker {
     this.stopped = false;
     this.tasks.length = 0;
     this.reported.clear();
+    rmSync(CURRENT_SUB_SNAPSHOT_DIR, { recursive: true, force: true });
     // 試合中のサブはツールを使えるが、ハーネス・ソルバー・プロンプト・方針・設定は変えさせない（試合終了時に元に戻す）
     this.guard = snapshotProtectedFiles({ includeSolver: true });
     this.publish();
@@ -81,8 +93,25 @@ export class SubWorker {
     }
   }
 
-  enqueue(request: string, requestedAt?: string): SubTask {
-    const task: SubTask = { id: this.nextId++, request, status: "queued", result: null, durationMs: null, requestedAt };
+  /** 仕事を足す。snapshot（依頼時の盤面の JSON）があれば var/current/sub-snapshots/task-N.json に残し、サブにはそれを読ませる */
+  enqueue(request: string, requestedAt?: string, context?: Omit<SubTaskContext, "snapshotPath"> & { snapshot?: string }): SubTask {
+    const id = this.nextId++;
+    let ctx: SubTaskContext | undefined;
+    if (context) {
+      const { snapshot, ...rest } = context;
+      ctx = { ...rest };
+      if (snapshot) {
+        try {
+          mkdirSync(CURRENT_SUB_SNAPSHOT_DIR, { recursive: true });
+          const p = path.join(CURRENT_SUB_SNAPSHOT_DIR, `task-${id}.json`);
+          writeFileSync(p, snapshot);
+          ctx.snapshotPath = path.relative(path.dirname(AGENT_DIR), p);
+        } catch {
+          // 書けなくても依頼は出す
+        }
+      }
+    }
+    const task: SubTask = { id, request, status: "queued", result: null, durationMs: null, requestedAt, ...(ctx ? { context: ctx } : {}) };
     this.tasks.push(task);
     this.publish();
     this.pump();
@@ -113,10 +142,20 @@ export class SubWorker {
     return this.tasks.filter((t) => t.status === "queued" || t.status === "running");
   }
 
-  /** 前回呼び出し以降に終わった仕事（メインへの報告用） */
+  /** 終わったがメインにまだ届けていない仕事 */
+  peekFinished(): SubTask[] {
+    return this.tasks.filter((t) => (t.status === "done" || t.status === "failed") && !this.reported.has(t.id)).map((t) => ({ ...t }));
+  }
+
+  /** メインが正常に返答したフェーズで見せた結果を、届けたことにする（時間切れのフェーズに載った結果は次のフェーズにもう一度出す） */
+  markReported(ids: number[]): void {
+    for (const id of ids) this.reported.add(id);
+  }
+
+  /** 終わった仕事を取り出し、届けたことにする */
   takeFinished(): SubTask[] {
-    const done = this.tasks.filter((t) => (t.status === "done" || t.status === "failed") && !this.reported.has(t.id));
-    for (const t of done) this.reported.add(t.id);
+    const done = this.peekFinished();
+    this.markReported(done.map((t) => t.id));
     return done;
   }
 
@@ -189,7 +228,7 @@ export class SubWorker {
     const session = this.newSession();
     this.sessions.add(session);
     try {
-      const res = await session.ask(`[TASK #${task.id}] ${task.request}`, numSetting("AGENT_SUB_TASK_TIMEOUT_MIN", { min: 1 }) * 60_000);
+      const res = await session.ask(`[TASK #${task.id}] ${task.request}${task.context ? `\n\n依頼時の盤面: ${task.context.snapshotPath ?? "(なし)"}（T${task.context.turn} ${task.context.phase}・区画${task.context.segment}・座標世代${task.context.frameVersion}）。座標はこの盤面の pos と同じ座標。var/current/snapshot.json は今の盤面で、ワープの後は座標系が違う（frameVersion で分かる）` : ""}`, numSetting("AGENT_SUB_TASK_TIMEOUT_MIN", { min: 1 }) * 60_000);
       if (res.status === "ok") {
         task.status = "done";
         task.result = res.text.slice(0, 1500);

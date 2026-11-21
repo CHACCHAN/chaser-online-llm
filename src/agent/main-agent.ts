@@ -24,6 +24,40 @@ export interface MainDecision {
   durationMs: number | null;
   note: string;
   delegated: string | null;
+  /** 作戦目標があった時、送る手が目標に向かっているか（followed）・目標へ経路が無い（no_route）・ソルバーが別の手を選んだ（other） */
+  planStatus?: "followed" | "no_route" | "other";
+}
+
+/** 作戦目標に対して、送る手が向かっているか */
+function planFollowStatus(worldMap: WorldMap, plan: AgentPlan | null, command: string): MainDecision["planStatus"] {
+  if (!plan) return undefined;
+  const step = worldMap.firstStepTowards(plan.target[0], plan.target[1]);
+  if (step === null) return "no_route";
+  if (step === "here") return "followed";
+  const spec = (CMD1_SPECS as Record<string, { walkDir?: string }>)[command] ?? (CMD2_SPECS as Record<string, { walkDir?: string }>)[command];
+  return spec?.walkDir === step.dir ? "followed" : "other";
+}
+
+const PLAN_STATUS_LABEL = { followed: "目標へ向かう手", no_route: "目標へ経路なし→ソルバーの手", other: "ソルバーは目標と別の手" } as const;
+
+/** 合法手ごとの行き先のマス（観測元つき）。メインが直接指定の可否を盤面から読み直さずに済むように */
+export function landingLines(worldMap: WorldMap, legal: readonly string[], turn: number): string {
+  const [x, y] = worldMap.getPosition();
+  const parts: string[] = [];
+  for (const cmd of legal) {
+    const spec = (CMD1_SPECS as Record<string, { move: [number, number] }>)[cmd] ?? (CMD2_SPECS as Record<string, { move: [number, number] }>)[cmd];
+    if (!spec || (spec.move[0] === 0 && spec.move[1] === 0)) continue;
+    const t = worldMap.getTile(x + spec.move[0], y + spec.move[1]);
+    if (!t) {
+      parts.push(`${cmd}→?`);
+      continue;
+    }
+    const safety = classifyTileSafety(t.value);
+    const flag = safety === "HAZARD" ? "罠" : safety === "BLOCKED" ? "不可" : "";
+    const src = t.fromGlobalMap ? "W" : `自${turn - t.lastSeenTurn === 0 ? "今" : `${turn - t.lastSeenTurn}T前`}`;
+    parts.push(`${cmd}→${t.value}${flag}(${src})`);
+  }
+  return parts.length > 0 ? `手の行き先（値・観測元: 自=自分の観測 W=Webマップ ?=未観測）: ${parts.join(" ")}` : "";
 }
 
 /** 試合中のエージェント使用量（UI と summary.json に出す） */
@@ -40,6 +74,8 @@ export interface AgentUsageReport {
   lastCallInputTokens: number | null;
   /** main に含まれる、予算切れで止めた問い合わせの見積もり分 */
   estimatedTimeoutTokens: number;
+  /** AGENT_HEDGE_SEC で2つ目のプロセスにも送った回数 */
+  hedges: number;
 }
 
 interface MainReply {
@@ -96,6 +132,7 @@ export class MainAgent {
   /** 予算切れで止めた問い合わせの見積もり分（実際の使用量は不明） */
   private estimatedTimeoutTokens = 0;
   private limitNotified = false;
+  private hedgeCount = 0;
   /** 前のフェーズの座標系（ワープで変わったら作戦目標・メモの座標が無効になる） */
   private frameVersion: number | null = null;
 
@@ -137,6 +174,7 @@ export class MainAgent {
       limitReached: limitTokens > 0 && totalTokens(total) >= limitTokens,
       lastCallInputTokens: this.lastCallInputTokens,
       estimatedTimeoutTokens: this.estimatedTimeoutTokens,
+      hedges: this.hedgeCount,
     };
   }
 
@@ -215,7 +253,9 @@ export class MainAgent {
       appendSystemPrompt: "あなたは CHaserOnline003 攻略プロジェクトのメインエージェント。試合後の振り返りとソルバー改修を行う。ツールを使ってよい。試合中の役割は agent/prompts/main.md にある。",
     });
     session.start();
-    const subResults = this.formatSubResults();
+    const sr = this.formatSubResults(null);
+    this.sub.markReported(sr.ids);
+    const subResults = sr.text;
     const policy = activePolicyPrompt();
     const res = await session.ask(
       [
@@ -339,7 +379,7 @@ export class MainAgent {
 
     await this.writeSnapshot(ctx.worldMap);
     const legal = ctx.phase === "CMD1" ? CMD1_COMMANDS : CMD2_COMMANDS;
-    const message = this.buildTurnMessage(ctx, solverNow, legal);
+    const { message, shownNotices, shownSubResults } = this.buildTurnMessage(ctx, solverNow, legal);
 
     // 先に起動しておいたプロセスで聞き、すぐ次のフェーズ用を起動する
     // 先に起動したプロセスが待ち時間の間に終わっていたら（他プレイヤー待ちが長い等）新しく起動する
@@ -349,7 +389,9 @@ export class MainAgent {
       call = this.spawnCall();
     }
     this.next = this.spawnCall();
-    const res = await call.ask(message, this.turnBudgetMs);
+    const { res, winner, hedged } = await this.askWithHedge(call, message);
+    call = winner;
+    if (hedged) this.hedgeCount += 1;
     if (res.status === "ok") {
       const u = call.usage;
       this.mainUsage = addUsage(this.mainUsage, u);
@@ -370,11 +412,20 @@ export class MainAgent {
 
     const reply = parseMainReply(res.text, ctx.turn, ctx.phase, legal);
     if (!reply) return fallback("応答に有効な JSON がない", res.durationMs);
+    // 正常に返答したので、このフェーズで見せた通知・サブ結果を届けたことにする
+    this.notices.splice(0, shownNotices);
+    this.sub.markReported(shownSubResults);
 
     this.applyMemo(reply);
     let delegated: string | null = null;
     if (reply.delegate) {
-      const task = this.sub.enqueue(reply.delegate, `T${ctx.turn} ${ctx.phase}`);
+      const task = this.sub.enqueue(reply.delegate, `T${ctx.turn} ${ctx.phase}`, {
+        turn: ctx.turn,
+        phase: ctx.phase,
+        segment: ctx.worldMap.getSegmentIndex(),
+        frameVersion: ctx.worldMap.frameVersion,
+        snapshot: JSON.stringify(ctx.worldMap.toSnapshot()),
+      });
       delegated = `#${task.id} ${reply.delegate.slice(0, 80)}`;
     }
 
@@ -383,7 +434,8 @@ export class MainAgent {
     if (reply.action === "plan" && reply.target) {
       this.plan = { target: reply.target, note: reply.note };
       decision = ctx.solve(this.plan);
-      note = `作戦変更 → 目標 (${reply.target.join(",")})`;
+      const st = planFollowStatus(ctx.worldMap, this.plan, decision.command)!;
+      note = `作戦変更 → 目標 (${reply.target.join(",")})：${PLAN_STATUS_LABEL[st]}`;
     } else if (reply.action === "command" && reply.command) {
       // 安全ガード: 行き先が罠・通行不可なのに、ソルバーの手なら避けられる時は却下する（モデルの見落とし対策）
       const danger = landingDanger(ctx.worldMap, reply.command);
@@ -396,6 +448,8 @@ export class MainAgent {
         note = "手を直接指定";
       }
     }
+    const planStatus = reply.action === "command" ? undefined : planFollowStatus(ctx.worldMap, this.plan, decision.command);
+    if (reply.action === "continue" && planStatus) note = `作戦どおり（${PLAN_STATUS_LABEL[planStatus]}）`;
     return {
       decision: { ...decision, reason: `${decision.reason}${reply.note ? ` / ${reply.note}` : ""}` },
       source: "main",
@@ -403,6 +457,7 @@ export class MainAgent {
       durationMs: res.durationMs,
       note,
       delegated,
+      ...(planStatus ? { planStatus } : {}),
     };
   }
 
@@ -441,7 +496,7 @@ export class MainAgent {
     const est = ctx.worldMap.getStats().estimatedTotalScore;
     const delta = this.lastEst === null ? "" : ` (${est - this.lastEst >= 0 ? "+" : ""}${est - this.lastEst})`;
     this.lastEst = est;
-    const who = r.source === "main" ? `main/${r.action}` : `solver: ${r.note}`;
+    const who = r.source === "main" ? `main/${r.action}${r.planStatus && r.planStatus !== "followed" ? ` ${PLAN_STATUS_LABEL[r.planStatus]}` : ""}` : `solver: ${r.note}`;
     this.recent.push(`T${ctx.turn} ${ctx.phase} pos(${x},${y}) est=${est}${delta} → ${r.decision.command} [${who}]`);
     const keep = numSetting("AGENT_RECENT_PHASES", { min: 0, integer: true });
     if (this.recent.length > keep) this.recent.splice(0, this.recent.length - keep);
@@ -540,12 +595,56 @@ export class MainAgent {
     }
   }
 
-  private formatSubResults(): string {
-    const finished = this.sub.takeFinished();
-    if (finished.length === 0) return "";
-    return finished
-      .map((t) => `サブ結果 #${t.id} [${t.status}${t.durationMs ? ` ${Math.round(t.durationMs / 1000)}s` : ""}]: ${t.result ?? ""}`)
+  /** まだ届けていないサブの結果（依頼時の区画・座標世代つき。ワープで座標系が変わった後の結果はそう書く） */
+  private formatSubResults(worldMap: WorldMap | null): { text: string; ids: number[] } {
+    const finished = this.sub.peekFinished();
+    if (finished.length === 0) return { text: "", ids: [] };
+    const nowFrame = worldMap?.frameVersion ?? null;
+    const text = finished
+      .map((t) => {
+        const c = t.context;
+        const when = c ? `（T${c.turn} ${c.phase}・区画${c.segment}・座標世代${c.frameVersion}で依頼${nowFrame !== null && c.frameVersion !== nowFrame ? "。その後ワープしたので、結果の座標は今の座標系と違う" : ""}）` : "";
+        return `サブ結果 #${t.id} [${t.status}${t.durationMs ? ` ${Math.round(t.durationMs / 1000)}s` : ""}]${when}: ${t.result ?? ""}`;
+      })
       .join("\n");
+    return { text, ids: finished.map((t) => t.id) };
+  }
+
+  /**
+   * 1つのプロセスに聞き、AGENT_HEDGE_SEC たっても返らなければ、先に起動しておいたもう1つのプロセスにも同じ問い合わせを送る。
+   * 先に正常に返った方を使い、もう一方は止める（ゲートウェイの詰まりで 60 秒の時間切れになり、手・メモ・依頼がまとめて失われていた）
+   */
+  private async askWithHedge(call: ClaudeSession, message: string): Promise<{ res: AskResult; winner: ClaudeSession; hedged: boolean }> {
+    const hedgeMs = numSetting("AGENT_HEDGE_SEC", { min: 0 }) * 1000;
+    const first = call.ask(message, this.turnBudgetMs).then((res) => ({ res, s: call }));
+    if (hedgeMs <= 0 || hedgeMs >= this.turnBudgetMs - 1000) {
+      const r = await first;
+      return { res: r.res, winner: r.s, hedged: false };
+    }
+    const quick = await Promise.race([first, Bun.sleep(hedgeMs).then(() => null)]);
+    if (quick) return { res: quick.res, winner: quick.s, hedged: false };
+    let second = this.next?.alive ? this.next : this.spawnCall();
+    if (second === this.next) this.next = this.spawnCall();
+    const t0 = Date.now();
+    const other = second.ask(message, this.turnBudgetMs - hedgeMs).then((res) => ({ res, s: second }));
+    // 先に「正常に」返った方。片方が異常終了したら、もう一方を待つ
+    const pending = [first, other];
+    let winnerResult: { res: AskResult; s: ClaudeSession } | null = null;
+    while (pending.length > 0) {
+      const r = await Promise.race(pending.map((p, i) => p.then((v) => ({ v, i }))));
+      pending.splice(r.i, 1);
+      if (r.v.res.status === "ok" || pending.length === 0) {
+        winnerResult = r.v;
+        break;
+      }
+    }
+    const loser = winnerResult!.s === call ? second : call;
+    // 負けた方は止める。入力は送信済みなので、直近の入力量で見積もって使用量に含める
+    const est = this.lastCallInputTokens ?? 0;
+    this.mainUsage = addUsage(this.mainUsage, { ...emptyUsage(), calls: 1, inputTokens: est });
+    loser.kill();
+    void t0;
+    return { res: winnerResult!.res, winner: winnerResult!.s, hedged: true };
   }
 
   /** サブに頼んだ仕事の一覧（メインは前の会話を持たないので、同じ依頼の重複を防ぐために毎回渡す） */
@@ -565,7 +664,7 @@ export class MainAgent {
     ctx: { turn: number; phase: "CMD1" | "CMD2"; worldMap: WorldMap; events: string[] },
     solverNow: SolverDecision,
     legal: readonly string[],
-  ): string {
+  ): { message: string; shownNotices: number; shownSubResults: number[] } {
     const ev = ctx.worldMap.evaluateCandidates(ctx.phase);
     const stats = ctx.worldMap.getStats();
     const targets = [
@@ -599,13 +698,21 @@ export class MainAgent {
       );
     }
     if (ctx.events.length > 0) lines.push(`イベント: ${ctx.events.join(", ")}`);
-    if (this.notices.length > 0) lines.push(...this.notices.splice(0));
-    const subResults = this.formatSubResults();
-    if (subResults) lines.push(subResults);
+    // 通知・サブ結果は、メインが正常に返答した時に届けたことにする（時間切れなら次のフェーズにもう一度出す）。溜まりすぎたら古いものから捨てる
+    if (this.notices.length > 20) this.notices.splice(0, this.notices.length - 20);
+    const shownNotices = this.notices.length;
+    if (shownNotices > 0) lines.push(...this.notices);
+    const subResults = this.formatSubResults(ctx.worldMap);
+    if (subResults.text) lines.push(subResults.text);
     const todo = this.formatSubTodo();
     if (todo) lines.push(todo);
+    if (ctx.worldMap.getLastEventFlags().warpPending && !ctx.worldMap.getGlobalPosition()) {
+      lines.push("ワープを踏んだ直後で、着地先のまわりはまだ分からない（手の行き先は ? ）");
+    }
+    const landing = landingLines(ctx.worldMap, legal, ctx.turn);
+    if (landing) lines.push(landing);
     lines.push(`合法手: ${legal.join(",")}`);
-    return lines.join("\n");
+    return { message: lines.join("\n"), shownNotices, shownSubResults: subResults.ids };
   }
 }
 
