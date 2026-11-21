@@ -57,7 +57,6 @@ export interface RoomProfile {
   /** マスごとのメモ（キーは絶対座標 "x,y"）。エージェントが `bun src/cli.ts cell-note` で書く */
   cellNotes?: Record<string, string[]>;
   discoveredTiles: number[];
-  tacticalNotes: string[];
   updatedAt: string;
 }
 
@@ -140,7 +139,6 @@ export function getRoomProfile(room: number): RoomProfile {
     warps: [],
     cellNotes: {},
     discoveredTiles: [],
-    tacticalNotes: [],
     updatedAt: new Date().toISOString(),
   };
 }

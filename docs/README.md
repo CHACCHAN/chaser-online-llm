@@ -35,7 +35,7 @@
 bun run typecheck        # 型エラー 0
 bun test                 # 単体テスト
 bun run verify-solver    # ソルバーが読み込めて合法手を返す
-bun src/cli.ts status --room 3   # ルームの最高得点とタイル数
+bun src/cli.ts cells --room 719  # ルームのワープの実測とマスのメモ
 ```
 
 ソルバーを改修したら、必ず `bun src/cli.ts verify --run-dir var/runs/<runId>` で過去ログを再生して確かめてください。

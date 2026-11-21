@@ -119,12 +119,11 @@
 
 | サブコマンド | 用途 |
 | :--- | :--- |
-| `scrape-map --room <n> [--url <u>]` | Web マップを取得し、結果を JSON で表示 |
 | `reference [--query <q>] [--tile <id>] [--url <u>]` | ローカルの `tiles.json` と公式サイトを検索 |
 | `upsert-tile --id <id> --score <s> [--name --label --passable --hazard --symbol --notes]` | `knowledge/tiles.json` にタイルを登録・更新（`source: inferred`） |
-| `run-script --snapshot <file> --code "<JS>"` | 盤面スナップショットに対して JS を実行（2.5 秒で打ち切り） |
 | `verify [--run-dir <dir>]` | リプレイ検証。失敗時は終了コード 1 |
-| `status [--room <n>]` | ルームの成績とタイル数 |
+| `cells --room <n> [--near x,y --radius r]` | ワープの実測（絶対座標）とマスのメモ |
+| `cell-note --room <n> --x <x> --y <y> --note <text>` | マスにメモを足す（空で消す） |
 
 ツールは `agent/tools/<name>.ts` に書き、`bun agent/tools/<name>.ts` で実行する（規約は `agent/tools/README.md`。出力は JSON 1 行、2 秒以内を目安）。`create-tool` は廃止した。
 

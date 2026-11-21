@@ -4,7 +4,6 @@ import { verifySolverWithReplay } from "./evolution/replay-verifier";
 import { WorldMap } from "./memory/world-map";
 import { parseGridFromHtml } from "./perception/web-map-scraper";
 import { decideTurnAction } from "./solver/active-solver";
-import { runTacticalScriptOnSnapshot } from "./tools/script-runner";
 
 async function runSelfTest() {
   const wm = new WorldMap();
@@ -31,13 +30,6 @@ async function runSelfTest() {
   const d1 = decideTurnAction(wm, "CMD1", 1);
   const d2 = decideTurnAction(wm, "CMD2", 1);
 
-  const scriptRes = await runTacticalScriptOnSnapshot({
-    worldMap: wm,
-    code: `return { pos: snapshot.position, globalPos: snapshot.globalPosition, tilesCount: snapshot.tiles.length };`,
-  });
-  if (!scriptRes.ok) {
-    throw new Error(`Tactical script test failed: ${scriptRes.error}`);
-  }
 
   const replayRes = await verifySolverWithReplay(path.join(RUNS_DIR, "nonexistent"));
   if (!replayRes.ok) {
@@ -51,7 +43,6 @@ async function runSelfTest() {
         globalPosition: wm.getGlobalPosition(),
         sampleCmd1: d1,
         sampleCmd2: d2,
-        scriptResult: scriptRes.result,
         replaySmokeTest: replayRes,
       },
       null,

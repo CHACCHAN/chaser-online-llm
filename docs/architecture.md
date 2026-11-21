@@ -109,7 +109,7 @@ flowchart LR
 | `src/client/` | サーバ通信（Cookie 付き HTTP、ポーリングの状態機械、ReturnCode パーサ、公式成績の取得） |
 | `src/evolution/analyzer.ts` | 試合後の診断レポート（推定と公式の差、穴の再踏破など） |
 | `src/evolution/replay-verifier.ts` | `turns.jsonl` を新ソルバーで再生して検証 |
-| `src/tools/` | ロガー（pino）、`run-script` の実行器、公式サイト検索 (`reference`) |
+| `src/tools/` | ロガー（pino）、公式サイト検索 (`reference`) |
 | `src/ui/` | `server.ts`（HTTP/SSE）、`event-bus.ts`（状態配信）、`env-store.ts`（.env 読み書き）、`public/index.html` |
 | `agent/prompts/main.md`, `agent/prompts/sub.md` | メインとサブの役割・返答形式 |
 | `agent/tools/` | エージェントが作る臨時／補助ツール（規約は `agent/tools/README.md`） |

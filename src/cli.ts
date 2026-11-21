@@ -1,20 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { RUNS_DIR } from "./paths";
 import { parseArgs } from "node:util";
 import { verifySolverWithReplay } from "./evolution/replay-verifier";
 import {
-  getRoomProfile,
   loadTilesKnowledge,
   roomCells,
   setCellNote,
   upsertTileDefinition,
 } from "./memory/knowledge-store";
-import type { WorldMapSnapshot } from "./memory/world-map";
-import { scrapeRoomWebMap } from "./perception/web-map-scraper";
-import {
-  runTacticalScriptOnSnapshot,
-} from "./tools/script-runner";
 import { consultReference } from "./tools/reference-fetcher";
 
 /**
@@ -38,9 +31,6 @@ async function main() {
       hazard: { type: "string" },
       symbol: { type: "string" },
       notes: { type: "string" },
-      snapshot: { type: "string" },
-      code: { type: "string" },
-      description: { type: "string" },
       "run-dir": { type: "string" },
       near: { type: "string" },
       radius: { type: "string" },
@@ -50,16 +40,6 @@ async function main() {
     },
     strict: false,
   });
-
-  if (subcommand === "scrape-map") {
-    const room = Number(values.room ?? Bun.env.CHASER_ROOM ?? "3");
-    const res = await scrapeRoomWebMap({
-      room,
-      webMapUrl: typeof values.url === "string" ? values.url : undefined,
-    });
-    console.log(JSON.stringify(res, null, 2));
-    return;
-  }
 
   if (subcommand === "reference") {
     const res = await consultReference({
@@ -91,58 +71,6 @@ async function main() {
       notes: typeof values.notes === "string" ? values.notes : undefined,
     });
     console.log(JSON.stringify({ ok: true, updatedTile: id, tiles: loadTilesKnowledge()[String(id)] }, null, 2));
-    return;
-  }
-
-  if (subcommand === "run-script") {
-    const snapPath =
-      typeof values.snapshot === "string"
-        ? path.resolve(process.cwd(), values.snapshot)
-        : null;
-    let snapshot: WorldMapSnapshot = {
-      turn: 1,
-      segmentId: 0,
-      segmentCount: 1,
-      position: [0, 0],
-      globalPosition: null,
-      globalMapLocked: false,
-      lastMoveDir: null,
-      lastGrid: null,
-      stats: {
-        turnsObserved: 1,
-        estimatedTotalScore: 300,
-        estimatedActionScore: 0,
-        estimatedItemScore: 0,
-        holeRevisits: 0,
-        hazardHits: 0,
-        pickups: {},
-        unknownTiles: [],
-        segmentCount: 1,
-        globalMapLocked: false,
-        warpLinksCount: 0,
-      },
-      tiles: [],
-      warpLinks: [],
-    };
-
-    if (snapPath && existsSync(snapPath)) {
-      const parsed = JSON.parse(readFileSync(snapPath, "utf-8")) as {
-        snapshot?: WorldMapSnapshot;
-      } & Partial<WorldMapSnapshot>;
-      if (parsed.snapshot) {
-        snapshot = parsed.snapshot;
-      } else if (parsed.position && parsed.tiles) {
-        snapshot = parsed as WorldMapSnapshot;
-      }
-    }
-
-    const code = typeof values.code === "string" ? values.code : "";
-    if (!code) {
-      throw new Error("--code <js_function_body> is required");
-    }
-
-    const res = await runTacticalScriptOnSnapshot({ code, snapshot });
-    console.log(JSON.stringify(res, null, 2));
     return;
   }
 
@@ -178,33 +106,13 @@ async function main() {
     return;
   }
 
-  if (subcommand === "status") {
-    const room = Number(values.room ?? Bun.env.CHASER_ROOM ?? "3");
-    const profile = getRoomProfile(room);
-    const tiles = loadTilesKnowledge();
-    console.log(
-      JSON.stringify(
-        {
-          roomProfile: profile,
-          knownTileCount: Object.keys(tiles).length,
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-
   console.log(
     [
       "Usage: bun src/cli.ts <subcommand> [options]",
       "Subcommands:",
-      "  scrape-map   --room <n> [--url <url>]          Scrape room Web Map via HTTP",
       "  reference    [--query <q>] [--tile <id>]       Consult official CHaserOnline reference & tile DB",
       "  upsert-tile  --id <id> --score <s> ...         Register or update tile knowledge in tiles.json",
-      "  run-script   --snapshot <file> --code <code>   Run on-the-fly tactical JS/TS on a map snapshot",
       "  verify       [--run-dir <dir>]                 Replay-verify active-solver.ts against turns.jsonl",
-      "  status       [--room <n>]                      Show room high score, profile & known tile stats",
       "  cells        --room <n> [--near x,y] [--radius r]  Known warps (absolute coords) and cell notes",
       "  cell-note    --room <n> --x <x> --y <y> --note <text>  Add a note to a cell (empty --note clears)",
     ].join("\n"),

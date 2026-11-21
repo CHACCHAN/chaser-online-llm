@@ -28,13 +28,10 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 ## CLI（`bun src/cli.ts <サブコマンド>`）
 | サブコマンド | 引数 | 内容 |
 |---|---|---|
-| `status` | `--room N` | ルームの記録 |
 | `reference` | `--tile ID` / `--query 語` | タイルの登録内容 / 公式ページの検索 |
 | `upsert-tile` | `--id --score --name --label --passable --hazard --symbol [--notes]` | タイルを登録・更新 |
-| `run-script` | `--snapshot var/current/snapshot.json --code "<JS>"` | 盤面（変数 `snapshot`）に JS を実行 |
 | `cells` | `--room N [--near x,y --radius r]` | ワープの実測（入口→着地、回数、タイル番号ごとの飛び方）とマスのメモ |
 | `cell-note` | `--room N --x X --y Y --note "…"` | マスにメモを足す（`--note ""` で消す）。絶対座標 |
-| `scrape-map` | `--room N` | Webマップを取得 |
 | `verify` | `--run-dir var/runs/<runId>` | ソルバーのリプレイ検証 |
 
 チェック: `bun run typecheck`、`bun test`、`bun run verify-solver`。

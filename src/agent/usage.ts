@@ -24,17 +24,6 @@ export function addUsage(a: UsageTotals, b: UsageTotals): UsageTotals {
   };
 }
 
-export function diffUsage(after: UsageTotals, before: UsageTotals): UsageTotals {
-  return {
-    calls: after.calls - before.calls,
-    inputTokens: after.inputTokens - before.inputTokens,
-    outputTokens: after.outputTokens - before.outputTokens,
-    cacheReadTokens: after.cacheReadTokens - before.cacheReadTokens,
-    cacheCreationTokens: after.cacheCreationTokens - before.cacheCreationTokens,
-    costUsd: after.costUsd - before.costUsd,
-  };
-}
-
 /** クォータ判定に使う総トークン（キャッシュ読み書きも含めてモデルが処理した量） */
 export function totalTokens(u: UsageTotals): number {
   return u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens;
