@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ROOM_PROFILES_PATH, RUNS_DIR, TILES_PATH } from "../paths";
 
@@ -71,22 +71,56 @@ export interface RoomProfilesFile {
 
 
 
+/**
+ * JSON を書く。一時ファイルに書いてから置き換えるので、書いている途中で止まっても前の中身が壊れない。
+ */
+function writeJsonAtomic(file: string, value: unknown): void {
+  const tmp = `${file}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", "utf-8");
+  renameSync(tmp, file);
+}
+
+/** 読めなかった JSON を控えに残す（上書きで失わない）。控えのパスを返す */
+function backupBroken(file: string): string | null {
+  try {
+    const dest = `${file}.broken-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    copyFileSync(file, dest);
+    return dest;
+  } catch {
+    return null;
+  }
+}
+
 let cachedTiles: Record<string, StoredTileDefinition> | null = null;
+/** 最後に読めた tiles.json（エージェントが書きかけ・壊した時はこれを使い、書き込みは止める） */
+let lastGoodTiles: Record<string, StoredTileDefinition> | null = null;
+/** tiles.json が読めない（壊れている）。その間に書くと全タイルが消えるので upsert しない */
+let tilesUnreadable: string | null = null;
 
 export function loadTilesKnowledge(): Record<string, StoredTileDefinition> {
   if (cachedTiles) return cachedTiles;
-  try {
-    if (existsSync(TILES_PATH)) {
-      const raw = readFileSync(TILES_PATH, "utf-8");
-      const parsed = JSON.parse(raw) as TilesKnowledgeFile;
-      cachedTiles = parsed.tiles ?? {};
-      return cachedTiles;
-    }
-  } catch {
-    // Fallback to empty cache if malformed
+  if (!existsSync(TILES_PATH)) {
+    tilesUnreadable = null;
+    cachedTiles = {};
+    return cachedTiles;
   }
-  cachedTiles = {};
-  return cachedTiles;
+  try {
+    const parsed = JSON.parse(readFileSync(TILES_PATH, "utf-8")) as TilesKnowledgeFile;
+    cachedTiles = parsed.tiles ?? {};
+    lastGoodTiles = cachedTiles;
+    tilesUnreadable = null;
+    return cachedTiles;
+  } catch (err) {
+    tilesUnreadable = err instanceof Error ? err.message : String(err);
+    // 前に読めた中身で続ける（キャッシュはしない。直れば次の読み込みで反映される）
+    return lastGoodTiles ? { ...lastGoodTiles } : {};
+  }
+}
+
+/** tiles.json が読めない時の理由（読めれば null） */
+export function tilesKnowledgeError(): string | null {
+  loadTilesKnowledge();
+  return tilesUnreadable;
 }
 
 export function reloadTilesKnowledge(): Record<string, StoredTileDefinition> {
@@ -99,14 +133,19 @@ export function upsertTileDefinition(
   def: StoredTileDefinition,
 ): void {
   const tiles = loadTilesKnowledge();
+  if (tilesUnreadable) {
+    // 壊れたファイルの上に書くと、他のタイルの知識がすべて消える
+    throw new Error(`knowledge/tiles.json が JSON として読めないので書き込まない（${tilesUnreadable}）。先にファイルを直すこと`);
+  }
   tiles[String(tileValue)] = def;
   const payload: TilesKnowledgeFile = {
     version: 1,
     updatedAt: new Date().toISOString(),
     tiles,
   };
-  writeFileSync(TILES_PATH, JSON.stringify(payload, null, 2) + "\n", "utf-8");
+  writeJsonAtomic(TILES_PATH, payload);
   cachedTiles = tiles;
+  lastGoodTiles = tiles;
 }
 
 /** 実測の得点を試合で使うのに要る推定の数 */
@@ -139,14 +178,30 @@ export function recordMeasuredTileScores(tiles: { value: number; score: number; 
   }
 }
 
+/** 最後に読めた room-profiles.json（壊れていた時に全ルームの記録を空で上書きしないため） */
+let lastGoodProfiles: RoomProfilesFile | null = null;
+/** 壊れた room-profiles.json を控えに残した（同じ壊れ方で何度も控えを作らない） */
+let brokenProfilesBackedUp: string | null = null;
+
 export function loadRoomProfiles(): RoomProfilesFile {
-  try {
-    if (existsSync(ROOM_PROFILES_PATH)) {
-      const raw = readFileSync(ROOM_PROFILES_PATH, "utf-8");
-      return JSON.parse(raw) as RoomProfilesFile;
+  if (existsSync(ROOM_PROFILES_PATH)) {
+    let raw = "";
+    try {
+      raw = readFileSync(ROOM_PROFILES_PATH, "utf-8");
+      const parsed = JSON.parse(raw) as RoomProfilesFile;
+      if (!parsed || typeof parsed !== "object" || typeof parsed.rooms !== "object" || parsed.rooms === null) throw new Error("rooms がない");
+      lastGoodProfiles = parsed;
+      brokenProfilesBackedUp = null;
+      return parsed;
+    } catch (err) {
+      // 壊れたファイルは控えに残し、前に読めた中身で続ける（次に保存した時にその中身で直る）
+      if (brokenProfilesBackedUp !== raw) {
+        const dest = backupBroken(ROOM_PROFILES_PATH);
+        brokenProfilesBackedUp = raw;
+        console.error(`room-profiles.json が読めない（${err instanceof Error ? err.message : String(err)}）。控え: ${dest ?? "作れなかった"}`);
+      }
+      if (lastGoodProfiles) return structuredClone(lastGoodProfiles);
     }
-  } catch {
-    // ignore
   }
   return {
     version: 1,
@@ -276,6 +331,7 @@ export function saveRoomProfile(profile: RoomProfile): RoomProfile {
   };
   file.rooms[String(profile.room)] = updated;
   file.updatedAt = updated.updatedAt;
-  writeFileSync(ROOM_PROFILES_PATH, JSON.stringify(file, null, 2) + "\n", "utf-8");
+  writeJsonAtomic(ROOM_PROFILES_PATH, file);
+  lastGoodProfiles = file;
   return updated;
 }
