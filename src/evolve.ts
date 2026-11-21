@@ -64,7 +64,8 @@ export async function runPostMatchEvolution(
   const outputText = res.status === "ok" ? res.text : `(${res.status}${res.status === "dead" ? `: ${res.error}` : ""})`;
   const solverChanged = backupCode !== null && existsSync(SOLVER_PATH) && readFileSync(SOLVER_PATH, "utf-8") !== backupCode;
 
-  const verification = await verifySolverWithReplay(summary.runDir);
+  // 改修前のソルバーと比べて、罠と分かっているマスへ動く手が増えていないかも確かめる
+  const verification = await verifySolverWithReplay(summary.runDir, { baselineCode: backupCode });
   let rolledBack = false;
 
   if (!verification.ok) {

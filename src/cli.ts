@@ -128,7 +128,9 @@ async function main() {
       typeof values["run-dir"] === "string"
         ? path.resolve(process.cwd(), values["run-dir"])
         : path.join(RUNS_DIR, "nonexistent");
-    const res = await verifySolverWithReplay(runDir);
+    // その試合で使ったソルバー（solver-snapshot.ts）があれば、罠へ動く手の回数を比べる
+    const snap = path.join(runDir, "solver-snapshot.ts");
+    const res = await verifySolverWithReplay(runDir, { baselineCode: existsSync(snap) ? readFileSync(snap, "utf-8") : null });
     console.log(JSON.stringify(res, null, 2));
     if (!res.ok) process.exit(1);
     return;
