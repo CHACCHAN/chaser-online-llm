@@ -55,6 +55,8 @@ export interface RoomProfile {
   matchesPlayed: number;
   /** 1試合の全ターン数（公式結果の 取得ターン数＋残ターン数。Webマップは今のターンしか出さない） */
   totalTurns?: number | null;
+  /** 最後に使った公式成績の行の開始時刻（次の試合が同じ行を取り違えないため。src/client/result.ts の isResultForRun） */
+  lastOfficialStartedAt?: string | null;
   /** ワープの記録（絶対座標）。ハーネスが自動で書く */
   warps?: RoomWarpRecord[];
   /** マスごとのメモ（キーは絶対座標 "x,y"）。エージェントが `bun src/cli.ts cell-note` で書く */

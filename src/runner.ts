@@ -533,7 +533,7 @@ export async function runAgentMatch(
   }
   // 公式成績のページは最新の行を返す。この試合が記録されていなければ前の試合の成績なので、ターン数が合わなければ使わない
   const latestResult = await fetchLatestResult(config.room);
-  const officialResult = latestResult && isResultForRun(latestResult, turnLogs.length) ? latestResult : null;
+  const officialResult = latestResult && isResultForRun(latestResult, turnLogs.length, getRoomProfile(config.room).lastOfficialStartedAt) ? latestResult : null;
   if (latestResult && !officialResult) {
     logger.warn({ turns: turnLogs.length, resultTurns: latestResult.acquiredTurns, resultStartedAt: latestResult.startedAt }, "公式成績の取得ターン数がこの試合と合わない（前の対戦のもの）ので使わない");
   }

@@ -202,6 +202,7 @@ export function analyzeMatchRun(
   if (official && official.acquiredTurns + official.remainingTurns > 0) {
     profile.totalTurns = official.acquiredTurns + official.remainingTurns;
   }
+  if (official) profile.lastOfficialStartedAt = official.startedAt;
   const achievedScore = official?.totalScore ?? summary.estimatedScore.estimatedTotalScore;
   // 試合になっていない（待機切れ等）回は最高記録として扱わない
   const isRealMatch = summary.turns >= numSetting("AGENT_EVOLVE_MIN_TURNS", { min: 0, integer: true });

@@ -127,7 +127,9 @@ export function parseVsResultTable(
  * 前の試合の成績が返ってくる（実例: room586 で 1 ターンで止めた試合に、その前の 147 ターンの試合の 96055 点が入っていた）。
  * サーバの時計は約26分遅れていて（room719・586 で実測）時刻では比べられないので、取得ターン数がこの試合のターン数（±1）と合うかで見る
  */
-export function isResultForRun(result: OfficialResult, turnsPlayed: number): boolean {
+export function isResultForRun(result: OfficialResult, turnsPlayed: number, previousStartedAt?: string | null): boolean {
+  // 前の試合で使った成績の行と同じ（開始時刻が同じ）なら、ターン数がたまたま同じでもこの試合のものではない
+  if (previousStartedAt && result.startedAt === previousStartedAt) return false;
   return Math.abs(result.acquiredTurns - turnsPlayed) <= 1;
 }
 

@@ -339,4 +339,7 @@ test("公式成績は取得ターン数がこの試合と合う時だけ使う�
   expect(isResultForRun(r, 147)).toBe(true);
   expect(isResultForRun(r, 148)).toBe(true);
   expect(isResultForRun(r, 1)).toBe(false);
+  // 前の試合で使った行（開始時刻が同じ）は、ターン数が同じでも使わない
+  expect(isResultForRun(r, 147, r.startedAt)).toBe(false);
+  expect(isResultForRun(r, 147, "2026-11-21 23:00:00.000")).toBe(true);
 });
