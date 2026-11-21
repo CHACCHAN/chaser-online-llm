@@ -167,7 +167,8 @@ export class SubWorker {
   /** 試合終了: 実行中の仕事は止め、待機中の仕事は流さない */
   async stop(): Promise<void> {
     this.stopped = true;
-    for (const s of this.sessions) s.kill();
+    // 書きかけのファイルを残さないよう、プロセスが終わるのを待ってから元に戻す
+    await Promise.all([...this.sessions].map((s) => s.killAndWait()));
     let changed = false;
     for (const t of this.tasks) {
       if (t.status === "queued") {

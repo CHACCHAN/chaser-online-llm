@@ -489,6 +489,8 @@ export async function runAgentMatch(
   const finishedAt = new Date().toISOString();
   const stats = worldMap.getStats();
   await webMap.drain();
+  // サブを先に止めてサブの範囲外の編集を戻す（この後で保存する solver-snapshot・最良ソルバー・振り返りの改修前のコードに混ぜない）
+  await mainAgent?.stopSub();
   // 試合中に届いた公式のアイテム得点から、タイルの本当の得点を測って knowledge/tiles.json に残す（振り返りの前に）
   let tileMeasurement: MeasureResult | undefined;
   try {

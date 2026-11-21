@@ -209,6 +209,14 @@ export class ClaudeSession {
     this.proc?.kill();
   }
 
+  /** kill して、プロセスが終わるまで待つ（最大 timeoutMs）。終わった後でファイルを元に戻す時に使う */
+  async killAndWait(timeoutMs = 5000): Promise<void> {
+    const p = this.proc;
+    this.kill();
+    if (!p) return;
+    await Promise.race([p.exited, Bun.sleep(timeoutMs)]);
+  }
+
   async stop(): Promise<void> {
     if (!this.proc) return;
     this.stopping = true;

@@ -333,6 +333,14 @@ export class MainAgent {
     return res.status === "ok" && res.text.trim() ? res.text.trim() : null;
   }
 
+  /**
+   * 試合が終わったらすぐ呼ぶ（runner）。サブを止め、プロセスが終わるのを待ってから、サブの範囲外の編集（ソルバーなど）を元に戻す。
+   * この後で試合に使ったソルバーを保存し、振り返りの改修前のコードを取る（evolve.ts）。2回目以降は何もしない
+   */
+  async stopSub(): Promise<void> {
+    await this.sub.stop();
+  }
+
   async end(): Promise<void> {
     this.next?.kill();
     this.next = null;
