@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import path from "node:path";
 import { CMD1_COMMANDS, CMD1_SPECS, CMD2_COMMANDS, CMD2_SPECS, classifyTileSafety, type WorldMap } from "../memory/world-map";
 import { getRoomProfile, knownTotalTurns, roomCells } from "../memory/knowledge-store";
-import { AGENT_DIR, COMMANDS_PATH, OFFICIAL_RULES_PATH, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
+import { AGENT_DIR, COMMANDS_PATH, CURRENT_SNAPSHOT_PATH, OFFICIAL_RULES_PATH, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
 import { numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
 import { uiBus } from "../ui/event-bus";
@@ -13,7 +13,6 @@ import { formatSubTodoLine, SubWorker } from "./sub-worker";
 import { addUsage, emptyUsage, totalTokens, type UsageTotals } from "./usage";
 import { checkOfficialVersion, type OfficialVersionCheck } from "../perception/official-check";
 
-export const CURRENT_SNAPSHOT_PATH = path.join(VAR_DIR, "current/snapshot.json");
 
 export type MainAction = "continue" | "plan" | "command";
 
@@ -503,7 +502,7 @@ export class MainAgent {
         lines.push(`既知のワープ（過去の試合も含む実測）: ${cells.warps.slice(0, 8).map((w) => `${loc(w.from)} ${w.tile >= 0 ? `${w.tile}番` : "ワープ"}→${loc(w.to)} ${w.count}回`).join(" / ")}`);
       }
       if (cells.notes.length > 0) {
-        lines.push(`マスのメモ: ${cells.notes.slice(0, 8).map((n) => `${loc([n.x, n.y])} ${n.notes.join("; ")}`).join(" / ")}`);
+        lines.push(`マスのメモ: ${cells.notes.slice(0, 8).map((n) => `${loc([n.x, n.y])} ${n.notes.map((t) => (t.length > 80 ? `${t.slice(0, 80)}…` : t)).join("; ")}`).join(" / ")}`);
       }
       return lines;
     }

@@ -40,6 +40,8 @@ export const BEST_SOLVERS_DIR = path.join(VAR_DIR, "best-solvers");
 export const CLAUDE_HOME_DIR = path.join(VAR_DIR, "claude-home");
 /** 試合中の現在の状態（毎フェーズ更新。試合後に var/runs/<runId>/ へコピー） */
 export const CURRENT_DIR = path.join(VAR_DIR, "current");
+/** 試合中の盤面（毎ターン更新） */
+export const CURRENT_SNAPSHOT_PATH = path.join(CURRENT_DIR, "snapshot.json");
 /** メインが次のフェーズへ引き継ぐメモ */
 export const CURRENT_MEMO_PATH = path.join(CURRENT_DIR, "MEMO.md");
 /** サブへの依頼一覧と結果 */

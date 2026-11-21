@@ -1,5 +1,6 @@
 import path from "node:path";
-import { RUNS_DIR } from "./paths";
+import { CURRENT_SNAPSHOT_PATH, RUNS_DIR } from "./paths";
+import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { verifySolverWithReplay } from "./evolution/replay-verifier";
 import {
@@ -37,6 +38,7 @@ async function main() {
       x: { type: "string" },
       y: { type: "string" },
       note: { type: "string" },
+      abs: { type: "boolean" },
     },
     strict: false,
   });
@@ -85,12 +87,45 @@ async function main() {
     return;
   }
 
+  // cells / cell-note の座標: 既定は var/current/snapshot.json の position と同じ座標（今の区画）。
+  // 保存は絶対座標（Webマップの列・行）なので、snapshot の globalPosition との差で直す。--abs なら絶対座標をそのまま使う
+  const offset = (): [number, number] | null => {
+    if (!existsSync(CURRENT_SNAPSHOT_PATH)) return null;
+    const s = JSON.parse(readFileSync(CURRENT_SNAPSHOT_PATH, "utf-8")) as { position?: [number, number]; globalPosition?: [number, number] | null };
+    return s.position && s.globalPosition ? [s.globalPosition[0] - s.position[0], s.globalPosition[1] - s.position[1]] : null;
+  };
+  const needOffset = (): [number, number] => {
+    if (values.abs) return [0, 0];
+    const o = offset();
+    if (!o) {
+      console.error("今の盤面が Webマップで位置合わせできていない（var/current/snapshot.json の globalPosition が無い）。絶対座標が分かるなら --abs を付ける。Webマップの無いルームは記録できない");
+      process.exit(1);
+    }
+    return o;
+  };
+
   if (subcommand === "cells") {
-    // ワープの記録（ハーネスが自動で書く）とマスのメモ。座標は絶対座標（Webマップの列・行）
+    // ワープの記録（ハーネスが自動で書く）とマスのメモ。出力は絶対座標と、今の座標（local）の両方
     const room = Number(values.room ?? Bun.env.CHASER_ROOM ?? "3");
+    const o: [number, number] | null = values.abs ? [0, 0] : offset();
     const near = typeof values.near === "string" ? (values.near.split(",").map(Number) as [number, number]) : null;
+    if (near && !o) needOffset();
+    const nearAbs = near && o ? ([near[0] + o[0], near[1] + o[1]] as [number, number]) : null;
     const radius = values.radius !== undefined ? Number(values.radius) : Infinity;
-    console.log(JSON.stringify(roomCells(room, near, radius), null, 2));
+    const res = roomCells(room, nearAbs, radius);
+    const local = (p: [number, number]) => (o && !values.abs ? [p[0] - o[0], p[1] - o[1]] : undefined);
+    console.log(
+      JSON.stringify(
+        {
+          ...res,
+          coords: values.abs || !o ? "絶対座標" : "from/to/x,y は絶対座標、local は今の pos と同じ座標",
+          warps: res.warps.map((w) => ({ ...w, localFrom: local(w.from), localTo: local(w.to) })),
+          notes: res.notes.map((n) => ({ ...n, local: local([n.x, n.y]) })),
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
@@ -99,10 +134,12 @@ async function main() {
     const x = Number(values.x);
     const y = Number(values.y);
     if (!Number.isInteger(x) || !Number.isInteger(y)) {
-      console.error("--x と --y（絶対座標）が必要");
+      console.error("--x と --y が必要（既定は今の pos と同じ座標。絶対座標なら --abs）");
       process.exit(1);
     }
-    console.log(JSON.stringify({ room, x, y, notes: setCellNote(room, x, y, String(values.note ?? "")) }));
+    const [ox, oy] = needOffset();
+    const [ax, ay] = [x + ox, y + oy];
+    console.log(JSON.stringify({ room, x: ax, y: ay, coords: "絶対座標で保存", notes: setCellNote(room, ax, ay, String(values.note ?? "")) }));
     return;
   }
 
@@ -113,8 +150,8 @@ async function main() {
       "  reference    [--query <q>] [--tile <id>]       Consult official CHaserOnline reference & tile DB",
       "  upsert-tile  --id <id> --score <s> ...         Register or update tile knowledge in tiles.json",
       "  verify       [--run-dir <dir>]                 Replay-verify active-solver.ts against turns.jsonl",
-      "  cells        --room <n> [--near x,y] [--radius r]  Known warps (absolute coords) and cell notes",
-      "  cell-note    --room <n> --x <x> --y <y> --note <text>  Add a note to a cell (empty --note clears)",
+      "  cells        --room <n> [--near x,y] [--radius r] [--abs]  Known warps and cell notes (coords = snapshot pos frame unless --abs)",
+      "  cell-note    --room <n> --x <x> --y <y> --note <text> [--abs]  Add a note to a cell (empty --note clears)",
     ].join("\n"),
   );
 }

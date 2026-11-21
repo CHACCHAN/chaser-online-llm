@@ -7,7 +7,7 @@ import type { AgentConfig } from "./config";
 import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
 import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
-import { getRoomProfile, recordRoomWarp, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
+import { getRoomProfile, isWarpTile, recordRoomWarp, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
 import { WorldMap } from "./memory/world-map";
 import { totalTurnsFromWeb, WebMapRefresher } from "./perception/web-map-refresher";
 import { GameOver, logger } from "./tools";
@@ -391,6 +391,8 @@ export async function runAgentMatch(
       for (const link of worldMap.getGlobalWarpLinks()) {
         if (recordedWarps.has(link.index)) continue;
         recordedWarps.add(link.index);
+        // 入口がワープのタイルでないものは、ワープの誤検知か位置合わせのずれなので残さない
+        if (!isWarpTile(link.tileValue)) continue;
         try {
           recordRoomWarp(config.room, link, runId);
         } catch (err) {

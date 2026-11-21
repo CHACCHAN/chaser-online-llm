@@ -31,7 +31,9 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 | `reference` | `--tile ID` / `--query 語` | タイルの登録内容 / 公式ページの検索 |
 | `upsert-tile` | `--id --score --name --label --passable --hazard --symbol [--notes]` | タイルを登録・更新 |
 | `cells` | `--room N [--near x,y --radius r]` | ワープの実測（入口→着地、回数、タイル番号ごとの飛び方）とマスのメモ |
-| `cell-note` | `--room N --x X --y Y --note "…"` | マスにメモを足す（`--note ""` で消す）。絶対座標 |
+| `cell-note` | `--room N --x X --y Y --note "…"` | マスにメモを足す（`--note ""` で消す。1件160字まで） |
+
+`cells`・`cell-note` の座標は `var/current/snapshot.json` の `position` と同じ座標（今の区画）。ハーネスが絶対座標（Webマップの列・行）に直して保存するので、試合をまたいで使える。過去の試合のログ（`turns.jsonl` の `globalPositionAfter` など）の絶対座標を使う時は `--abs`。Webマップで位置合わせできていない時は記録できない。
 | `verify` | `--run-dir var/runs/<runId>` | ソルバーのリプレイ検証 |
 
 チェック: `bun run typecheck`、`bun test`、`bun run verify-solver`。

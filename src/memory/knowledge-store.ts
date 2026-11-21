@@ -164,6 +164,14 @@ export function knownTotalTurns(room: number, runsDir = RUNS_DIR): number | null
   return null;
 }
 
+/** ワープのタイル番号か（20〜23・30〜33・40〜43・50〜53 のワープ、60〜63 のブラックスター） */
+export function isWarpTile(v: number): boolean {
+  return [20, 30, 40, 50, 60].some((b) => v >= b && v <= b + 3);
+}
+
+/** マスのメモ1件の上限（試合中のメインにも見せるので短く） */
+export const CELL_NOTE_MAX_CHARS = 160;
+
 /** ワープを1回観測したら呼ぶ（同じ入口・同じ着地なら回数を足す）。絶対座標で渡す */
 export function recordRoomWarp(room: number, link: { tileValue: number; from: [number, number]; to: [number, number] }, runId: string | null): RoomWarpRecord {
   const profile = getRoomProfile(room);
@@ -189,7 +197,7 @@ export function setCellNote(room: number, x: number, y: number, note: string): s
   const profile = getRoomProfile(room);
   const notes = profile.cellNotes ?? {};
   const key = `${x},${y}`;
-  if (note.trim()) notes[key] = [...(notes[key] ?? []), note.trim()];
+  if (note.trim()) notes[key] = [...(notes[key] ?? []), note.trim().replace(/\s+/g, " ").slice(0, CELL_NOTE_MAX_CHARS)];
   else delete notes[key];
   profile.cellNotes = notes;
   saveRoomProfile(profile);
@@ -200,7 +208,9 @@ export function setCellNote(room: number, x: number, y: number, note: string): s
 export function roomCells(room: number, near?: [number, number] | null, radius = Infinity) {
   const profile = getRoomProfile(room);
   const dist = (p: [number, number]) => (near ? Math.abs(p[0] - near[0]) + Math.abs(p[1] - near[1]) : 0);
+  // 古い版はワープ以外のタイルからの誤検知も記録していたので、読む時にも除く
   const warps = (profile.warps ?? [])
+    .filter((w) => isWarpTile(w.tile))
     .map((w) => ({ ...w, distance: dist(w.from) }))
     .filter((w) => w.distance <= radius)
     .sort((a, b) => a.distance - b.distance);
@@ -213,7 +223,7 @@ export function roomCells(room: number, near?: [number, number] | null, radius =
     .sort((a, b) => a.distance - b.distance);
   // タイル番号ごとの飛び方（入口から着地への移動量）。公式の「番号ごとに決まった方向・距離」と照らし合わせる用
   const byTile = new Map<number, Map<string, number>>();
-  for (const w of profile.warps ?? []) {
+  for (const w of (profile.warps ?? []).filter((x) => isWarpTile(x.tile))) {
     const v = `${w.to[0] - w.from[0]},${w.to[1] - w.from[1]}`;
     const m = byTile.get(w.tile) ?? new Map<string, number>();
     m.set(v, (m.get(v) ?? 0) + w.count);

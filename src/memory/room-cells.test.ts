@@ -39,3 +39,15 @@ test("getGlobalWarpLinks: 入口・着地の両方の区画の位置合わせが
   wm.segmentOffsets.set(1, [13, 26]);
   expect(wm.getGlobalWarpLinks()).toEqual([{ index: 0, tileValue: 23, from: [13, 11], to: [13, 26], observedTurn: 5 }]);
 });
+
+test("ワープのタイル（20〜23・30〜33・40〜43・50〜53・60〜63）以外からの記録は引かない。メモは160字で切る", async () => {
+  const { isWarpTile, CELL_NOTE_MAX_CHARS } = await import("./knowledge-store");
+  expect([20, 23, 33, 41, 53, 60, 63].every(isWarpTile)).toBe(true);
+  expect([1, 24, 34, 70, 77, 79].some(isWarpTile)).toBe(false);
+  const room = 90004;
+  recordRoomWarp(room, { tileValue: 77, from: [0, 38], to: [11, 10] }, "r"); // 誤検知（古い版が残したもの）
+  recordRoomWarp(room, { tileValue: 30, from: [9, 16], to: [9, 21] }, "r");
+  expect(roomCells(room).warps.map((w) => w.tile)).toEqual([30]);
+  expect(roomCells(room).tileJumps).toEqual([{ tile: 30, jumps: [{ delta: [0, 5], count: 1 }] }]);
+  expect(setCellNote(room, 1, 1, "あ".repeat(300))[0]!.length).toBe(CELL_NOTE_MAX_CHARS);
+});
