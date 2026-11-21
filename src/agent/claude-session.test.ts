@@ -41,3 +41,13 @@ test("全セッションに agent/AGENTS.md を渡し、CLAUDE.md は読ませ�
   expect(app[app.indexOf("--append-system-prompt") + 1]).toBe(`APP\n\n${guide}`);
   expect(buildClaudeEnv({}).CLAUDE_CODE_DISABLE_CLAUDE_MDS).toBe("1");
 });
+
+test("試合中のメイン用: AGENTS.md から手の一覧の節だけを取り出せる", async () => {
+  const { agentsGuideSection } = await import("./claude-session");
+  const sec = agentsGuideSection("### ゲームの手");
+  expect(sec).toContain("`w3u`");
+  expect(sec).toContain("`keiru`");
+  expect(sec).not.toContain("### 試合中のメインの返答");
+  const none = new ClaudeSession({ label: "t", systemPrompt: "SYS", agentsGuide: false }).buildArgs();
+  expect(none[none.indexOf("--system-prompt") + 1]).toBe("SYS");
+});

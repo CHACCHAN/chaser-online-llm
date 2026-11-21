@@ -20,22 +20,98 @@
 | `knowledge/` | 永続知識（`tiles.json` タイル得点、`strategy.md` 戦略、`research/` 調査メモ） | 試合後・サブ |
 | `agent/tools/` | エージェントが作るツール（`bun agent/tools/<name>.ts`。試合中に作るものは `@temporary`） | 試合後・サブ |
 | `src/solver/active-solver.ts`（とそのテスト） | 進化対象のソルバー | **試合後だけ** |
-| `var/` | 実行時データ（`runs/<runId>/` 過去の試合、`room-profiles.json`、`current/snapshot.json`・`MEMO.md`・`ASK_SUB.md`） | 読むだけ |
+| `var/` | 実行時データ（過去の試合・ルームの記録・試合中の今。下の「読む資料の場所」） | 読むだけ |
 | `agent/prompts/`・`agent/policies/`・`agent/AGENTS.md`・`agent/REVIEW.md`・`src/`（ソルバー以外）・`CLAUDE.md`・`.env` | ハーネス本体・手順書・ユーザーの方針 | **禁止**（変えても自動で元に戻される） |
 
 - ログイン情報（`.env`）は読まない・出力しない・外部に送らない。CHaserOnline サーバにはログインしない（試合中のセッションを壊す）。
-- 公式サイト（`http://www7019ug.sakura.ne.jp/CHaserOnline003/`）のログイン不要ページは見てよい。公式の仕様書は手に入らないので、得点・ルールは実測で確かめて `knowledge/` に残す。
+- 公式サイト（`http://www7019ug.sakura.ne.jp/CHaserOnline003/`）のログイン不要ページと、公式テキスト「ステップアップヒント」（`knowledge/official-rules.md` の出典）は見てよい。公式資料と実測が食い違ったら実測を優先し、`knowledge/official-rules.md` の「食い違い」に記録する。
 
-## CLI ツール（`bun src/cli.ts`）
-```bash
-bun src/cli.ts scrape-map --room 3                       # Web マップ (MapView.jsp) を HTTP で取得
-bun src/cli.ts reference --tile 15                       # タイル・ルールの知識を検索
-bun src/cli.ts upsert-tile --id 15 --name "special_15" --label "特殊(15)" --score 80 --passable true --hazard false --symbol "S"
-bun src/cli.ts run-script --snapshot var/current/snapshot.json --code "return snapshot.tiles.filter(t => t.value >= 70);"
-bun src/cli.ts verify --run-dir var/runs/<runId>         # 改修したソルバーを過去ログでリプレイ検証
-bun src/cli.ts status --room 3                           # ルームの最高得点・発見タイル
-bun run typecheck && bun test && bun run verify-solver   # 機械チェック一式
-```
+## コマンド一覧
+
+「場面」の略: **準**=準備（Read/Glob/Grep だけ。コマンドは実行できない）、**メ**=試合中のメイン（ツールなし。返答の JSON だけ）、**サ**=試合中のサブ、**後**=試合後の振り返り。
+
+### ゲームの手（公式の全61種。試合中のメインが `command` で指定する、またはソルバーが選ぶ）
+出典: 公式「ステップアップヒント」2026 [2] §9 コマンド一覧（2026.4.1。2024・2025 版と同じ61種）、動作得点は 2025 [3] §15「疲労について」。詳しくは `knowledge/official-rules.md`。
+
+- 1ターン = **CMD1**（準備コマンド GetReadyMove）→ **CMD2**（動作コマンド）→ 終了コマンド `#`（ハーネスが自動で送る）。
+- 方向: u=上 d=下 l=左 r=右、ru=右上 rd=右下 lu=左上 ld=左下。
+- 返り値: 3×3 は左上から 0〜8（4 が自分）。直線サーチは近い順に 0〜8。フィールドの端では要素が減る（場外は -500）。
+- 「ハーネス」列: **○**=送れる（合法手に入る）、**×**=まだ送れない（ハーネスとソルバーが未対応。使いたければ試合後のレビューで要望する）。
+
+| 系 | 手 | フェーズ | 動き（公式の説明） | 観測 | 動作得点 | ハーネス |
+|---|---|---|---|---|---|---|
+| GetReady | `gr` | CMD1 | 動かない | 自分の周り3×3 | -20（実測。穴の上ならさらに再着地 -20） | ○ |
+| GetReady | `gru` `grd` `grl` `grr` | CMD1 | その方向へ1マス移動 | 移動後の周り3×3 | -10 ＋ 着地マス（実測） | ○ |
+| walk | `wu` `wd` `wl` `wr` | CMD2 | その方向へ1マス移動 | 移動後の周り3×3 | **-10** | ○ |
+| walk3 | `w3u` `w3d` `w3l` `w3r` | CMD2 | その方向へ3マス移動（通り抜けたマスには影響なし） | 移動後の周り3×3 | **-20** | × |
+| kei | `keiru` `keird` `keilu` `keild` | CMD2 | 桂馬のような動き（縦2・横1） | 着地後の周り3×3 | **-20** | ○ |
+| dig | `du` `dd` `dl` `dr` | CMD2 | **一歩その方向へ移動**して、その方向を探査 | その方向の3×3（中心は元の位置から2マス先） | **-40** | ○（※移動なしとして扱っている。未実測） |
+| dig（斜め） | `dru` `drd` `dlu` `dld` | CMD2 | 一歩斜めへ移動して、その方向を探査 | その方向の3×3 | **-40** | × |
+| put3 & search | `pu3su` `pd3sd` `pl3sl` `pr3sr` | CMD2 | 指定方向にアイテムを置き、右方向のマスへ移動 | 指定方向へ真っすぐ9マス | **-30** | ○ |
+| put3 & look | `pu3lu` `pd3ld` `pl3ll` `pr3lr` | CMD2 | 指定方向にアイテムを置き、右方向のマスへ移動 | 指定方向の離れた3×3 | **-30** | ○ |
+| put2 & walk | `pu2wd` `pd2wu` `pl2wr` `pr2wl` | CMD2 | 指定方向に土を置き、逆向きに1マス移動 | 移動後の周り3×3 | **-1000** | ○（使うな） |
+| put2 & walk（斜め） | `pru2wld` `plu2wrd` `prd2wlu` `pld2wru` | CMD2 | 斜めに土を置き、逆の斜めへ1マス移動 | 移動後の周り3×3 | **-10000** | × |
+| put2 & walk2 | `pu2w2d` `pd2w2u` `pl2w2r` `pr2w2l` | CMD2 | 指定方向に土を置き、逆向きに2マス移動。土を相手に当てると大きく得点を奪える | 移動後の周り3×3 | **-100** | × |
+| put2 & walk2（斜め） | `pru2w2ld` `plu2w2rd` `prd2w2lu` `pld2w2ru` | CMD2 | 斜めに土を置き、逆の斜めへ2マス移動 | 移動後の周り3×3 | **-1500** | × |
+| put0（砕く） | `pu0` `pd0` `pl0` `pr0` | CMD2 | 指定方向の土を砕く（先に進めるようになる） | 周り3×3 | **-10** | × |
+| put0 & walk | `pu0wd` `pd0wu` `pl0wr` `pr0wl` | CMD2 | 指定方向の土を砕きつつ、逆方向へ移動 | 移動後の周り3×3 | **-20** | × |
+| put0 & walk（斜め） | `pru0wld` `plu0wrd` `prd0wlu` `pld0wru` | CMD2 | 斜めの土を砕きつつ、逆の斜めへ移動 | 移動後の周り3×3 | **-200** | × |
+| 終了 | `#` | 終了 | 自分のターンを終える（周囲情報なし） | なし | 0 | ハーネスが自動で送る |
+
+- 動作得点は公式の値。過去の試合（11試合）の公式「動作得点」と、この表で計算した値が全試合で一致した（kei -20・dig -40 も実測で確認）。
+- **kei（-20）は walk（-10）2回分の安さで、縦2横1を一気に動ける**。ただし着地先は CMD1 で見えない場所なので、観測済みの安全マスにだけ飛ぶ。
+- **put2&walk 系は -1000 以上と非常に高い**。土を相手に当てる作戦以外では使わない。
+- 合法手は毎フェーズの依頼文の「合法手」に出る（○の手だけ）。行き先が観測済みの罠・岩盤・他プレイヤーで、ソルバーの手なら避けられる時は、指定はハーネスに却下される。
+
+### 試合中のメインの返答（`agent/prompts/main.md`）
+最後の行に JSON を1行: `{"turn","phase","action","target","command","note","delegate","memo"}`
+
+| 項目 | 必須 | 意味 |
+|---|---|---|
+| `action: "continue"` | どれか1つ | 今の作戦のまま。ソルバーの手を送る |
+| `action: "plan"` ＋ `target: [x, y]` | | 目標マスを決める。そこまでの手はソルバーが毎ターン計算する。着いたら解除 |
+| `action: "command"` ＋ `command: "<手>"` | | このフェーズの手を直接指定（上の表の手。合法手に限る） |
+| `note` | 任意 | 20字程度の理由。WebUI と直近の経過に出る |
+| `delegate` | 任意 | サブへの依頼文。待たずに続き、結果は後のフェーズに「サブ結果」として届く |
+| `memo` | 任意 | 次のフェーズの自分への引き継ぎ（全文で上書き。上限あり）。前の会話は残らないので、狙い・注意点はここに書く |
+
+### プロジェクトの CLI（`bun src/cli.ts <サブコマンド>`、場面: サ・後）
+| サブコマンド | 主な引数 | 何をする | 出力 |
+|---|---|---|---|
+| `status` | `--room N` | ルームの記録（最高得点・試合数・Webマップの有無・盤面の大きさ・発見タイル・ワープ）と、登録済みタイルの数 | JSON |
+| `reference` | `--tile ID` / `--query 語` | `--tile`: `knowledge/tiles.json` の登録内容（得点・根拠・メモ）。`--query`: 公式の公開ページ（ログイン不要）の本文からその語を含む行を探す | JSON |
+| `upsert-tile` | `--id ID --score 点 --name 英名 --label 表示名 --passable true/false --hazard true/false --symbol 1字 [--notes 根拠]` | `knowledge/tiles.json` にタイルを登録・更新（実測で分かったら） | 更新後の JSON |
+| `run-script` | `--snapshot var/current/snapshot.json --code "<JS>"` | 盤面に対して JS を実行（変数 `snapshot`: `position`, `tiles[{x,y,value,visitedCount}]`, `warpLinks`, `stats`, `lastGrid`, `turn` 等。1行なら式、複数行なら `return` を書く） | 実行結果の JSON |
+| `scrape-map` | `--room N [--url URL]` | Webマップ（MapView.jsp）を取る。試合中はハーネスが毎ターン自動で取っているので、普段は不要 | JSON |
+| `verify` | `--run-dir var/runs/<runId>` | 今のソルバーを過去の試合で再生し、例外・不正な手が無いか確かめる（場面: 後） | JSON（失敗で終了コード1） |
+
+### チェック（`bun run <名前>`、場面: 後）
+| コマンド | 何をする |
+|---|---|
+| `bun run typecheck` | 型チェック（ソルバーを変えたら必ず） |
+| `bun test` | テスト一式 |
+| `bun run verify-solver` | 過去の試合全部でソルバーをリプレイ検証 |
+
+`bun run start`（WebUI）・`bun run play`（試合）はユーザーが使うもの。エージェントは実行しない（サーバに接続して試合が始まる）。
+
+### エージェントが作ったツール（`bun agent/tools/<名前>.ts`、場面: サ・後）
+| ツール | 引数 | 何をする |
+|---|---|---|
+| `local-grid.ts` | `[半径=12]` または `x0 x1 y0 y1` | 今の位置の周りのタイルを、座標付きの数字の格子で出す（`var/current/snapshot.json` を読む） |
+| `score-model-check.ts` | なし | 過去の試合を全部再生し、推定スコアと公式スコアが合うか確かめる（得点の規則を変えたら） |
+| `measure-turn-timeout.ts` | `--room N --delays 5,15,...` | 1ターンの許容思考時間を実サーバで測る。**実際に試合をするのでエージェントは使わない**（セットアップ用） |
+
+新しいツールを作ったら `agent/tools/README.md` の一覧に1行足す（規約: 1ファイル1ツール、JSON 1行で出力、2秒以内。試合中に作るものは先頭に `@temporary`）。
+
+### 読む資料の場所（場面: 準・サ・後）
+| パス | 中身 |
+|---|---|
+| `knowledge/official-rules.md` | 公式資料（ステップアップヒント）から分かったルール: コマンド・動作得点・タイル得点と、実測との食い違い |
+| `docs/chaser-protocol.md` | 通信・Webマップ・タイルID・コマンドの仕様（実測） |
+| `knowledge/tiles.json` / `knowledge/strategy.md` / `knowledge/research/` | タイル得点・戦略・調査メモ |
+| `var/room-profiles.json` | ルームごとの記録 |
+| `var/runs/<runId>/` | 過去の試合: `summary.json`（得点・終了理由）、`turns.jsonl`（毎ターンの手・観測・判断理由。大きいので Grep で）、`diagnosis.md`（失点の分析）、`MEMO.md`、`ASK_SUB.md`、`evolution-report.md`、`final-map.txt`（最終盤面）、`solver-snapshot.ts`（その試合で使ったソルバー） |
+| `var/current/` | 試合中の今: `snapshot.json`（盤面。毎ターン更新）、`MEMO.md`（メインのメモ）、`ASK_SUB.md`（サブへの依頼と結果） |
 
 ## スコア計算式と絶対ルール
 - **公式スコア式**: `合計得点 = 300 × 取得ターン数 + 動作得点 + アイテム得点 + プット得点 + プットダメージ`
@@ -49,7 +125,7 @@ bun run typecheck && bun test && bun run verify-solver   # 機械チェック一
   - **静止 `gr` も穴への再着地扱いで `-20` 入る（実測）**。隣接が穴だけなら、目的地方向へ `gr*` で進む方が得。静止 `gr` は進める安全マスが無い時だけ。
 - **CMD2 の疲労コスト**:
   - 実測: `gr` 動作 -20（＋穴再着地 -20）、`gr*`・`w*` 動作 -10（＋着地マス得点）。`agent/tools/score-model-check.ts` で過去試合と照合済み。
-  - `d*`, `p*2w*`, `p*3s*`, `p*3l*`, `kei*` は1回約 `-250` の高疲労。それを上回るリターン（ジオーメタル `+400` へのショートカットや罠完全包囲からの脱出など）がある時のみ使う。
+  - 公式の動作得点: `kei*` -20、`p*3s*`・`p*3l*` -30、`d*` -40、`p*2w*` -1000（上の表）。kei は安いが着地先が見えないので、観測済みの安全マスにだけ飛ぶ。put2&walk は使わない。
 - 未知のタイル・通らないコマンド・得点のずれに気付いたら記録する（公式の仕様が変わった可能性がある）。
 
 ## 試合後の改修

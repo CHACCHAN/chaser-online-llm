@@ -7,7 +7,7 @@ import { numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
-import { type AskResult, ClaudeSession } from "./claude-session";
+import { type AskResult, agentsGuideSection, ClaudeSession } from "./claude-session";
 import { activePolicyPrompt } from "./policy";
 import { formatSubTodoLine, SubWorker } from "./sub-worker";
 import { addUsage, emptyUsage, totalTokens, type UsageTotals } from "./usage";
@@ -144,6 +144,7 @@ export class MainAgent {
     const strategy = existsSync(STRATEGY_PATH) ? readFileSync(STRATEGY_PATH, "utf-8") : "";
     this.systemPrompt = [
       readPrompt("main.md"),
+      agentsGuideSection("### ゲームの手") ? `\n## 手の一覧（agent/AGENTS.md より）\n${agentsGuideSection("### ゲームの手").replace(/^### .*\n/, "")}` : "",
       `\n## この試合\n${this.matchInfo}`,
       policy ? `\n${policy}` : "",
       strategy ? `\n## 戦略知識（knowledge/strategy.md）\n${strategy}` : "",
@@ -288,6 +289,8 @@ export class MainAgent {
       context: "in_game",
       label: "main",
       systemPrompt: this.systemPrompt,
+      // 毎フェーズ呼ぶので AGENTS.md 全体ではなく、手の一覧だけを systemPrompt に入れてある（begin）
+      agentsGuide: false,
       tools: "",
       noSessionPersistence: true,
       quietLifecycle: true,

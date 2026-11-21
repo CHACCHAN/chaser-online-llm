@@ -155,36 +155,41 @@ export const CMD1_SPECS: Record<Cmd1Command, CommandSpec> = {
   grr: { category: "get_ready", move: [1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "r" },
 };
 
+/**
+ * 動作得点は公式の値（ステップアップヒント 2025 [3] §15「疲労について」）: walk -10, kei -20, dig -40, put3(search/look) -30,
+ * put2&walk 上下左右 -1000（斜め -10000）。実戦ログの公式動作得点と一致を確認済み（room555/556/719）。
+ * 注意: 公式の説明では dig は「一歩移動して、その方向を探査」。ここでは移動なしとして扱っている（未実測）。
+ */
 export const CMD2_SPECS: Record<Cmd2Command, CommandSpec> = {
   wu: { category: "walk", move: [0, -1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "u" },
   wd: { category: "walk", move: [0, 1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "d" },
   wl: { category: "walk", move: [-1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "l" },
   wr: { category: "walk", move: [1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "r" },
 
-  du: { category: "dig", move: [0, 0], obsOffset: [0, -2], obsShape: "3x3", estActionCost: -250, highFatigue: true },
-  dd: { category: "dig", move: [0, 0], obsOffset: [0, 2], obsShape: "3x3", estActionCost: -250, highFatigue: true },
-  dl: { category: "dig", move: [0, 0], obsOffset: [-2, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true },
-  dr: { category: "dig", move: [0, 0], obsOffset: [2, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true },
+  du: { category: "dig", move: [0, 0], obsOffset: [0, -2], obsShape: "3x3", estActionCost: -40, highFatigue: false },
+  dd: { category: "dig", move: [0, 0], obsOffset: [0, 2], obsShape: "3x3", estActionCost: -40, highFatigue: false },
+  dl: { category: "dig", move: [0, 0], obsOffset: [-2, 0], obsShape: "3x3", estActionCost: -40, highFatigue: false },
+  dr: { category: "dig", move: [0, 0], obsOffset: [2, 0], obsShape: "3x3", estActionCost: -40, highFatigue: false },
 
-  pu2wd: { category: "put_walk", move: [0, 1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true, putDir: "u", walkDir: "d" },
-  pd2wu: { category: "put_walk", move: [0, -1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true, putDir: "d", walkDir: "u" },
-  pl2wr: { category: "put_walk", move: [1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true, putDir: "l", walkDir: "r" },
-  pr2wl: { category: "put_walk", move: [-1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true, putDir: "r", walkDir: "l" },
+  pu2wd: { category: "put_walk", move: [0, 1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -1000, highFatigue: true, putDir: "u", walkDir: "d" },
+  pd2wu: { category: "put_walk", move: [0, -1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -1000, highFatigue: true, putDir: "d", walkDir: "u" },
+  pl2wr: { category: "put_walk", move: [1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -1000, highFatigue: true, putDir: "l", walkDir: "r" },
+  pr2wl: { category: "put_walk", move: [-1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -1000, highFatigue: true, putDir: "r", walkDir: "l" },
 
-  pu3su: { category: "put_search", move: [1, 0], obsOffset: [0, 0], obsShape: "ray", estActionCost: -250, highFatigue: true, put3Dir: "u", rayDir: "u", walkDir: "r" },
-  pd3sd: { category: "put_search", move: [-1, 0], obsOffset: [0, 0], obsShape: "ray", estActionCost: -250, highFatigue: true, put3Dir: "d", rayDir: "d", walkDir: "l" },
-  pl3sl: { category: "put_search", move: [0, -1], obsOffset: [0, 0], obsShape: "ray", estActionCost: -250, highFatigue: true, put3Dir: "l", rayDir: "l", walkDir: "u" },
-  pr3sr: { category: "put_search", move: [0, 1], obsOffset: [0, 0], obsShape: "ray", estActionCost: -250, highFatigue: true, put3Dir: "r", rayDir: "r", walkDir: "d" },
+  pu3su: { category: "put_search", move: [1, 0], obsOffset: [0, 0], obsShape: "ray", estActionCost: -30, highFatigue: false, put3Dir: "u", rayDir: "u", walkDir: "r" },
+  pd3sd: { category: "put_search", move: [-1, 0], obsOffset: [0, 0], obsShape: "ray", estActionCost: -30, highFatigue: false, put3Dir: "d", rayDir: "d", walkDir: "l" },
+  pl3sl: { category: "put_search", move: [0, -1], obsOffset: [0, 0], obsShape: "ray", estActionCost: -30, highFatigue: false, put3Dir: "l", rayDir: "l", walkDir: "u" },
+  pr3sr: { category: "put_search", move: [0, 1], obsOffset: [0, 0], obsShape: "ray", estActionCost: -30, highFatigue: false, put3Dir: "r", rayDir: "r", walkDir: "d" },
 
-  pu3lu: { category: "put_look", move: [1, 0], obsOffset: [0, -2], obsShape: "3x3", estActionCost: -250, highFatigue: true, put3Dir: "u", walkDir: "r" },
-  pd3ld: { category: "put_look", move: [-1, 0], obsOffset: [0, 2], obsShape: "3x3", estActionCost: -250, highFatigue: true, put3Dir: "d", walkDir: "l" },
-  pl3ll: { category: "put_look", move: [0, -1], obsOffset: [-2, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true, put3Dir: "l", walkDir: "u" },
-  pr3lr: { category: "put_look", move: [0, 1], obsOffset: [2, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true, put3Dir: "r", walkDir: "d" },
+  pu3lu: { category: "put_look", move: [1, 0], obsOffset: [0, -2], obsShape: "3x3", estActionCost: -30, highFatigue: false, put3Dir: "u", walkDir: "r" },
+  pd3ld: { category: "put_look", move: [-1, 0], obsOffset: [0, 2], obsShape: "3x3", estActionCost: -30, highFatigue: false, put3Dir: "d", walkDir: "l" },
+  pl3ll: { category: "put_look", move: [0, -1], obsOffset: [-2, 0], obsShape: "3x3", estActionCost: -30, highFatigue: false, put3Dir: "l", walkDir: "u" },
+  pr3lr: { category: "put_look", move: [0, 1], obsOffset: [2, 0], obsShape: "3x3", estActionCost: -30, highFatigue: false, put3Dir: "r", walkDir: "d" },
 
-  keilu: { category: "kei", move: [-1, -2], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true },
-  keiru: { category: "kei", move: [1, -2], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true },
-  keild: { category: "kei", move: [-1, 2], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true },
-  keird: { category: "kei", move: [1, 2], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -250, highFatigue: true },
+  keilu: { category: "kei", move: [-1, -2], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -20, highFatigue: false },
+  keiru: { category: "kei", move: [1, -2], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -20, highFatigue: false },
+  keild: { category: "kei", move: [-1, 2], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -20, highFatigue: false },
+  keird: { category: "kei", move: [1, 2], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -20, highFatigue: false },
 };
 
 export function getTileInfo(value: number): TileInfo {

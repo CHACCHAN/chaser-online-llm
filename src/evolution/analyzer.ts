@@ -65,12 +65,12 @@ export function analyzeMatchRun(
     }
   }
   if (highFatigueTurns.length > 0) {
-    const fatigueLoss = highFatigueTurns.length * 235;
+    const fatigueLoss = highFatigueTurns.length * 990;
     issues.push({
       code: "HIGH_FATIGUE_OVERUSE",
       severity: highFatigueTurns.length >= 2 ? "high" : "low",
       estimatedPointLoss: fatigueLoss,
-      description: `Used high-fatigue (~-250) CMD2 commands ${highFatigueTurns.length} times on turns: ${highFatigueTurns.join(", ")}.`,
+      description: `Used high-fatigue put&walk (-1000) CMD2 commands ${highFatigueTurns.length} times on turns: ${highFatigueTurns.join(", ")}.`,
       affectedTurns: highFatigueTurns,
       recommendation:
         "Restrict high-fatigue commands (kei*, d*, p*) strictly to situations where immediate tile gain >= +250 or all 4 cardinal directions are blocked/hazards.",

@@ -85,7 +85,7 @@
   - `gru`, `grd`, `grl`, `grr`（1歩移動＋3×3観測、動作 `-10`）→ 隣接に安全なプラス得点マスがある時は CMD2 と合わせて **1ターン2マス回収** が可能
 - **CMD2（24種）**:
   - **低疲労（動作 `-10`）**: `wu`, `wd`, `wl`, `wr`（通常移動）。静止 `gr` は動作 `-20`
-  - **高疲労（約 `-250`）**:
+  - **公式の動作得点**（ステップアップヒント 2025 [3] §15。全61種の一覧と、ハーネスが未対応の32種は [agent/AGENTS.md](../agent/AGENTS.md)・[knowledge/official-rules.md](../knowledge/official-rules.md)）: dig -40 / put2&walk -1000 / put3 -30 / kei -20。過去11試合の公式動作得点と一致:
     - `du`, `dd`, `dl`, `dr`（2マス先3×3遠隔掘削/観測）
     - `pu2wd`, `pd2wu`, `pl2wr`, `pr2wl`（Put2 & 反対方向移動）
     - `pu3su`, `pd3sd`, `pl3sl`, `pr3sr`（Put3 & 時計回り90度移動＋直線サーチ）

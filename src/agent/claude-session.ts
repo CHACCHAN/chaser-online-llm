@@ -11,6 +11,23 @@ export function agentsGuide(): string {
   return existsSync(AGENTS_GUIDE_PATH) ? readFileSync(AGENTS_GUIDE_PATH, "utf-8").trim() : "";
 }
 
+/** AGENTS.md の1節（見出し行から、同じか上の階層の次の見出しの前まで）。無ければ空 */
+export function agentsGuideSection(heading: string): string {
+  const lines = agentsGuide().split("\n");
+  const start = lines.findIndex((l) => l.startsWith(heading));
+  if (start < 0) return "";
+  const level = (lines[start]!.match(/^#+/)?.[0] ?? "#").length;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const m = lines[i]!.match(/^(#+) /);
+    if (m && m[1]!.length <= level) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start, end).join("\n").trim();
+}
+
 export type ClaudeContext = "in_game" | "evolution" | "system";
 
 export type AskResult =
@@ -35,6 +52,8 @@ interface StreamEvent {
 export interface ClaudeSessionOptions extends ClaudeModelSettings {
   /** 既定システムプロンプトの末尾に追加するテキスト */
   appendSystemPrompt?: string;
+  /** agent/AGENTS.md を自動で付けない（試合中のメインは必要な節だけを systemPrompt に入れる） */
+  agentsGuide?: false;
   /** Claude Code 既定のシステムプロンプトを丸ごと置き換える（指定時は appendSystemPrompt より優先） */
   systemPrompt?: string;
   /** 組み込みツール。"" で全て無効（ツール定義を送らないので1回あたりのトークンが大きく減る） */
@@ -100,7 +119,7 @@ export class ClaudeSession {
   buildArgs(): string[] {
     const args = [...baseClaudeArgs(this.options), "--input-format", "stream-json"];
     // エージェント向けの説明書（agent/AGENTS.md）を全セッションに渡す（CLAUDE.md は開発者向けなので読ませない）
-    const guide = agentsGuide();
+    const guide = this.options.agentsGuide === false ? "" : agentsGuide();
     if (this.options.systemPrompt !== undefined) args.push("--system-prompt", [this.options.systemPrompt, guide].filter(Boolean).join("\n\n"));
     else {
       const append = [this.options.appendSystemPrompt, guide].filter(Boolean).join("\n\n");
