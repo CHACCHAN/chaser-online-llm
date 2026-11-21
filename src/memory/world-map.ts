@@ -201,9 +201,38 @@ export const CMD2_SPECS: Record<Cmd2Command, CommandSpec> = {
   keird: { category: "kei", move: [1, 2], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -20, highFatigue: false },
 };
 
+/**
+ * 公式の番号で種類が決まっているタイル（ワープ・ブラックスター・ジオーメタル）。
+ * 種類（名前・記号・通れるか）は番号で決め、knowledge/tiles.json からは得点だけを使う。
+ * tiles.json はエージェントが推測で書き換えるので、以前は 61（ブラックスター＝ワープ）が「400点のジオメタル」、
+ * 71・79（ジオーメタル）が「?（未知）」として地図に出て、ソルバーがブラックスターを高得点として狙っていた。
+ */
+function officialCategory(value: number): TileInfo | null {
+  if ([20, 30, 40, 50].some((b) => value >= b && value <= b + 3)) {
+    return { name: "warp", label: `ワープ(${value})`, score: 5, passable: true, hazard: false, symbol: "W", known: true };
+  }
+  if (value >= 60 && value <= 63) {
+    return { name: "blackstar", label: `ブラックスター(${value})`, score: 5, passable: true, hazard: false, symbol: "B", known: true };
+  }
+  if (value >= 70 && value <= 79) {
+    return { name: "geometal", label: `ジオーメタル(${value})`, score: 400, passable: true, hazard: false, symbol: "G", known: true };
+  }
+  return null;
+}
+
+/** ジオーメタルの公式の得点の範囲（番号ごとの値は実測で tiles.json に入る。範囲外の値は推測の誤りとして使わない） */
+const GEOMETAL_SCORE_RANGE: [number, number] = [200, 600];
+
 export function getTileInfo(value: number): TileInfo {
   const dynamicDb = loadTilesKnowledge();
   const fromDb = dynamicDb[String(value)];
+  const official = officialCategory(value);
+  if (official) {
+    // ワープ・ブラックスターは公式の 5 点のまま。ジオーメタルは公式の範囲内の実測値だけ使う
+    const dbScore = fromDb?.score;
+    const useDb = official.name === "geometal" && typeof dbScore === "number" && dbScore >= GEOMETAL_SCORE_RANGE[0] && dbScore <= GEOMETAL_SCORE_RANGE[1];
+    return { ...official, score: useDb ? dbScore : official.score };
+  }
   if (fromDb) {
     return {
       name: fromDb.name,

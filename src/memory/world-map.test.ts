@@ -118,3 +118,14 @@ describe("WorldMap", () => {
     expect(evalHoles.recommendedFallback).toBe("gr");
   });
 });
+
+describe("公式の番号で決まるタイルの種類", () => {
+  test("ワープ・ブラックスター・ジオーメタルは tiles.json の推測で種類が変わらない（得点はジオーメタルの公式範囲内だけ使う）", async () => {
+    const { getTileInfo } = await import("./world-map");
+    expect(getTileInfo(61)).toMatchObject({ name: "blackstar", symbol: "B", score: 5 });
+    expect(getTileInfo(63)).toMatchObject({ name: "blackstar", symbol: "B", score: 5 });
+    expect(getTileInfo(32)).toMatchObject({ name: "warp", symbol: "W", score: 5 });
+    expect(getTileInfo(71)).toMatchObject({ name: "geometal", symbol: "G" });
+    expect(getTileInfo(79).score).toBeGreaterThanOrEqual(200);
+  });
+});
