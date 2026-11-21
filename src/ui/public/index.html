@@ -1397,8 +1397,7 @@ function renderPrepInfo(prep, running) {
   else if (prep.state === "ready") {
     el.classList.add(prep.versionChanged ? "warn" : "ok");
     el.textContent = `Room ${prep.room} 準備済み（${Math.round((prep.durationMs || 0) / 1000)}秒・${fmtTok(prep.tokens)}）${ver}`;
-  } else if (prep.state === "failed") { el.classList.add("warn"); el.textContent = `準備できず: ${prep.error || ""}`; }
-  else { el.textContent = ""; }
+  } else { el.textContent = ""; }
   el.title = [el.textContent, prep.officialVersion ? `公式 ver ${prep.officialVersion}（記録 ${prep.knownVersion ?? "-"}）` : ""].filter(Boolean).join("\n");
 }
 

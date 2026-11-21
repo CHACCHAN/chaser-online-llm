@@ -39,4 +39,10 @@ describe("loginWithRetry", () => {
     await expect(p).rejects.toThrow("停止ボタン");
     expect(c.calls).toBe(1);
   });
+
+  test("最初から停止されていたらログインしない（セッションを作らない）", async () => {
+    const c = fakeClient(0);
+    await expect(loginWithRetry(c as unknown as Client, { waitMs: 1000, intervalMs: 10, shouldStop: () => true })).rejects.toThrow("停止ボタン");
+    expect(c.calls).toBe(0);
+  });
 });

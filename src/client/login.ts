@@ -24,6 +24,8 @@ export async function loginWithRetry(client: Client, opts: LoginRetryOptions = {
   const stopped = () => client.aborted || (opts.shouldStop?.() ?? false);
   const start = Date.now();
   for (let attempt = 1; ; attempt++) {
+    // 停止されていたらログインしない（ログインするとそのセッションが数分残り、次のログインが断られる）
+    if (stopped()) throw new HTTPError("停止ボタンでログインを中断");
     try {
       await client.login();
       return { attempts: attempt, waitedMs: Date.now() - start };

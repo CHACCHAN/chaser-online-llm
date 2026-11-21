@@ -145,11 +145,15 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
     uiBus.patchState({ statusMessage: `Run ${summary.runId}: エージェントがハーネスをレビュー中...` });
     // レビュー中の編集は認めない（検証済みのソルバーも含めて元に戻す）
     const guard = snapshotProtectedFiles({ includeSolver: true });
-    const review = await mainAgent.reviewHarness(
-      { runDir: summary.runDir, reverted, verificationOk: verification.ok, rolledBack },
-      numSetting("AGENT_REVIEW_TIMEOUT_SEC", { min: 10 }) * 1000,
-    );
-    restoreProtectedFiles(guard);
+    let review: string | null;
+    try {
+      review = await mainAgent.reviewHarness(
+        { runDir: summary.runDir, reverted, verificationOk: verification.ok, rolledBack },
+        numSetting("AGENT_REVIEW_TIMEOUT_SEC", { min: 10 }) * 1000,
+      );
+    } finally {
+      restoreProtectedFiles(guard);
+    }
     if (review) {
       appendReview({ runId: summary.runId, room: summary.room, model: summary.model ?? null, text: review });
       await Bun.write(path.join(summary.runDir, "harness-review.md"), review);

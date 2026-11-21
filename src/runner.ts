@@ -366,6 +366,9 @@ export async function runAgentMatch(
           turnCompleted = true;
         } else if (client.aborted) {
           throw err; // 停止ボタン
+        } else if (err instanceof Error && /応答しない|Timeout waiting for|Stopped while waiting/.test(err.message)) {
+          // 応答の時間切れはサーバが受け付けていた可能性があり、送り直すと応答と手がずれる。他プレイヤー待ちの上限切れも送り直さない
+          throw err;
         } else {
           // 通信の一時的な失敗など。下の耐障害フォールバックで、まだ送っていないフェーズを安全な手で送り直す
           const msg = err instanceof Error ? err.message : String(err);

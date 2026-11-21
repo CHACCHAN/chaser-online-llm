@@ -364,6 +364,7 @@ async function main() {
               statusMessage: `Match #${matchIndex}: ログインを待っています（${error}。前の試合のセッションが切れるまで、${attempt}回目・あと最大${Math.ceil(remainingMs / 60_000)}分、CHASER_LOGIN_WAIT_MIN）`,
             }),
         });
+        if (uiBus.getState().stopRequested) throw new Error("停止ボタンで入室を中断");
         await client.enterRoom(config.room);
         // 準備は1試合ごとに使い切る（次の試合はその試合の結果も読んで準備し直す）。入室できなかった時は使わずに残す
         resetPrep();

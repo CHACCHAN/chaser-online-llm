@@ -114,8 +114,10 @@ export function loadTilesKnowledge(): Record<string, StoredTileDefinition> {
     return cachedTiles;
   } catch (err) {
     tilesUnreadable = err instanceof Error ? err.message : String(err);
-    // 前に読めた中身で続ける（キャッシュはしない。直れば次の読み込みで反映される）
-    return lastGoodTiles ? { ...lastGoodTiles } : {};
+    // 前に読めた中身で続ける。キャッシュもする（getTileInfo はマスごとに呼ばれる。runner が毎フェーズ reloadTilesKnowledge
+    // で捨てるので、ファイルが直れば次のフェーズで反映される）
+    cachedTiles = lastGoodTiles ? { ...lastGoodTiles } : {};
+    return cachedTiles;
   }
 }
 
@@ -184,8 +186,11 @@ export function recordMeasuredTileScores(tiles: { value: number; score: number; 
 let lastGoodProfiles: RoomProfilesFile | null = null;
 /** 壊れた room-profiles.json を控えに残した（同じ壊れ方で何度も控えを作らない） */
 let brokenProfilesBackedUp: string | null = null;
+/** room-profiles.json が壊れていて、前に読めた中身も無い（この間は保存しない。空に上書きすると全ルームの記録が消える） */
+let profilesUnsafe = false;
 
 export function loadRoomProfiles(): RoomProfilesFile {
+  if (!existsSync(ROOM_PROFILES_PATH)) profilesUnsafe = false;
   if (existsSync(ROOM_PROFILES_PATH)) {
     let raw = "";
     try {
@@ -194,6 +199,7 @@ export function loadRoomProfiles(): RoomProfilesFile {
       if (!parsed || typeof parsed !== "object" || typeof parsed.rooms !== "object" || parsed.rooms === null) throw new Error("rooms がない");
       lastGoodProfiles = parsed;
       brokenProfilesBackedUp = null;
+      profilesUnsafe = false;
       return parsed;
     } catch (err) {
       // 壊れたファイルは控えに残し、前に読めた中身で続ける（次に保存した時にその中身で直る）
@@ -202,6 +208,7 @@ export function loadRoomProfiles(): RoomProfilesFile {
         brokenProfilesBackedUp = raw;
         console.error(`room-profiles.json が読めない（${err instanceof Error ? err.message : String(err)}）。控え: ${dest ?? "作れなかった"}`);
       }
+      profilesUnsafe = !lastGoodProfiles;
       if (lastGoodProfiles) return structuredClone(lastGoodProfiles);
     }
   }
@@ -333,6 +340,11 @@ export function saveRoomProfile(profile: RoomProfile): RoomProfile {
   };
   file.rooms[String(profile.room)] = updated;
   file.updatedAt = updated.updatedAt;
+  if (profilesUnsafe) {
+    // 試合は止めない。壊れたファイルを直せば次の保存から記録される
+    console.error(`room-profiles.json が読めないので Room ${profile.room} の記録を保存しない（控え: room-profiles.json.broken-*。ファイルを直すこと）`);
+    return updated;
+  }
   writeJsonAtomic(ROOM_PROFILES_PATH, file);
   lastGoodProfiles = file;
   return updated;
