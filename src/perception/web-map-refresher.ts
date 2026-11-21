@@ -3,6 +3,7 @@ import type { WorldMap } from "../memory/world-map";
 import { numSetting } from "../settings";
 import { logger } from "../tools";
 import { uiBus } from "../ui/event-bus";
+import type { ScoreSample } from "../memory/tile-measure";
 import { scrapeRoomWebMap, type WebMapScrapeResult } from "./web-map-scraper";
 
 /**
@@ -27,6 +28,7 @@ export class WebMapRefresher {
   private lastStageName: string | null = null;
   private consecutiveFailures = 0;
   private lastSeenTurn: { ourTurn: number; webTurn: number | null } | null = null;
+  private lastScoreSample: ScoreSample | null = null;
   private attempts = 0;
 
   constructor(
@@ -51,6 +53,11 @@ export class WebMapRefresher {
   /** 最後に取れた Webマップの `turn=` の値と、それを取りに行った時のハーネスのターン（意味の確認用に記録する） */
   get lastTurn(): { ourTurn: number; webTurn: number | null } | null {
     return this.lastSeenTurn;
+  }
+
+  /** 最後に取れた公式のアイテム得点（I:）と残りターン数。タイルの得点の実測に使う（取れるたびに新しいオブジェクトになる） */
+  get lastScore(): ScoreSample | null {
+    return this.lastScoreSample;
   }
 
   /** 試合開始時: 取得を始め、タイムアウト1回分だけ結果を待つ（間に合わなければ裏で続行） */
@@ -103,6 +110,7 @@ export class WebMapRefresher {
         this.worldMap.setGlobalGrid(r.grid, r.playerPos, r.stageName, turn, r.selfTileId, capturePos);
         this.consecutiveFailures = 0;
         this.lastSeenTurn = { ourTurn: turn, webTurn: r.turn };
+        if (r.liveScore && r.turn !== null) this.lastScoreSample = { ourTurn: turn, webTurn: r.turn, itemPoint: r.liveScore.itemPoint };
         this.lastSourceUrl = r.sourceUrl;
         this.lastStageName = r.stageName;
         if (!this.found) {

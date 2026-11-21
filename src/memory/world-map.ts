@@ -1,5 +1,6 @@
 import {
   loadTilesKnowledge,
+  MEASURED_MIN_SAMPLES,
   type WarpLinkRecord,
 } from "./knowledge-store";
 
@@ -228,9 +229,13 @@ export function getTileInfo(value: number): TileInfo {
   const fromDb = dynamicDb[String(value)];
   const official = officialCategory(value);
   if (official) {
-    // ワープ・ブラックスターは公式の 5 点のまま。ジオーメタルは公式の範囲内の実測値だけ使う
+    // 種類は公式の番号で固定。得点は、Webマップの公式の得点から実測したもの（推定が足りていれば）を最優先し、
+    // 次にジオーメタルの公式の範囲内の値、それ以外は公式の値
     const dbScore = fromDb?.score;
-    const useDb = official.name === "geometal" && typeof dbScore === "number" && dbScore >= GEOMETAL_SCORE_RANGE[0] && dbScore <= GEOMETAL_SCORE_RANGE[1];
+    const measured = fromDb?.source === "measured" && (fromDb.measuredSamples ?? 0) >= MEASURED_MIN_SAMPLES;
+    const useDb =
+      typeof dbScore === "number" &&
+      (measured || (official.name === "geometal" && dbScore >= GEOMETAL_SCORE_RANGE[0] && dbScore <= GEOMETAL_SCORE_RANGE[1]));
     return { ...official, score: useDb ? dbScore : official.score };
   }
   if (fromDb) {

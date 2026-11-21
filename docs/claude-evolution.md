@@ -120,7 +120,8 @@
 | サブコマンド | 用途 |
 | :--- | :--- |
 | `reference [--query <q>] [--tile <id>] [--url <u>]` | ローカルの `tiles.json` と公式サイトを検索 |
-| `upsert-tile --id <id> --score <s> [--name --label --passable --hazard --symbol --notes]` | `knowledge/tiles.json` にタイルを登録・更新（`source: inferred`） |
+| `upsert-tile --id <id> --score <s> [--name --label --passable --hazard --symbol --notes]` | `knowledge/tiles.json` にタイルを登録・更新（`source: inferred`。`measured` のタイルの得点は変えない） |
+| `tile-scores --run-dir <dir>` | その試合の `turns.jsonl` から、Webマップの公式のアイテム得点で測ったタイルの得点を出す（読むだけ） |
 | `verify [--run-dir <dir>]` | リプレイ検証。失敗時は終了コード 1 |
 | `cells --room <n> [--near x,y --radius r]` | ワープの実測（絶対座標）とマスのメモ |
 | `cell-note --room <n> --x <x> --y <y> --note <text>` | マスにメモを足す（空で消す） |
@@ -134,6 +135,13 @@
 - サーバの制限時間は公開されていない。実測では CMD1 を 120 秒遅らせても切断されなかった（上限は未確認。`knowledge/server.json`）。
 - 同一ユーザーの二重ログインは拒否される。途中放棄後は約 5 分、ログインのみのセッションは約 12 分ロックされるため、`bun run play --login-wait-min` で待つ。
 - タイル得点は公式根拠がない。`knowledge/tiles.json` は実測値として扱う（[chaser-protocol.md](chaser-protocol.md)）。
+
+### タイルの得点の実測（`src/memory/tile-measure.ts`）
+- Webマップには自分の公式の得点（`A: I: P: PD: T:`）が出る。取れるたびに、残りターン数（`turn=`）とアイテム得点（I:）を `turns.jsonl` の `webScore` に、そのターンに踏んだタイル（番号→回数）を `landed` に残す。
+- 画面の残りターン数から「サーバの何ターン目の手の前か」を出し、隣り合う画面の I: の差を「踏んだ数×得点」の式にして、未知が1種類の式から順に解く。境目のずれ（−1・0・+1 ターン）は式が一番よく揃うものを採る。1つのタイルは推定3件以上・7割以上が一致した値だけ出す。
+- 試合の終わり（振り返りの前）に `knowledge/tiles.json` へ `source: "measured"`・`measuredSamples` で残す。前の実測と同じ値なら推定の数を足し、違えば推定の多い方を残す。
+- `getTileInfo` は推定が3件以上の measured の得点を最優先する（ワープ・ブラックスター・ジオーメタルの種類は番号で固定のまま）。`upsert-tile` では measured の得点を書き換えない。
+- きっかけ: `tiles.json` がエージェントの推測で 61（ブラックスター）を「400点のジオメタル」としていて、deepseek の試合でブラックスターを狙い続けていた。過去の試合は公式結果が中断などで合わず、得点を確かめられなかった。
 
 ### ワープの記録とマスのメモ（`var/room-profiles.json` の `warps`・`cellNotes`）
 - **自動記録**: ワープするたびに、入口と着地の両方の区画を Webマップで位置合わせできたら、絶対座標（Webマップの列・行）で `warps` に足す（同じ入口・着地は `count` を増やす）。Webマップのないルームは座標が区画ごとに変わるので試合をまたいでは残さない。

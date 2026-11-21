@@ -9,6 +9,7 @@ import {
   setCellNote,
   upsertTileDefinition,
 } from "./memory/knowledge-store";
+import { type MeasureTurn, measureTileScores } from "./memory/tile-measure";
 import { consultReference } from "./tools/reference-fetcher";
 
 /**
@@ -61,18 +62,64 @@ async function main() {
     const score = Number(values.score ?? 0);
     const passable = values.passable !== "false";
     const hazard = values.hazard === "true";
+    // Webマップの公式の得点で実測した得点は、推測で書き換えない（名前・メモなどは更新できる）
+    const prev = loadTilesKnowledge()[String(id)];
+    const keepMeasured = prev?.source === "measured";
     upsertTileDefinition(id, {
       name: typeof values.name === "string" ? values.name : `tile_${id}`,
       label: typeof values.label === "string" ? values.label : `タイル(${id})`,
-      score,
+      score: keepMeasured ? prev.score : score,
       passable,
       hazard,
       symbol: typeof values.symbol === "string" ? values.symbol.slice(0, 2) : "?",
       known: true,
-      source: "inferred",
-      notes: typeof values.notes === "string" ? values.notes : undefined,
+      source: keepMeasured ? "measured" : "inferred",
+      ...(keepMeasured ? { measuredSamples: prev.measuredSamples } : {}),
+      notes: typeof values.notes === "string" ? values.notes : prev?.notes,
     });
-    console.log(JSON.stringify({ ok: true, updatedTile: id, tiles: loadTilesKnowledge()[String(id)] }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          updatedTile: id,
+          ...(keepMeasured && prev.score !== score ? { note: `得点は実測（${prev.score}）のまま。measured の得点は推測で書き換えない` } : {}),
+          tiles: loadTilesKnowledge()[String(id)],
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  if (subcommand === "tile-scores") {
+    // 試合の turns.jsonl（landed と webScore）から、Webマップの公式のアイテム得点で測ったタイルの得点を出す（読むだけ）。
+    // 試合の終わりにハーネスが同じ計算をして knowledge/tiles.json に source: "measured" で残している
+    const runDir = typeof values["run-dir"] === "string" ? path.resolve(process.cwd(), values["run-dir"]) : null;
+    const file = runDir ? path.join(runDir, "turns.jsonl") : null;
+    if (!file || !existsSync(file)) {
+      console.error("--run-dir <var/runs/...>（turns.jsonl のあるフォルダ）が必要");
+      process.exit(1);
+    }
+    const turns = readFileSync(file, "utf-8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as MeasureTurn);
+    const withScore = turns.filter((t) => t.webScore).length;
+    const res = measureTileScores(turns);
+    const db = loadTilesKnowledge();
+    console.log(
+      JSON.stringify(
+        {
+          turns: turns.length,
+          turnsWithWebScore: withScore,
+          ...res,
+          tiles: res.tiles.map((t) => ({ ...t, tilesJson: db[String(t.value)]?.score ?? null })),
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
@@ -150,6 +197,7 @@ async function main() {
       "  reference    [--query <q>] [--tile <id>]       Consult official CHaserOnline reference & tile DB",
       "  upsert-tile  --id <id> --score <s> ...         Register or update tile knowledge in tiles.json",
       "  verify       [--run-dir <dir>]                 Replay-verify active-solver.ts against turns.jsonl",
+      "  tile-scores  --run-dir <dir>  Tile scores measured from the official item score on the Web map (read only)",
       "  cells        --room <n> [--near x,y] [--radius r] [--abs]  Known warps and cell notes (coords = snapshot pos frame unless --abs)",
       "  cell-note    --room <n> --x <x> --y <y> --note <text> [--abs]  Add a note to a cell (empty --note clears)",
     ].join("\n"),

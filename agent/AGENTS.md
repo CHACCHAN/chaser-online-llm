@@ -30,6 +30,7 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 |---|---|---|
 | `reference` | `--tile ID` / `--query 語` | タイルの登録内容 / 公式ページの検索 |
 | `upsert-tile` | `--id --score --name --label --passable --hazard --symbol [--notes]` | タイルを登録・更新 |
+| `tile-scores` | `--run-dir var/runs/…` | Webマップの公式のアイテム得点から測ったタイルの得点（読むだけ。試合の終わりにハーネスが `tiles.json` へ `source: "measured"` で残す。measured の得点は推測で書き換えない） |
 | `cells` | `--room N [--near x,y --radius r]` | ワープの実測（入口→着地、回数、タイル番号ごとの飛び方）とマスのメモ |
 | `cell-note` | `--room N --x X --y Y --note "…"` | マスにメモを足す（`--note ""` で消す。1件160字まで） |
 

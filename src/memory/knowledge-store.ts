@@ -10,7 +10,10 @@ export interface StoredTileDefinition {
   hazard: boolean;
   symbol: string;
   known: boolean;
-  source?: "verified" | "inferred" | "reference";
+  /** official: 公式資料 / measured: Webマップの公式の得点から実測（ハーネスが書く） / verified・inferred: エージェントの検証・推測 */
+  source?: "official" | "measured" | "verified" | "inferred" | "reference";
+  /** 実測の推定の数（measured の時）。試合をまたいで足す */
+  measuredSamples?: number;
   notes?: string;
 }
 
@@ -104,6 +107,36 @@ export function upsertTileDefinition(
   };
   writeFileSync(TILES_PATH, JSON.stringify(payload, null, 2) + "\n", "utf-8");
   cachedTiles = tiles;
+}
+
+/** 実測の得点を試合で使うのに要る推定の数 */
+export const MEASURED_MIN_SAMPLES = 3;
+
+/**
+ * Webマップの公式のアイテム得点から測ったタイルの得点を残す（src/memory/tile-measure.ts）。
+ * 前の実測と同じ値なら推定の数を足し、違う値なら推定の多い方を残す。推測（inferred など）より常に優先する。
+ */
+export function recordMeasuredTileScores(tiles: { value: number; score: number; agree: number; samples: number }[], runId: string): void {
+  for (const m of tiles) {
+    const prev = loadTilesKnowledge()[String(m.value)];
+    const prevMeasured = prev?.source === "measured" ? (prev.measuredSamples ?? 0) : 0;
+    if (prevMeasured > 0 && prev!.score !== m.score && prevMeasured >= m.agree) continue;
+    const samples = prevMeasured > 0 && prev!.score === m.score ? prevMeasured + m.agree : m.agree;
+    const note = `【実測 ${runId}: ${m.score}点（推定${m.samples}件中${m.agree}件が一致）${prev && prev.score !== m.score ? `。以前の値 ${prev.score}（${prev.source ?? "?"}）を置き換え` : ""}】`;
+    upsertTileDefinition(m.value, {
+      name: prev?.name ?? `tile_${m.value}`,
+      label: prev?.label ?? `タイル${m.value}`,
+      passable: prev?.passable ?? true,
+      hazard: prev?.hazard ?? m.score < 0,
+      symbol: prev?.symbol ?? "?",
+      known: true,
+      ...prev,
+      score: m.score,
+      source: "measured",
+      measuredSamples: samples,
+      notes: [prev?.notes, note].filter(Boolean).join(" "),
+    });
+  }
 }
 
 export function loadRoomProfiles(): RoomProfilesFile {

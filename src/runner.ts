@@ -7,7 +7,8 @@ import type { AgentConfig } from "./config";
 import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
 import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
-import { getRoomProfile, isWarpTile, recordRoomWarp, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
+import { getRoomProfile, isWarpTile, recordMeasuredTileScores, recordRoomWarp, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
+import { type MeasureResult, measureTileScores, type ScoreSample } from "./memory/tile-measure";
 import { WorldMap } from "./memory/world-map";
 import { totalTurnsFromWeb, WebMapRefresher } from "./perception/web-map-refresher";
 import { GameOver, logger } from "./tools";
@@ -41,6 +42,10 @@ export interface TurnRecord {
   breakpointReasons: string[];
   /** 最後に取れた Webマップの `turn=` とその時のハーネスのターン（Webマップのターン表示の意味を確かめるため） */
   webMapTurn?: { ourTurn: number; webTurn: number | null } | null;
+  /** このターンに踏んだタイル（番号 → 回数）。タイルの得点の実測に使う */
+  landed?: Record<string, number>;
+  /** このターンの間に届いた Webマップの公式のアイテム得点（届いた時だけ） */
+  webScore?: ScoreSample;
   positionAfter: [number, number];
   globalPositionAfter: [number, number] | null;
   estimatedScoreAfter: number;
@@ -62,6 +67,8 @@ export interface RunSummary {
   estimatedScore: ReturnType<WorldMap["getStats"]>;
   officialResult: OfficialResult | null;
   tilePickups: Record<string, number>;
+  /** Webマップの公式のアイテム得点から測ったタイルの得点（src/memory/tile-measure.ts） */
+  tileMeasurement?: MeasureResult;
   commandCounts: Record<string, number>;
   holeRevisits: number;
   hazardHits: number;
@@ -167,6 +174,8 @@ export async function runAgentMatch(
   const roomProfileBefore = getRoomProfile(config.room);
   /** 記録済みのワープ（worldMap.getWarpLinks() の番号） */
   const recordedWarps = new Set<number>();
+  /** turns.jsonl に書いた最後の Webマップの得点（同じものを二度書かない） */
+  let recordedScore: ScoreSample | null = null;
 
   // Web マップは裏で取得する。取れない間は自作マップ、途中で取れたら全体マップ表示に切り替わる
   const webMap = new WebMapRefresher(config.room, config.webMapUrl, worldMap, (r) => {
@@ -217,6 +226,7 @@ export async function runAgentMatch(
         break;
       }
       webMap.onTurnStart(turn);
+      const pickupsBefore = worldMap.getStats().pickups;
       // Webマップの残りターン数から全ターン数が分かれば、メインの「残り」をそれに合わせる（初めてのルームでも分かる）
       const webTotal = totalTurnsFromWeb(webMap.lastTurn);
       if (webTotal !== null) mainAgent?.setTotalTurns(webTotal);
@@ -359,6 +369,10 @@ export async function runAgentMatch(
       incCommand(cmd2);
 
       const curStats = worldMap.getStats();
+      const landed: Record<string, number> = {};
+      for (const [v, c] of Object.entries(curStats.pickups)) if (c > (pickupsBefore[v] ?? 0)) landed[v] = c - (pickupsBefore[v] ?? 0);
+      const newScore: ScoreSample | null = webMap.lastScore && webMap.lastScore !== recordedScore ? webMap.lastScore : null;
+      if (newScore) recordedScore = newScore;
       const record: TurnRecord = {
         turn,
         cmd1,
@@ -380,6 +394,8 @@ export async function runAgentMatch(
           : {}),
         breakpointReasons,
         webMapTurn: webMap.lastTurn,
+        landed,
+        ...(newScore ? { webScore: newScore } : {}),
         positionAfter: worldMap.getPosition(),
         globalPositionAfter: worldMap.getGlobalPosition(),
         estimatedScoreAfter: curStats.estimatedTotalScore,
@@ -440,6 +456,14 @@ export async function runAgentMatch(
   const finishedAt = new Date().toISOString();
   const stats = worldMap.getStats();
   await webMap.drain();
+  // 試合中に届いた公式のアイテム得点から、タイルの本当の得点を測って knowledge/tiles.json に残す（振り返りの前に）
+  let tileMeasurement: MeasureResult | undefined;
+  try {
+    tileMeasurement = measureTileScores(turnLogs);
+    if (tileMeasurement.tiles.length > 0) recordMeasuredTileScores(tileMeasurement.tiles, runId);
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, "タイルの得点の実測に失敗");
+  }
   const officialResult = await fetchLatestResult(config.room);
   const fallbackTurns = turnLogs.filter((r) => r.usedFallback).length;
   const harnessTurns = turnLogs.filter((r) => r.usedHarness).length;
@@ -460,6 +484,7 @@ export async function runAgentMatch(
     estimatedScore: stats,
     officialResult,
     tilePickups: stats.pickups,
+    ...(tileMeasurement ? { tileMeasurement } : {}),
     commandCounts,
     holeRevisits: stats.holeRevisits,
     hazardHits: stats.hazardHits,
