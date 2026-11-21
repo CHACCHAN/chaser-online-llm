@@ -52,6 +52,13 @@ interface MainReply {
   memo?: string;
   /** メモの末尾に1行足す（全文を書き直さずに済む＝出力が短く速い） */
   memoAdd?: string;
+  /** メモの行を番号で書き換える（"" で削除）。番号は依頼文に表示した行番号 */
+  memoSet?: Record<number, string>;
+}
+
+/** 依頼文で付けた行番号（"3| "）をモデルが書き写しても、メモに残さない */
+function stripLineNo(text: string): string {
+  return text.replace(/^[ \t]*\d+\|[ \t]?/gm, "");
 }
 
 function readPrompt(name: string): string {
@@ -396,10 +403,24 @@ export class MainAgent {
   private applyMemo(reply: MainReply): void {
     const max = numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true });
     if (reply.memo !== undefined) {
-      if (reply.memo.length > max) this.notices.push(`memo が上限 ${max} 字を超えたので、${max} 字で切った`);
-      this.memo = reply.memo.slice(0, max);
+      const memo = stripLineNo(reply.memo);
+      if (memo.length > max) this.notices.push(`memo が上限 ${max} 字を超えたので、${max} 字で切った`);
+      this.memo = memo.slice(0, max);
+      if (reply.memoSet) this.notices.push("memo（全文の書き直し）と一緒に来た memo_set は使わなかった");
+    } else if (reply.memoSet) {
+      const lines = this.memo.split("\n");
+      const bad: number[] = [];
+      for (const [k, v] of Object.entries(reply.memoSet)) {
+        const i = Number(k) - 1;
+        if (!Number.isInteger(i) || i < 0 || i >= lines.length) bad.push(Number(k));
+        else lines[i] = stripLineNo(v);
+      }
+      const next = lines.filter((l, i) => !(l.trim() === "" && Object.hasOwn(reply.memoSet!, String(i + 1)))).join("\n");
+      if (next.length > max) this.notices.push(`memo_set の結果がメモの上限 ${max} 字を超えるので使わなかった`);
+      else this.memo = next;
+      if (bad.length > 0) this.notices.push(`memo_set の行番号 ${bad.join(",")} はメモに無い（1〜${lines.length}）`);
     }
-    const add = reply.memoAdd?.trim();
+    const add = reply.memoAdd ? stripLineNo(reply.memoAdd).trim() : "";
     if (add) {
       const next = this.memo ? `${this.memo}\n${add}` : add;
       if (next.length > max) this.notices.push(`memo_add はメモの上限 ${max} 字を超えるので入らなかった（今 ${this.memo.length} 字）。memo で書き直せば入る`);
@@ -519,7 +540,7 @@ export class MainAgent {
     const lines = [
       `[TURN ${ctx.turn}${this.totalTurns ? `/${this.totalTurns}（このターンを含め残り${Math.max(0, this.totalTurns - ctx.turn + 1)}）` : ""} / ${ctx.phase}] budget=${Math.round(this.turnBudgetMs / 1000)}s`,
       `## メモ（前のフェーズまでの自分から。${this.memo.length}/${numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true })}字）`,
-      this.memo || "(まだない)",
+      this.memo ? this.memo.split("\n").map((l, i) => `${i + 1}| ${l}`).join("\n") : "(まだない)",
       "## 直近の経過",
       this.recent.join("\n") || "(試合開始)",
       "## 現在の状況",
@@ -658,6 +679,14 @@ export function parsePrepMemo(text: string): string {
   return text.trim();
 }
 
+/** memo_set は {"行番号": "新しい内容"}。文字列でない値・番号でないキーは捨てる */
+function parseMemoSet(v: unknown): Record<number, string> | undefined {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+  const out: Record<number, string> = {};
+  for (const [k, val] of Object.entries(v)) if (/^\d+$/.test(k) && typeof val === "string") out[Number(k)] = val;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function parseMainReply(
   text: string,
   turn: number,
@@ -684,9 +713,10 @@ export function parseMainReply(
       // 1行のはずだが、配列で返すモデルもあるので行をつなげて受け取る
       const rawAdd = Array.isArray(obj.memo_add) ? obj.memo_add.filter((v) => typeof v === "string").join("\n") : obj.memo_add;
       const memoAdd = typeof rawAdd === "string" && rawAdd.trim() ? rawAdd : undefined;
-      if (obj.action === "continue") return { action: "continue", note, delegate, memo, memoAdd };
+      const memoSet = parseMemoSet((obj as { memo_set?: unknown }).memo_set);
+      if (obj.action === "continue") return { action: "continue", note, delegate, memo, memoAdd, memoSet };
       if (obj.action === "command" && obj.command && legal.includes(obj.command)) {
-        return { action: "command", command: obj.command, note, delegate, memo, memoAdd };
+        return { action: "command", command: obj.command, note, delegate, memo, memoAdd, memoSet };
       }
       if (
         obj.action === "plan" &&
@@ -694,7 +724,7 @@ export function parseMainReply(
         obj.target.length === 2 &&
         obj.target.every((v) => Number.isInteger(v))
       ) {
-        return { action: "plan", target: [obj.target[0] as number, obj.target[1] as number], note, delegate, memo, memoAdd };
+        return { action: "plan", target: [obj.target[0] as number, obj.target[1] as number], note, delegate, memo, memoAdd, memoSet };
       }
     } catch {
       // 次の候補へ

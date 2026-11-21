@@ -267,3 +267,16 @@ test("memo_add: 全文を書き直さずにメモの末尾へ1行足せる（上
   expect(agent.notices.at(-1)).toContain("memo_add はメモの上限");
   delete Bun.env.AGENT_MEMO_MAX_CHARS;
 });
+
+test("memo_set: メモの行を番号で書き換え・削除できる（行番号を書き写しても残さない）", async () => {
+  const { parseMainReply } = await import("./main-agent");
+  const r = parseMainReply('{"action": "continue", "memo_set": {"2": "西は回収済み", "3": "", "x": "無視"}}', 3, "CMD1", ["gr"]);
+  expect(r?.memoSet).toEqual({ 2: "西は回収済み", 3: "" });
+  const agent = new MainAgent({}, 5000) as unknown as { memo: string; notices: string[]; applyMemo(r: unknown): void };
+  agent.memo = "目標 57万点\n西に77が3つ\n(2,0)はワープ\n北は罠";
+  agent.applyMemo({ action: "continue", memoSet: { 2: "西は回収済み", 3: "", 9: "x" } });
+  expect(agent.memo).toBe("目標 57万点\n西は回収済み\n北は罠");
+  expect(agent.notices.at(-1)).toContain("行番号 9");
+  agent.applyMemo({ action: "continue", memo: "1| 書き直し\n2| 二行目", memoAdd: "3| 追記" });
+  expect(agent.memo).toBe("書き直し\n二行目\n追記");
+});
