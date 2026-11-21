@@ -1,4 +1,4 @@
-import { Client } from "./client";
+import { Client, loginWithRetry } from "./client";
 import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
 import { waitAwareClientConfig } from "./client/wait-status";
@@ -259,8 +259,6 @@ async function main() {
     // （prepared はクロージャから更新されるので、ここで型を明示して読む）
     const preparedNow = prepared as { key: string; result: PrepResult } | null;
     const prep = prepRequired() ? (preparedNow?.result ?? null) : null;
-    // 準備は1試合ごとに使い切る（次の試合はその試合の結果も読んで準備し直す）
-    resetPrep();
     matchIndex += 1;
 
     const runMatchCycle = async (client: Client, mainAgent: MainAgent | null) => {
@@ -349,8 +347,18 @@ async function main() {
 
         const client = new Client(waitAwareClientConfig(config.retryMs));
         currentClient = client;
-        await client.login();
+        // 前の試合を停止・ターン上限で終えた直後は、そのセッションが切れるまで二重ログインで断られるので待ってやり直す
+        uiBus.patchState({ statusMessage: `Match #${matchIndex}: Room ${config.room} にログイン中...` });
+        await loginWithRetry(client, {
+          shouldStop: () => uiBus.getState().stopRequested,
+          onRetry: ({ attempt, remainingMs, error }) =>
+            uiBus.patchState({
+              statusMessage: `Match #${matchIndex}: ログインを待っています（${error}。前の試合のセッションが切れるまで、${attempt}回目・あと最大${Math.ceil(remainingMs / 60_000)}分、CHASER_LOGIN_WAIT_MIN）`,
+            }),
+        });
         await client.enterRoom(config.room);
+        // 準備は1試合ごとに使い切る（次の試合はその試合の結果も読んで準備し直す）。入室できなかった時は使わずに残す
+        resetPrep();
         await runMatchCycle(client, mainAgent);
       } finally {
         await mainAgent?.end();
@@ -358,6 +366,12 @@ async function main() {
     } catch (err) {
       inMatch = false; // エラー停止中はルーム変更をすぐ反映してよい
       const msg = err instanceof Error ? err.message : String(err);
+      if (uiBus.getState().stopRequested) {
+        // 停止ボタンで打ち切った（ログイン待ち・入室中など）。エラーではないので待機に戻る
+        logger.info({ matchIndex, err: msg }, "Match cycle stopped by user");
+        uiBus.patchState({ running: false });
+        continue;
+      }
       logger.error({ matchIndex, err: msg }, "Match cycle failed; returning to idle dashboard");
       uiBus.patchState({
         status: "error",

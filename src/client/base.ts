@@ -27,6 +27,11 @@ export class Base {
     this.abortController.abort(new HTTPError("停止ボタンで通信を中断"));
   }
 
+  /** 停止ボタンで打ち切られたか */
+  public get aborted(): boolean {
+    return this.abortController.signal.aborted;
+  }
+
   // 状態返却
   public get getStatus(): Status {
     return this.status;

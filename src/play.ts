@@ -9,7 +9,7 @@
  */
 import { parseArgs } from "node:util";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
-import { Client } from "./client";
+import { Client, loginWithRetry } from "./client";
 import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
 import { getRoomProfile, knownTotalTurns } from "./memory/knowledge-store";
@@ -63,18 +63,11 @@ try {
       console.log(JSON.stringify({ waiting: what, elapsedSec: Math.round(elapsedMs / 1000) }));
     },
   });
-  const loginStart = Date.now();
-  for (let attempt = 0; ; attempt++) {
-    try {
-      await client.login();
-      console.log(JSON.stringify({ loginOk: new Date().toISOString(), waitedSec: Math.round((Date.now() - loginStart) / 1000) }));
-      break;
-    } catch (err) {
-      if (Date.now() - loginStart > loginWaitMs) throw err;
-      console.log(JSON.stringify({ loginRetry: attempt + 1, at: new Date().toISOString() }));
-      await Bun.sleep(numSetting("CHASER_LOGIN_RETRY_SEC", { min: 1 }) * 1000);
-    }
-  }
+  const login = await loginWithRetry(client, {
+    waitMs: loginWaitMs,
+    onRetry: ({ attempt }) => console.log(JSON.stringify({ loginRetry: attempt, at: new Date().toISOString() })),
+  });
+  console.log(JSON.stringify({ loginOk: new Date().toISOString(), waitedSec: Math.round(login.waitedMs / 1000) }));
   await client.enterRoom(config.room);
   const summary = await runAgentMatch(client, config, 1, mainAgent);
 
