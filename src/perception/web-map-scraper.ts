@@ -132,7 +132,7 @@ export function parseGridFromHtml(
 
       if (imgNum !== undefined) {
         const val = Number(imgNum);
-        if (val === playerTileId || (detectedPlayerPos === null && val >= 1000)) {
+        if (val === playerTileId) {
           detectedPlayerPos = [colIdx, tableRows.length];
         }
         row.push(val);
@@ -161,16 +161,12 @@ export function parseGridFromHtml(
     const uniformRows = tableRows.filter((r) => r.length === bestWidth);
     if (uniformRows.length >= 5) {
       // uniformRows フィルタ後の正確な自機座標を再計算
-      let finalPlayerPos: [number, number] | null = detectedPlayerPos;
-      for (let ry = 0; ry < uniformRows.length; ry++) {
-        const r = uniformRows[ry]!;
-        for (let rx = 0; rx < r.length; rx++) {
-          if (r[rx] === playerTileId) {
-            finalPlayerPos = [rx, ry];
-            break;
-          }
-        }
-      }
+      // 自分のタイル番号（スコア欄で分かる）の位置。分からない時は、盤面のプレイヤーが1人だけならそれを自機とする
+      // （以前は最初に見つかったプレイヤーを自機にしていたので、複数人のルームで他プレイヤーに合わせてずれることがあった）
+      const players: [number, number, number][] = [];
+      uniformRows.forEach((r, ry) => r.forEach((v, rx) => v >= 1000 && players.push([rx, ry, v])));
+      const own = selfFound ? players.find((p) => p[2] === playerTileId) : players.length === 1 ? players[0] : undefined;
+      const finalPlayerPos: [number, number] | null = own ? [own[0], own[1]] : selfFound ? null : detectedPlayerPos;
       return {
         grid: uniformRows,
         playerPos: finalPlayerPos,

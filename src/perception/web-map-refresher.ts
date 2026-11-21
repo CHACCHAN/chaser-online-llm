@@ -93,7 +93,7 @@ export class WebMapRefresher {
   private request(turn: number, reason: string): void {
     if (this.inFlight) return;
     const capturePos = this.worldMap.getPosition();
-    const captureSegments = this.worldMap.getStats().segmentCount;
+    const captureFrame = this.worldMap.frameVersion;
     this.attempts += 1;
     const startedAt = Date.now();
     this.inFlight = (async () => {
@@ -103,7 +103,8 @@ export class WebMapRefresher {
           this.onFailure(reason, r.error ?? "マップが見つからない", startedAt);
           return;
         }
-        if (this.worldMap.getStats().segmentCount !== captureSegments) {
+        // ワープ（新しい区画・前に来た区画へ戻る）で座標系が変わったら、取得開始時の位置は使えないので捨てる
+        if (this.worldMap.frameVersion !== captureFrame) {
           logger.info({ reason }, "Web map discarded: warped while fetching");
           return;
         }

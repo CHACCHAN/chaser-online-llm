@@ -9,7 +9,7 @@ import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
 import { getRoomProfile, isWarpTile, recordMeasuredTileScores, recordRoomWarp, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
 import { type MeasureResult, measureTileScores, type ScoreSample } from "./memory/tile-measure";
-import { WorldMap } from "./memory/world-map";
+import { WorldMap, type WebAlignInfo } from "./memory/world-map";
 import { totalTurnsFromWeb, WebMapRefresher } from "./perception/web-map-refresher";
 import { GameOver, logger } from "./tools";
 import { decideTurnAction as defaultDecideTurnAction, type SolverDecision } from "./solver/active-solver";
@@ -46,6 +46,8 @@ export interface TurnRecord {
   landed?: Record<string, number>;
   /** このターンの間に届いた Webマップの公式のアイテム得点（届いた時だけ） */
   webScore?: ScoreSample;
+  /** このターンの間の Webマップでの位置合わせ（あった時だけ。corrected があれば、それまでの位置合わせがずれていた） */
+  webAlign?: WebAlignInfo;
   positionAfter: [number, number];
   globalPositionAfter: [number, number] | null;
   estimatedScoreAfter: number;
@@ -176,6 +178,7 @@ export async function runAgentMatch(
   const recordedWarps = new Set<number>();
   /** turns.jsonl に書いた最後の Webマップの得点（同じものを二度書かない） */
   let recordedScore: ScoreSample | null = null;
+  let recordedAlign: WebAlignInfo | null = null;
 
   // Web マップは裏で取得する。取れない間は自作マップ、途中で取れたら全体マップ表示に切り替わる
   const webMap = new WebMapRefresher(config.room, config.webMapUrl, worldMap, (r) => {
@@ -373,6 +376,20 @@ export async function runAgentMatch(
       for (const [v, c] of Object.entries(curStats.pickups)) if (c > (pickupsBefore[v] ?? 0)) landed[v] = c - (pickupsBefore[v] ?? 0);
       const newScore: ScoreSample | null = webMap.lastScore && webMap.lastScore !== recordedScore ? webMap.lastScore : null;
       if (newScore) recordedScore = newScore;
+      const align = worldMap.getLastAlign();
+      const newAlign: WebAlignInfo | null = align && align !== recordedAlign ? align : null;
+      if (newAlign) {
+        recordedAlign = newAlign;
+        if (newAlign.corrected) {
+          logger.warn({ ...newAlign, turn }, "Webマップで位置合わせを直した（それまでずれていた）");
+          uiBus.pushClaudeEvent({
+            context: "system",
+            kind: "system",
+            title: "位置合わせを直した",
+            content: `T${turn}: Webマップの自機の位置に合わせ直した（ずれ ${newAlign.corrected.to[0] - newAlign.corrected.from[0]},${newAlign.corrected.to[1] - newAlign.corrected.from[1]}）`,
+          });
+        }
+      }
       const record: TurnRecord = {
         turn,
         cmd1,
@@ -396,6 +413,7 @@ export async function runAgentMatch(
         webMapTurn: webMap.lastTurn,
         landed,
         ...(newScore ? { webScore: newScore } : {}),
+        ...(newAlign ? { webAlign: newAlign } : {}),
         positionAfter: worldMap.getPosition(),
         globalPositionAfter: worldMap.getGlobalPosition(),
         estimatedScoreAfter: curStats.estimatedTotalScore,

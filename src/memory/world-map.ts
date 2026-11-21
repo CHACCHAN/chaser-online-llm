@@ -7,6 +7,22 @@ import {
 export type Dir = "u" | "d" | "l" | "r";
 
 /** 絶対座標（Webマップ）で分かったワープ。index は getWarpLinks() の何番目か（同じワープを二重に記録しないため） */
+/** Webマップでの位置合わせ1回分 */
+export interface WebAlignInfo {
+  turn: number;
+  /** web-player: Webマップの自機の位置で合わせた / pattern: 自分の観測と Webマップの見た目の一致で合わせた */
+  method: "web-player" | "pattern";
+  webPos: [number, number] | null;
+  capturePos: [number, number] | null;
+  nowPos: [number, number];
+  /** 絶対座標 = ローカル座標 + offset */
+  offset: [number, number];
+  /** 自分で観測したマスと Webマップの食い違いの数 */
+  mismatch: number;
+  /** ワープ以外で位置合わせが変わった（前の位置合わせがずれていた） */
+  corrected: { from: [number, number]; to: [number, number] } | null;
+}
+
 export interface GlobalWarpLink {
   index: number;
   tileValue: number;
@@ -368,6 +384,10 @@ export class WorldMap {
   /** 区画ごとの絶対座標とのずれ（ワープの入口・着地を絶対座標に直すため） */
   private segmentOffsets = new Map<number, [number, number]>();
   private trail: [number, number][] = [[0, 0]];
+  /** 最後に取れた Webマップに自機の位置が載っていたか（載っていれば、位置合わせは Webマップの自機の位置だけで行う） */
+  private webPlayerPosKnown = false;
+  /** 最後の Webマップでの位置合わせ（試合の記録・ずれの調査用） */
+  private lastAlign: WebAlignInfo | null = null;
   private stageName: string | null = null;
 
   private get currentMap(): Map<string, TileRecord> {
@@ -461,14 +481,15 @@ export class WorldMap {
     this.globalGridTurn = turn ?? this.lastTurn;
     if (selfTileId) this.selfTileId = selfTileId;
     if (stageName !== undefined) this.stageName = stageName;
+    this.webPlayerPosKnown = !!knownPlayerPos;
     if (knownPlayerPos) {
-      // 取得中に動いていると、Web マップの自機位置が「取得開始時」と「今」のどちらの時点か分からない。
-      // 候補（既存の位置合わせ・取得開始時・今）を自分で観測したマスとの食い違いの少なさで選ぶ
-      const candidates: [number, number][] = [];
-      if (this.globalOffset) candidates.push(this.globalOffset);
-      for (const [lx, ly] of [localPosAtCapture ?? [this.x, this.y], [this.x, this.y]] as [number, number][]) {
-        candidates.push([knownPlayerPos[0] - lx, knownPlayerPos[1] - ly]);
-      }
+      // Web マップの自機の位置は、取得を始めてから今までに通ったどこか（取得中に動くことがある）。
+      // その位置の候補だけから、自分で観測したマスとの食い違いが少ないものを選ぶ（同じなら取得開始時に近い方）。
+      // 以前は「今の位置合わせ」も候補に入れて同点なら優先していたので、一度ずれると Web マップで直らなかった
+      const now: [number, number] = [this.x, this.y];
+      const capture = localPosAtCapture ?? now;
+      const path = this.positionsSince(capture);
+      const candidates = path.map(([lx, ly]) => [knownPlayerPos[0] - lx, knownPlayerPos[1] - ly] as [number, number]);
       let best = candidates[0]!;
       let bestMismatch = this.offsetMismatch(best);
       for (const c of candidates.slice(1)) {
@@ -478,12 +499,63 @@ export class WorldMap {
           bestMismatch = m;
         }
       }
+      const prev = this.globalOffset;
+      const changed = !!prev && (prev[0] !== best[0] || prev[1] !== best[1]);
+      // 位置合わせが変わったら、前の位置合わせで書き込んだ Web マップのマスを捨ててから書き直す（ずれた所に古い値が残らないように）
+      if (changed) this.clearGlobalOverlay();
       this.globalOffset = best;
       this.segmentOffsets.set(this.segmentIndex, best);
       this.overlayGlobalGridToCurrentSegment();
+      this.lastAlign = {
+        turn: this.globalGridTurn,
+        method: "web-player",
+        webPos: [knownPlayerPos[0], knownPlayerPos[1]],
+        capturePos: [capture[0], capture[1]],
+        nowPos: now,
+        offset: [best[0], best[1]],
+        mismatch: bestMismatch,
+        corrected: changed ? { from: [prev![0], prev![1]], to: [best[0], best[1]] } : null,
+      };
     } else {
-      this.tryLocalizeOnGlobalGrid();
+      if (this.tryLocalizeOnGlobalGrid()) {
+        this.lastAlign = {
+          turn: this.globalGridTurn,
+          method: "pattern",
+          webPos: null,
+          capturePos: null,
+          nowPos: [this.x, this.y],
+          offset: [this.globalOffset![0], this.globalOffset![1]],
+          mismatch: this.offsetMismatch(this.globalOffset!),
+          corrected: null,
+        };
+      }
     }
+  }
+
+  /** 取得を始めた時の位置から今までに通った位置（同じ座標系の中だけ）。最初が取得開始時、最後が今 */
+  private positionsSince(capture: [number, number]): [number, number][] {
+    let idx = -1;
+    for (let i = this.trail.length - 1; i >= 0; i--) {
+      const p = this.trail[i]!;
+      if (p[0] === capture[0] && p[1] === capture[1]) {
+        idx = i;
+        break;
+      }
+    }
+    const path: [number, number][] = idx >= 0 ? this.trail.slice(idx).map((p) => [p[0], p[1]]) : [[capture[0], capture[1]]];
+    const last = path[path.length - 1]!;
+    if (last[0] !== this.x || last[1] !== this.y) path.push([this.x, this.y]);
+    return path;
+  }
+
+  /** Web マップから書き込んだマス（自分で観測していないマス）を今の区画から消す */
+  private clearGlobalOverlay(): void {
+    for (const [k, rec] of this.currentMap) if (rec.fromGlobalMap) this.currentMap.delete(k);
+  }
+
+  /** 最後の Webマップでの位置合わせ（取れるたびに新しいオブジェクト） */
+  public getLastAlign(): WebAlignInfo | null {
+    return this.lastAlign;
   }
 
   /** この位置合わせで、自分で観測したマスと Web マップが食い違う数（自分が踏んで穴にしたマス・プレイヤーは除く） */
@@ -915,10 +987,13 @@ export class WorldMap {
 
         if (spec.obsOffset[0] === 0 && spec.obsOffset[1] === 0) {
           this.lastGridValues = values.slice(0, 9);
-          if (warped) {
+          // Web マップに自機の位置が載るなら、ワープ後の位置は次の Web マップ（ワープ直後にすぐ取り直す）で決める。
+          // 3×3 の見た目だけで「前に来た区画」「Web マップのこの位置」と決めると、穴ばかりの所で別の場所に一致してずれていた
+          const webPositions = this.globalGrid !== null && this.webPlayerPosKnown;
+          if (warped && !webPositions) {
             this.tryLoopClosureWithPreviousSegments(this.lastGridValues, turn);
           }
-          if (this.globalGrid && !this.globalOffset) {
+          if (this.globalGrid && !this.globalOffset && !webPositions) {
             this.tryLocalizeOnGlobalGrid();
           }
         }

@@ -103,3 +103,44 @@ test("取得中に動いても、観測と食い違わない方の位置で Web 
   expect(wm.getTile(3, -1)?.value).toBe(0); // Web (5,1)
   expect(wm.getTile(3, 1)?.value).toBe(2); // Web (5,3)
 });
+
+test("一度ずれた位置合わせも、次の Web マップの自機の位置で直る（同点なら前の位置合わせを優先していた）", () => {
+  const wm = new WorldMap();
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1001, 2, 2, 2, 2], 1);
+  wm.setGlobalGrid(grid, [2, 2], "t", 1, 1001, [0, 0]); // 何かの理由でずれた位置で合わせた
+  expect(wm.getGlobalPosition()).toEqual([2, 2]);
+  wm.setGlobalGrid(grid, [3, 3], "t", 2, 1001, [0, 0]);
+  expect(wm.getGlobalPosition()).toEqual([3, 3]);
+  expect(wm.getLastAlign()?.corrected).toEqual({ from: [2, 2], to: [3, 3] });
+});
+
+test("Web マップに自機が載るなら、ワープ後の位置は 3×3 の見た目で決めず、次の Web マップで決める", () => {
+  const big = Array.from({ length: 9 }, (_, y) => Array.from({ length: 9 }, (_, x) => (x === 0 || y === 0 || x === 8 || y === 8 ? 10 : 2)));
+  const wm = new WorldMap();
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1001, 2, 2, 2, 2], 1);
+  wm.setGlobalGrid(big, [4, 4], "t", 1, 1001, [0, 0]);
+  expect(wm.getGlobalPosition()).toEqual([4, 4]);
+  // 右へ歩いたら見た目が全く違う → ワープ
+  wm.applyObservation("CMD2", "wr", [10, 10, 10, 10, 1001, 2, 10, 2, 2], 1);
+  expect(wm.getLastEventFlags().warped).toBe(true);
+  expect(wm.getGlobalPosition()).toBeNull();
+  // ワープ直後に取り直した Web マップで、自機は左上の角
+  wm.setGlobalGrid(big, [1, 1], "t", 2, 1001, [0, 0]);
+  expect(wm.getGlobalPosition()).toEqual([1, 1]);
+});
+
+test("取得中にワープしたら（前に来た区画へ戻った時も）、その Web マップは位置合わせに使わない", async () => {
+  Bun.env.CHASER_WEB_MAP_TIMEOUT_SEC = "1";
+  Bun.env.CHASER_WEB_MAP_REFRESH = "every_turn";
+  const wm = new WorldMap();
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 2, 2, 2, 2], 1);
+  const r = new WebMapRefresher(1, undefined, wm, () => {});
+  queue.push({ delayMs: 40, result: { found: true, grid, playerPos: [3, 3], stageName: "S" } });
+  r.onWarp(1);
+  // 取得中に座標系が変わる（区画の数は変わらない「前の区画へ戻る」場合も含む）
+  (wm as unknown as { frameVersionCount: number }).frameVersionCount += 1;
+  await Bun.sleep(70);
+  expect(wm.getGlobalPosition()).toBeNull();
+  delete Bun.env.CHASER_WEB_MAP_TIMEOUT_SEC;
+  delete Bun.env.CHASER_WEB_MAP_REFRESH;
+});
