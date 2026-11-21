@@ -135,3 +135,12 @@
 - サーバの制限時間は公開されていない。実測では CMD1 を 120 秒遅らせても切断されなかった（上限は未確認。`knowledge/server.json`）。
 - 同一ユーザーの二重ログインは拒否される。途中放棄後は約 5 分、ログインのみのセッションは約 12 分ロックされるため、`bun run play --login-wait-min` で待つ。
 - タイル得点は公式根拠がない。`knowledge/tiles.json` は実測値として扱う（[chaser-protocol.md](chaser-protocol.md)）。
+
+### ワープの記録とマスのメモ（`var/room-profiles.json` の `warps`・`cellNotes`）
+- **自動記録**: ワープするたびに、入口と着地の両方の区画を Webマップで位置合わせできたら、絶対座標（Webマップの列・行）で `warps` に足す（同じ入口・着地は `count` を増やす）。Webマップのないルームは座標が区画ごとに変わるので試合をまたいでは残さない。
+- **マスのメモ**: サブ・振り返りが `bun src/cli.ts cell-note --room N --x X --y Y --note "…"` で書く。引くのは `bun src/cli.ts cells --room N [--near x,y --radius r]`（タイル番号ごとの飛び方 `tileJumps` も出る。公式の「番号ごとに決まった方向・距離」と照合する用）。
+- **試合中のメイン**: 今の位置から `AGENT_KNOWN_CELLS_RADIUS` マス以内の記録を、今の pos と同じ座標（`[ ]` に絶対座標）で毎フェーズ見せる。Webマップで位置合わせできていない時は、この試合で入ったワープ（今の区画）だけ。
+
+### エージェントのツール
+- サブ・試合後の振り返りに渡すツールは `Bash,Read,Edit,Write,Glob,Grep`（`claude-session.ts` の `AGENT_WORK_TOOLS`）。指定しないと ListAgents・SendMessage まで使え、同じマシンの別の Claude Code セッションへメッセージを送れてしまう（11/20 に試合中のメインがサブと話そうとして使った記録がある）。
+- エージェント（準備・サブ・振り返り）のツール呼び出しは `var/agent-tool-log.jsonl` に1行ずつ残す（場面・ラベル・ツール・コマンドの先頭）。使われている機能・使われていない機能を調べる用。

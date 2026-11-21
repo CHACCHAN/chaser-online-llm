@@ -29,6 +29,18 @@ export interface WarpLinkRecord {
   observedTurn: number;
 }
 
+/** ルームのワープの記録（絶対座標 = Webマップの列・行。Webマップのあるルームだけ） */
+export interface RoomWarpRecord {
+  /** ワープのタイル番号（不明なら -1） */
+  tile: number;
+  from: [number, number];
+  to: [number, number];
+  /** 観測した回数（試合をまたいで数える） */
+  count: number;
+  lastRunId: string | null;
+  updatedAt: string;
+}
+
 export interface RoomProfile {
   room: number;
   webMapAvailable: boolean | null;
@@ -40,7 +52,10 @@ export interface RoomProfile {
   matchesPlayed: number;
   /** 1試合の全ターン数（公式結果の 取得ターン数＋残ターン数。Webマップは今のターンしか出さない） */
   totalTurns?: number | null;
-  warpLinks: WarpLinkRecord[];
+  /** ワープの記録（絶対座標）。ハーネスが自動で書く */
+  warps?: RoomWarpRecord[];
+  /** マスごとのメモ（キーは絶対座標 "x,y"）。エージェントが `bun src/cli.ts cell-note` で書く */
+  cellNotes?: Record<string, string[]>;
   discoveredTiles: number[];
   tacticalNotes: string[];
   updatedAt: string;
@@ -122,7 +137,8 @@ export function getRoomProfile(room: number): RoomProfile {
     bestRunId: null,
     bestSolverFile: null,
     matchesPlayed: 0,
-    warpLinks: [],
+    warps: [],
+    cellNotes: {},
     discoveredTiles: [],
     tacticalNotes: [],
     updatedAt: new Date().toISOString(),
@@ -148,6 +164,67 @@ export function knownTotalTurns(room: number, runsDir = RUNS_DIR): number | null
     }
   }
   return null;
+}
+
+/** ワープを1回観測したら呼ぶ（同じ入口・同じ着地なら回数を足す）。絶対座標で渡す */
+export function recordRoomWarp(room: number, link: { tileValue: number; from: [number, number]; to: [number, number] }, runId: string | null): RoomWarpRecord {
+  const profile = getRoomProfile(room);
+  const warps = profile.warps ?? [];
+  const now = new Date().toISOString();
+  let rec = warps.find((w) => w.from[0] === link.from[0] && w.from[1] === link.from[1] && w.to[0] === link.to[0] && w.to[1] === link.to[1]);
+  if (rec) {
+    rec.count += 1;
+    if (link.tileValue >= 0) rec.tile = link.tileValue;
+    rec.lastRunId = runId;
+    rec.updatedAt = now;
+  } else {
+    rec = { tile: link.tileValue, from: [...link.from], to: [...link.to], count: 1, lastRunId: runId, updatedAt: now };
+    warps.push(rec);
+  }
+  profile.warps = warps;
+  saveRoomProfile(profile);
+  return rec;
+}
+
+/** マスのメモを足す（note が空なら、そのマスのメモを消す）。絶対座標 */
+export function setCellNote(room: number, x: number, y: number, note: string): string[] {
+  const profile = getRoomProfile(room);
+  const notes = profile.cellNotes ?? {};
+  const key = `${x},${y}`;
+  if (note.trim()) notes[key] = [...(notes[key] ?? []), note.trim()];
+  else delete notes[key];
+  profile.cellNotes = notes;
+  saveRoomProfile(profile);
+  return notes[key] ?? [];
+}
+
+/** ワープの記録とマスのメモを引く。near を渡すと、そこからマンハッタン距離 radius 以内だけ（近い順） */
+export function roomCells(room: number, near?: [number, number] | null, radius = Infinity) {
+  const profile = getRoomProfile(room);
+  const dist = (p: [number, number]) => (near ? Math.abs(p[0] - near[0]) + Math.abs(p[1] - near[1]) : 0);
+  const warps = (profile.warps ?? [])
+    .map((w) => ({ ...w, distance: dist(w.from) }))
+    .filter((w) => w.distance <= radius)
+    .sort((a, b) => a.distance - b.distance);
+  const notes = Object.entries(profile.cellNotes ?? {})
+    .map(([k, v]) => {
+      const [x, y] = k.split(",").map(Number) as [number, number];
+      return { x, y, notes: v, distance: dist([x, y]) };
+    })
+    .filter((n) => n.distance <= radius)
+    .sort((a, b) => a.distance - b.distance);
+  // タイル番号ごとの飛び方（入口から着地への移動量）。公式の「番号ごとに決まった方向・距離」と照らし合わせる用
+  const byTile = new Map<number, Map<string, number>>();
+  for (const w of profile.warps ?? []) {
+    const v = `${w.to[0] - w.from[0]},${w.to[1] - w.from[1]}`;
+    const m = byTile.get(w.tile) ?? new Map<string, number>();
+    m.set(v, (m.get(v) ?? 0) + w.count);
+    byTile.set(w.tile, m);
+  }
+  const tileJumps = [...byTile.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([tile, m]) => ({ tile, jumps: [...m.entries()].map(([d, count]) => ({ delta: d.split(",").map(Number), count })) }));
+  return { room, warps, notes, tileJumps };
 }
 
 export function saveRoomProfile(profile: RoomProfile): RoomProfile {

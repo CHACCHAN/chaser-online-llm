@@ -5,6 +5,15 @@ import {
 
 export type Dir = "u" | "d" | "l" | "r";
 
+/** 絶対座標（Webマップ）で分かったワープ。index は getWarpLinks() の何番目か（同じワープを二重に記録しないため） */
+export interface GlobalWarpLink {
+  index: number;
+  tileValue: number;
+  from: [number, number];
+  to: [number, number];
+  observedTurn: number;
+}
+
 export const CMD1_COMMANDS = ["gr", "gru", "grd", "grl", "grr"] as const;
 export type Cmd1Command = (typeof CMD1_COMMANDS)[number];
 
@@ -322,6 +331,8 @@ export class WorldMap {
     return this.frameVersionCount;
   }
   private globalOffset: [number, number] | null = null; // [globalOriginX, globalOriginY] so global = local + offset
+  /** 区画ごとの絶対座標とのずれ（ワープの入口・着地を絶対座標に直すため） */
+  private segmentOffsets = new Map<number, [number, number]>();
   private trail: [number, number][] = [[0, 0]];
   private stageName: string | null = null;
 
@@ -366,6 +377,34 @@ export class WorldMap {
     return [...this.warpLinks];
   }
 
+  /** 今の区画の番号 */
+  public getSegmentIndex(): number {
+    return this.segmentIndex;
+  }
+
+  /** 今の区画の絶対座標とのずれ（絶対 = 今の座標 + ずれ）。Webマップで位置合わせできていなければ null */
+  public getGlobalOffset(): [number, number] | null {
+    return this.globalOffset ? [this.globalOffset[0], this.globalOffset[1]] : null;
+  }
+
+  /** 入口と着地の両方の区画が Webマップで位置合わせできたワープを、絶対座標で返す */
+  public getGlobalWarpLinks(): GlobalWarpLink[] {
+    const out: GlobalWarpLink[] = [];
+    this.warpLinks.forEach((l, index) => {
+      const of = this.segmentOffsets.get(l.fromSegment);
+      const ot = this.segmentOffsets.get(l.toSegment);
+      if (!of || !ot) return;
+      out.push({
+        index,
+        tileValue: l.tileValue,
+        from: [l.fromPos[0] + of[0], l.fromPos[1] + of[1]],
+        to: [l.toPos[0] + ot[0], l.toPos[1] + ot[1]],
+        observedTurn: l.observedTurn,
+      });
+    });
+    return out;
+  }
+
   public getLastEventFlags() {
     return { ...this.lastEventFlags, newUnknownTiles: [...this.lastEventFlags.newUnknownTiles] };
   }
@@ -406,6 +445,7 @@ export class WorldMap {
         }
       }
       this.globalOffset = best;
+      this.segmentOffsets.set(this.segmentIndex, best);
       this.overlayGlobalGridToCurrentSegment();
     } else {
       this.tryLocalizeOnGlobalGrid();
@@ -508,6 +548,7 @@ export class WorldMap {
 
     if (chosen) {
       this.globalOffset = [chosen.ox, chosen.oy];
+      this.segmentOffsets.set(this.segmentIndex, this.globalOffset);
       this.overlayGlobalGridToCurrentSegment();
       this.lastEventFlags.globalLocalized = true;
       return true;
@@ -602,6 +643,7 @@ export class WorldMap {
           lastWarp.toPos = [matchedX, matchedY];
           lastWarp.observedTurn = turn;
         }
+        this.segmentOffsets.delete(this.segmentIndex);
         this.segments.pop();
         this.segmentIndex = segIdx;
         this.x = matchedX;

@@ -1,13 +1,13 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CMD1_COMMANDS, CMD1_SPECS, CMD2_COMMANDS, CMD2_SPECS, classifyTileSafety, type WorldMap } from "../memory/world-map";
-import { getRoomProfile, knownTotalTurns } from "../memory/knowledge-store";
+import { getRoomProfile, knownTotalTurns, roomCells } from "../memory/knowledge-store";
 import { AGENT_DIR, COMMANDS_PATH, OFFICIAL_RULES_PATH, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
 import { numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
-import { type AskResult, ClaudeSession } from "./claude-session";
+import { AGENT_WORK_TOOLS, type AskResult, ClaudeSession } from "./claude-session";
 import { activePolicyPrompt } from "./policy";
 import { formatSubTodoLine, SubWorker } from "./sub-worker";
 import { addUsage, emptyUsage, totalTokens, type UsageTotals } from "./usage";
@@ -82,6 +82,7 @@ export class MainAgent {
   private matchInfo = "";
   /** このルームの1試合の全ターン数（過去の公式結果から。不明なら null） */
   private totalTurns: number | null = null;
+  private room: number | null = null;
   /** 固定のシステムプロンプト（main.md ＋ 作戦方針 ＋ 戦略知識）。試合中は不変なのでキャッシュも効きやすい */
   private systemPrompt = "";
   private memo = "";
@@ -151,6 +152,7 @@ export class MainAgent {
     this.lastEst = null;
     this.frameVersion = null;
     this.totalTurns = info.totalTurns ?? null;
+    this.room = info.room;
     this.matchInfo = `room=${info.room} stage=${info.stageName ?? "unknown"} webMap=${info.webMap} roomHighScore=${info.highScore} totalTurns=${this.totalTurns ?? "不明（このルームの公式結果がまだない）"}`;
     const policy = activePolicyPrompt();
     const strategy = existsSync(STRATEGY_PATH) ? readFileSync(STRATEGY_PATH, "utf-8") : "";
@@ -204,6 +206,7 @@ export class MainAgent {
       ...this.settings,
       context: "evolution",
       label: "main",
+      tools: AGENT_WORK_TOOLS,
       // main.md は試合中用（ツールなし・毎フェーズ新規）なので渡さない。役割とルールは下の依頼文に書く
       appendSystemPrompt: "あなたは CHaserOnline003 攻略プロジェクトのメインエージェント。試合後の振り返りとソルバー改修を行う。ツールを使ってよい。試合中の役割は agent/prompts/main.md にある。",
     });
@@ -479,6 +482,34 @@ export class MainAgent {
     }
   }
 
+/**
+   * 近くの既知のワープ・マスのメモ。座標は今の pos と同じ座標系、[ ] は絶対座標（Webマップの列・行）。
+   * Webマップで位置合わせできていない時は、この試合で入ったワープ（今の区画）だけ。
+   */
+  private knownCellLines(worldMap: WorldMap): string[] {
+    const off = worldMap.getGlobalOffset();
+    const radius = numSetting("AGENT_KNOWN_CELLS_RADIUS", { min: 0, integer: true });
+    const lines: string[] = [];
+    if (off && this.room !== null) {
+      const g = worldMap.getGlobalPosition();
+      const cells = roomCells(this.room, g, radius);
+      const loc = (p: [number, number]) => `(${p[0] - off[0]},${p[1] - off[1]})[${p[0]},${p[1]}]`;
+      if (cells.warps.length > 0) {
+        lines.push(`既知のワープ（過去の試合も含む実測）: ${cells.warps.slice(0, 8).map((w) => `${loc(w.from)} ${w.tile >= 0 ? `${w.tile}番` : "ワープ"}→${loc(w.to)} ${w.count}回`).join(" / ")}`);
+      }
+      if (cells.notes.length > 0) {
+        lines.push(`マスのメモ: ${cells.notes.slice(0, 8).map((n) => `${loc([n.x, n.y])} ${n.notes.join("; ")}`).join(" / ")}`);
+      }
+      return lines;
+    }
+    const seg = worldMap.getSegmentIndex();
+    const here = worldMap.getWarpLinks().filter((l) => l.fromSegment === seg);
+    if (here.length > 0) {
+      lines.push(`この試合で入ったワープ（今の区画）: ${here.slice(-8).map((l) => `(${l.fromPos.join(",")}) ${l.tileValue >= 0 ? `${l.tileValue}番` : "ワープ"}→${l.toSegment === seg ? `(${l.toPos.join(",")})` : "別の区画"}`).join(" / ")}`);
+    }
+    return lines;
+  }
+
   /** ワープで座標系が変わったら、古い座標の作戦目標を解除し、メモの座標が古いことを知らせる */
   private checkFrameChange(worldMap: WorldMap): void {
     const v = worldMap.frameVersion;
@@ -552,6 +583,7 @@ export class MainAgent {
       `現在の作戦: ${this.plan ? `目標(${this.plan.target.join(",")})${this.plan.note ? ` ${this.plan.note}` : ""}` : "なし（ソルバーの貪欲探索）"}`,
       `continue した場合の手: ${solverNow.command} — ${solverNow.reason}`,
       `目標候補: ${targets.join(" / ") || "なし"}`,
+      ...this.knownCellLines(ctx.worldMap),
     ];
     const enemies = ctx.worldMap.getEnemySightings();
     if (enemies.length > 0) {
@@ -624,7 +656,8 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
       officialLine,
       "",
       "## ルームの情報（var/room-profiles.json）",
-      JSON.stringify({ room: profile.room, highScore: profile.highScore, matchesPlayed: profile.matchesPlayed, webMapAvailable: profile.webMapAvailable, mapDimensions: profile.mapDimensions, discoveredTiles: profile.discoveredTiles, warpLinks: profile.warpLinks.length, tacticalNotes: profile.tacticalNotes }),
+      JSON.stringify({ room: profile.room, highScore: profile.highScore, matchesPlayed: profile.matchesPlayed, webMapAvailable: profile.webMapAvailable, mapDimensions: profile.mapDimensions, discoveredTiles: profile.discoveredTiles, warps: (profile.warps ?? []).length, cellNotes: Object.keys(profile.cellNotes ?? {}).length, tacticalNotes: profile.tacticalNotes }),
+      (profile.warps ?? []).length > 0 ? `ワープの記録・マスのメモ（絶対座標）は var/room-profiles.json の warps・cellNotes にある` : "",
       "",
       "## このルームの過去の試合（新しい順）",
       pastRuns.length > 0 ? pastRuns.join("\n") : "(まだない。初めてのルーム)",

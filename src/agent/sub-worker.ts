@@ -4,7 +4,7 @@ import { AGENT_DIR, CURRENT_ASK_SUB_PATH } from "../paths";
 import { numSetting } from "../settings";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
-import { ClaudeSession } from "./claude-session";
+import { AGENT_WORK_TOOLS, ClaudeSession } from "./claude-session";
 import { type ProtectedSnapshot, restoreProtectedFiles, snapshotProtectedFiles } from "../evolution/edit-guard";
 import { addUsage, emptyUsage, type UsageTotals } from "./usage";
 
@@ -139,6 +139,7 @@ export class SubWorker {
       effort: this.settings.subEffort || this.settings.effort,
       context: "in_game",
       label: "sub",
+      tools: AGENT_WORK_TOOLS,
       appendSystemPrompt: readFileSync(path.join(AGENT_DIR, "prompts/sub.md"), "utf-8"),
       noSessionPersistence: true,
       quietLifecycle: true,

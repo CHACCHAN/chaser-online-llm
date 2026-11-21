@@ -230,6 +230,7 @@ test("試合後: 振り返りと同じ会話でハーネスのレビューを聞
   const post = sent.find((x) => x.text.startsWith("[POST-MATCH]"))!;
   const rev = sent.find((x) => x.text.startsWith("[HARNESS REVIEW]"))!;
   expect(rev.options).toBe(post.options); // 同じセッション（振り返りの経験を持ったまま）
+  expect(post.options.tools).toBe("Bash,Read,Edit,Write,Glob,Grep"); // 別の Claude セッションへ送る SendMessage などは渡さない
   expect(rev.text).not.toContain("この試合のログ:"); // 続きなのでログの場所は繰り返さない
   expect(agent.usage().main.calls).toBe(afterPost + 1);
   await agent.end();
@@ -279,4 +280,24 @@ test("memo_set: メモの行を番号で書き換え・削除できる（行番�
   expect(agent.notices.at(-1)).toContain("行番号 9");
   agent.applyMemo({ action: "continue", memo: "1| 書き直し\n2| 二行目", memoAdd: "3| 追記" });
   expect(agent.memo).toBe("書き直し\n二行目\n追記");
+});
+
+test("既知のワープ・マスのメモを、今の座標（[ ] に絶対座標）で見せる。Webマップなしはこの試合の今の区画だけ", async () => {
+  const { recordRoomWarp, setCellNote } = await import("../memory/knowledge-store");
+  recordRoomWarp(90003, { tileValue: 23, from: [24, 14], to: [24, 29] }, "r");
+  setCellNote(90003, 25, 14, "東は罠");
+  const agent = new MainAgent({}, 5000) as unknown as { room: number | null; knownCellLines(wm: unknown): string[] };
+  agent.room = 90003;
+  const webMap = { getGlobalOffset: () => [20, 10], getGlobalPosition: () => [24, 15], getSegmentIndex: () => 0, getWarpLinks: () => [] };
+  expect(agent.knownCellLines(webMap)).toEqual(["既知のワープ（過去の試合も含む実測）: (4,4)[24,14] 23番→(4,19)[24,29] 1回", "マスのメモ: (5,4)[25,14] 東は罠"]);
+  const noWeb = {
+    getGlobalOffset: () => null,
+    getGlobalPosition: () => null,
+    getSegmentIndex: () => 1,
+    getWarpLinks: () => [
+      { tileValue: 31, fromSegment: 1, fromPos: [2, 0], toSegment: 2, toPos: [0, 0], observedTurn: 3 },
+      { tileValue: 23, fromSegment: 0, fromPos: [5, 5], toSegment: 1, toPos: [0, 0], observedTurn: 1 },
+    ],
+  };
+  expect(agent.knownCellLines(noWeb)).toEqual(["この試合で入ったワープ（今の区画）: (2,0) 31番→別の区画"]);
 });

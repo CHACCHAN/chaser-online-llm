@@ -7,7 +7,7 @@ import type { AgentConfig } from "./config";
 import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
 import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
-import { getRoomProfile, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
+import { getRoomProfile, recordRoomWarp, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
 import { WorldMap } from "./memory/world-map";
 import { WebMapRefresher } from "./perception/web-map-refresher";
 import { GameOver, logger } from "./tools";
@@ -165,6 +165,8 @@ export async function runAgentMatch(
   };
   const worldMap = new WorldMap();
   const roomProfileBefore = getRoomProfile(config.room);
+  /** 記録済みのワープ（worldMap.getWarpLinks() の番号） */
+  const recordedWarps = new Set<number>();
 
   // Web マップは裏で取得する。取れない間は自作マップ、途中で取れたら全体マップ表示に切り替わる
   const webMap = new WebMapRefresher(config.room, config.webMapUrl, worldMap, (r) => {
@@ -382,6 +384,16 @@ export async function runAgentMatch(
         gameOverReason: turnGameOverReason,
       };
       turnLogs.push(record);
+      // ワープを絶対座標で記録する（Webマップで入口・着地の両方の位置が分かったものだけ。次の試合でも使う）
+      for (const link of worldMap.getGlobalWarpLinks()) {
+        if (recordedWarps.has(link.index)) continue;
+        recordedWarps.add(link.index);
+        try {
+          recordRoomWarp(config.room, link, runId);
+        } catch (err) {
+          logger.warn({ err: err instanceof Error ? err.message : String(err) }, "ワープの記録に失敗");
+        }
+      }
 
       // WebUI に最新盤面・スコア・ターン記録を即時反映
       uiBus.updateScores({

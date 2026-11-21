@@ -1,12 +1,32 @@
 import type { Subprocess } from "bun";
-import { existsSync, readFileSync } from "node:fs";
-import { AGENTS_GUIDE_PATH, PROJECT_ROOT } from "../paths";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { AGENT_TOOL_LOG_PATH, AGENTS_GUIDE_PATH, PROJECT_ROOT } from "../paths";
 import { logger } from "../tools/logger";
 import { uiBus } from "../ui/event-bus";
 import { baseClaudeArgs, buildClaudeEnv, type ClaudeModelSettings } from "./claude-env";
 import { addUsage, contextSizeFromRaw, emptyUsage, type UsageTotals, usageFromRaw } from "./usage";
 
 /** agent/AGENTS.md（エージェント向けの説明書）。無ければ空 */
+/**
+ * 道具を使う場面（サブ・試合後の振り返り）に渡すツール。
+ * 指定しないと全ツール（Agent・WebSearch・ListAgents・SendMessage など）が使え、
+ * 同じマシンの別の Claude Code セッション（開発中のセッションなど）へメッセージを送れてしまう。
+ */
+export const AGENT_WORK_TOOLS = "Bash,Read,Edit,Write,Glob,Grep";
+
+/** エージェントのツール呼び出しを var/agent-tool-log.jsonl に1行ずつ残す（使われている機能・使われていない機能を調べるため） */
+function logToolUse(context: string, label: string | null, tool: string, input: unknown): void {
+  try {
+    const raw = input as { command?: unknown; file_path?: unknown; pattern?: unknown } | null;
+    const detail = String(raw?.command ?? raw?.file_path ?? raw?.pattern ?? "").replace(/\s+/g, " ").slice(0, 300);
+    mkdirSync(path.dirname(AGENT_TOOL_LOG_PATH), { recursive: true });
+    appendFileSync(AGENT_TOOL_LOG_PATH, JSON.stringify({ at: new Date().toISOString(), context, label, tool, detail }) + "\n");
+  } catch {
+    // 記録に失敗しても試合は続ける
+  }
+}
+
 export function agentsGuide(): string {
   return existsSync(AGENTS_GUIDE_PATH) ? readFileSync(AGENTS_GUIDE_PATH, "utf-8").trim() : "";
 }
@@ -225,8 +245,10 @@ export class ClaudeSession {
       for (const b of ev.message.content) {
         if (b.type === "thinking" && b.thinking) this.emit("thinking", "Reasoning", b.thinking.slice(0, 2000));
         else if (b.type === "text" && b.text) this.emit("text", "Claude", b.text.slice(0, 2000));
-        else if (b.type === "tool_use")
+        else if (b.type === "tool_use") {
           this.emit("tool_use", b.name ?? "Tool", JSON.stringify(b.input ?? {}, null, 2).slice(0, 1200));
+          logToolUse(this.context, this.options.label ?? null, b.name ?? "Tool", b.input);
+        }
       }
       return;
     }

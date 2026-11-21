@@ -6,6 +6,8 @@ import { verifySolverWithReplay } from "./evolution/replay-verifier";
 import {
   getRoomProfile,
   loadTilesKnowledge,
+  roomCells,
+  setCellNote,
   upsertTileDefinition,
 } from "./memory/knowledge-store";
 import type { WorldMapSnapshot } from "./memory/world-map";
@@ -40,6 +42,11 @@ async function main() {
       code: { type: "string" },
       description: { type: "string" },
       "run-dir": { type: "string" },
+      near: { type: "string" },
+      radius: { type: "string" },
+      x: { type: "string" },
+      y: { type: "string" },
+      note: { type: "string" },
     },
     strict: false,
   });
@@ -150,6 +157,27 @@ async function main() {
     return;
   }
 
+  if (subcommand === "cells") {
+    // ワープの記録（ハーネスが自動で書く）とマスのメモ。座標は絶対座標（Webマップの列・行）
+    const room = Number(values.room ?? Bun.env.CHASER_ROOM ?? "3");
+    const near = typeof values.near === "string" ? (values.near.split(",").map(Number) as [number, number]) : null;
+    const radius = values.radius !== undefined ? Number(values.radius) : Infinity;
+    console.log(JSON.stringify(roomCells(room, near, radius), null, 2));
+    return;
+  }
+
+  if (subcommand === "cell-note") {
+    const room = Number(values.room ?? Bun.env.CHASER_ROOM ?? "3");
+    const x = Number(values.x);
+    const y = Number(values.y);
+    if (!Number.isInteger(x) || !Number.isInteger(y)) {
+      console.error("--x と --y（絶対座標）が必要");
+      process.exit(1);
+    }
+    console.log(JSON.stringify({ room, x, y, notes: setCellNote(room, x, y, String(values.note ?? "")) }));
+    return;
+  }
+
   if (subcommand === "status") {
     const room = Number(values.room ?? Bun.env.CHASER_ROOM ?? "3");
     const profile = getRoomProfile(room);
@@ -177,6 +205,8 @@ async function main() {
       "  run-script   --snapshot <file> --code <code>   Run on-the-fly tactical JS/TS on a map snapshot",
       "  verify       [--run-dir <dir>]                 Replay-verify active-solver.ts against turns.jsonl",
       "  status       [--room <n>]                      Show room high score, profile & known tile stats",
+      "  cells        --room <n> [--near x,y] [--radius r]  Known warps (absolute coords) and cell notes",
+      "  cell-note    --room <n> --x <x> --y <y> --note <text>  Add a note to a cell (empty --note clears)",
     ].join("\n"),
   );
 }
