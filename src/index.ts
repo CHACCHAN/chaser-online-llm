@@ -112,6 +112,17 @@ async function main() {
     return preparing;
   };
 
+  /** 試合中に保留したルーム変更・順に回る次のルームを反映する（試合の外でだけ呼ぶ。準備はそのルームでやり直し） */
+  const applyPendingRoom = () => {
+    if (pendingRoom === null || inMatch) return;
+    config.room = pendingRoom;
+    pendingRoom = null;
+    uiBus.updateScores({ roomHighScore: getRoomProfile(config.room).highScore });
+    uiBus.patchState(settingsState());
+    if (prepared && prepared.key !== prepKey()) resetPrep();
+    publishPrep({});
+  };
+
   let wakeResolver: (() => void) | null = null;
   const wakeUp = () => {
     if (wakeResolver) {
@@ -225,12 +236,7 @@ async function main() {
       continue;
     }
 
-    if (pendingRoom !== null) {
-      config.room = pendingRoom;
-      pendingRoom = null;
-      uiBus.updateScores({ roomHighScore: getRoomProfile(config.room).highScore });
-      uiBus.patchState(settingsState());
-    }
+    applyPendingRoom();
     // 連続モードの次の試合など、準備が済んでいなければ入室前に準備する（直前の試合も読ませる）
     if (!isPrepared()) {
       let ok = await doPrep();
@@ -367,6 +373,7 @@ async function main() {
       }
     } catch (err) {
       inMatch = false; // エラー停止中はルーム変更をすぐ反映してよい
+      applyPendingRoom();
       const msg = err instanceof Error ? err.message : String(err);
       if (uiBus.getState().stopRequested) {
         // 停止ボタンで打ち切った（ログイン待ち・入室中など）。エラーではないので待機に戻る
@@ -392,6 +399,8 @@ async function main() {
     } finally {
       inMatch = false;
       currentClient = null;
+      // 試合が終わったら保留のルームをすぐ反映する（連続を切って待機に戻った後の「準備」が前のルームにならないように）
+      applyPendingRoom();
     }
   }
 }
