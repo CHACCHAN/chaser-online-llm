@@ -81,7 +81,7 @@
 
 ### 3.3 コマンドと疲労コスト（動作得点）
 コマンド（公式の全61種）の動き・観測・動作得点・ハーネスで送れるかは [knowledge/commands.md](../knowledge/commands.md) に一本化している（ここには書かない）。
-スコア式・守ること・タイルの公式の得点と、公式資料と実測の食い違いは [knowledge/official-rules.md](../knowledge/official-rules.md)。
+スコア・タイルは [knowledge/official-rules.md](../knowledge/official-rules.md)、公式資料の出典と実測との食い違いは [knowledge/research/official-sources.md](../knowledge/research/official-sources.md)。
 ハーネスの内部表現（移動量・観測の位置・推定動作得点）は `src/memory/world-map.ts` の `CMD1_SPECS` / `CMD2_SPECS`。
 
 ---

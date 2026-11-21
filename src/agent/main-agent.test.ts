@@ -245,7 +245,7 @@ test("試合中のメインには knowledge/commands.md の中身を入れ、AGE
   await playPhases(agent, 1);
   const main = sent.find((x) => x.label === "main")!;
   expect(main.options.systemPrompt).toContain("## ゲームのコマンド（knowledge/commands.md）");
-  expect(main.options.systemPrompt).toContain("`w3u`");
+  expect(main.options.systemPrompt).toContain("`w3*`");
   expect(main.options.systemPrompt).toContain("## ゲームのルール（knowledge/official-rules.md）");
   expect(main.options.agentsGuide).toBe(false);
   await agent.end();
