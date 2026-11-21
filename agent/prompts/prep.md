@@ -5,7 +5,7 @@
 だから今のうちに資料を読み、**試合で最初に使うメモ**をじっくり作る。
 
 ## 読むもの（Read / Glob / Grep が使える。編集はできない）
-1. ゲームのルールと得点: システムプロンプトの AGENTS.md、`docs/chaser-protocol.md`、`knowledge/tiles.json`、`knowledge/strategy.md`
+1. ゲームのルールと得点: `knowledge/official-rules.md`（スコア・守ること・タイル・公式資料との食い違い）、`knowledge/commands.md`（コマンド全61種）、`knowledge/tiles.json`、`knowledge/strategy.md`（ほかの資料の場所はシステムプロンプトの AGENTS.md「情報の在りか」）
 2. このルームの記録: 下の「ルームの情報」と、過去の試合のフォルダ（新しい順）
    - `summary.json`（得点・ターン数・終了理由・最終メモ `agent.finalMemo`）、`diagnosis.md`（失点の分析）、
      `MEMO.md`（その試合の最終メモ）、`ASK_SUB.md`（サブへの依頼と結果）、`evolution-report.md`（試合後の改修）、`final-map.txt`（最終盤面）

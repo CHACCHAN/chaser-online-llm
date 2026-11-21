@@ -80,17 +80,9 @@
 | `1000`+ | プレイヤー | `0` | **不可** | いいえ | 自機・他機 |
 
 ### 3.3 コマンドと疲労コスト（動作得点）
-- **CMD1（5種）**:
-  - `gr`（静止3×3観測、約 `-10`）
-  - `gru`, `grd`, `grl`, `grr`（1歩移動＋3×3観測、動作 `-10`）→ 隣接に安全なプラス得点マスがある時は CMD2 と合わせて **1ターン2マス回収** が可能
-- **CMD2（24種）**:
-  - **低疲労（動作 `-10`）**: `wu`, `wd`, `wl`, `wr`（通常移動）。静止 `gr` は動作 `-20`
-  - **公式の動作得点**（ステップアップヒント 2025 [3] §15。全61種の一覧と、ハーネスが未対応の32種は [agent/AGENTS.md](../agent/AGENTS.md)・[knowledge/official-rules.md](../knowledge/official-rules.md)）: dig -40 / put2&walk -1000 / put3 -30 / kei -20。過去11試合の公式動作得点と一致:
-    - `du`, `dd`, `dl`, `dr`（2マス先3×3遠隔掘削/観測）
-    - `pu2wd`, `pd2wu`, `pl2wr`, `pr2wl`（Put2 & 反対方向移動）
-    - `pu3su`, `pd3sd`, `pl3sl`, `pr3sr`（Put3 & 時計回り90度移動＋直線サーチ）
-    - `pu3lu`, `pd3ld`, `pl3ll`, `pr3lr`（Put3 & 時計回り90度移動＋2マス先3×3）
-    - `keilu`, `keiru`, `keild`, `keird`（桂馬飛び: `[±1, ±2]` 移動）
+コマンド（公式の全61種）の動き・観測・動作得点・ハーネスで送れるかは [knowledge/commands.md](../knowledge/commands.md) に一本化している（ここには書かない）。
+スコア式・守ること・タイルの公式の得点と、公式資料と実測の食い違いは [knowledge/official-rules.md](../knowledge/official-rules.md)。
+ハーネスの内部表現（移動量・観測の位置・推定動作得点）は `src/memory/world-map.ts` の `CMD1_SPECS` / `CMD2_SPECS`。
 
 ---
 

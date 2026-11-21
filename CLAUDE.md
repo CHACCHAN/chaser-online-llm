@@ -17,6 +17,7 @@ CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/
 - **エージェントの声を参考にする**: 開発を始める前に `agent/REVIEW.md`（試合後にエージェントが書いた使い勝手の指摘・要望）を読み、対応したものは開発者が「対応済み」に印を付ける。
 - **設定**: 全て `.env` から読む。項目・既定値・説明は `src/settings.ts` に一本化（コードに直書きしない）。追加したら `bun scripts/gen-env-example.ts`。
 - **パス**: `src/paths.ts` に集約。
+- **情報は1か所に**: ゲームのルール・コマンドは `knowledge/`（`commands.md`・`official-rules.md`・`tiles.json`）が唯一の置き場。`agent/AGENTS.md` は「どこを見るか」の案内で、同じ内容を書かない。ツールなしの試合中のメインには、ハーネスが必要なファイルの中身を入れて渡す（`main-agent.ts` の `begin`）。
 - **エージェントの範囲**: エージェントが読み書きするのは `agent/`（手順書・ツール）・`knowledge/`・`var/`・ソルバーだけ。試合後の振り返り・試合中のサブがそれ以外を変えると `src/evolution/edit-guard.ts` が元に戻す。エージェントに伝えたいことは `agent/AGENTS.md` か `agent/prompts/` に書く（CLAUDE.md に書いても届かない）。
 - **チェック**: `bun run typecheck && bun test && bun run verify-solver`。テストは一時ディレクトリで動く（`src/test-setup.ts`）。
 - **セットアップ・自己レビュー**: `agent/SETUP.md` → `agent/SELF_CHECK.md`（実施後は両方を更新する）。

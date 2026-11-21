@@ -2,12 +2,12 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import path from "node:path";
 import { CMD1_COMMANDS, CMD1_SPECS, CMD2_COMMANDS, CMD2_SPECS, classifyTileSafety, type WorldMap } from "../memory/world-map";
 import { getRoomProfile } from "../memory/knowledge-store";
-import { AGENT_DIR, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
+import { AGENT_DIR, COMMANDS_PATH, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
 import { numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
 import { uiBus } from "../ui/event-bus";
 import type { ClaudeModelSettings } from "./claude-env";
-import { type AskResult, agentsGuideSection, ClaudeSession } from "./claude-session";
+import { type AskResult, ClaudeSession } from "./claude-session";
 import { activePolicyPrompt } from "./policy";
 import { formatSubTodoLine, SubWorker } from "./sub-worker";
 import { addUsage, emptyUsage, totalTokens, type UsageTotals } from "./usage";
@@ -142,9 +142,11 @@ export class MainAgent {
     this.matchInfo = `room=${info.room} stage=${info.stageName ?? "unknown"} webMap=${info.webMap} roomHighScore=${info.highScore}`;
     const policy = activePolicyPrompt();
     const strategy = existsSync(STRATEGY_PATH) ? readFileSync(STRATEGY_PATH, "utf-8") : "";
+    // 試合中のメインはツールなしでファイルを読めないので、コマンドの表はここで中身を入れる（AGENTS.md は付けない）
+    const commands = existsSync(COMMANDS_PATH) ? readFileSync(COMMANDS_PATH, "utf-8").trim() : "";
     this.systemPrompt = [
       readPrompt("main.md"),
-      agentsGuideSection("### ゲームの手") ? `\n## 手の一覧（agent/AGENTS.md より）\n${agentsGuideSection("### ゲームの手").replace(/^### .*\n/, "")}` : "",
+      commands ? `\n## ゲームのコマンド（knowledge/commands.md）\n${commands.replace(/^# .*\n/, "")}` : "",
       `\n## この試合\n${this.matchInfo}`,
       policy ? `\n${policy}` : "",
       strategy ? `\n## 戦略知識（knowledge/strategy.md）\n${strategy}` : "",
@@ -289,7 +291,7 @@ export class MainAgent {
       context: "in_game",
       label: "main",
       systemPrompt: this.systemPrompt,
-      // 毎フェーズ呼ぶので AGENTS.md 全体ではなく、手の一覧だけを systemPrompt に入れてある（begin）
+      // ファイルを読めないので AGENTS.md（案内）は付けず、コマンドの表の中身を systemPrompt に入れてある（begin）
       agentsGuide: false,
       tools: "",
       noSessionPersistence: true,

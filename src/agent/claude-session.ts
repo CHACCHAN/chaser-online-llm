@@ -11,23 +11,6 @@ export function agentsGuide(): string {
   return existsSync(AGENTS_GUIDE_PATH) ? readFileSync(AGENTS_GUIDE_PATH, "utf-8").trim() : "";
 }
 
-/** AGENTS.md の1節（見出し行から、同じか上の階層の次の見出しの前まで）。無ければ空 */
-export function agentsGuideSection(heading: string): string {
-  const lines = agentsGuide().split("\n");
-  const start = lines.findIndex((l) => l.startsWith(heading));
-  if (start < 0) return "";
-  const level = (lines[start]!.match(/^#+/)?.[0] ?? "#").length;
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i++) {
-    const m = lines[i]!.match(/^(#+) /);
-    if (m && m[1]!.length <= level) {
-      end = i;
-      break;
-    }
-  }
-  return lines.slice(start, end).join("\n").trim();
-}
-
 export type ClaudeContext = "in_game" | "evolution" | "system";
 
 export type AskResult =
@@ -52,7 +35,7 @@ interface StreamEvent {
 export interface ClaudeSessionOptions extends ClaudeModelSettings {
   /** 既定システムプロンプトの末尾に追加するテキスト */
   appendSystemPrompt?: string;
-  /** agent/AGENTS.md を自動で付けない（試合中のメインは必要な節だけを systemPrompt に入れる） */
+  /** agent/AGENTS.md を自動で付けない（試合中のメインはツールなしでファイルを読めないので、必要な中身を systemPrompt に入れる） */
   agentsGuide?: false;
   /** Claude Code 既定のシステムプロンプトを丸ごと置き換える（指定時は appendSystemPrompt より優先） */
   systemPrompt?: string;

@@ -236,3 +236,17 @@ test("試合後: 振り返りと同じ会話でハーネスのレビューを聞
   expect(agent.usage().main.calls).toBe(afterPost + 1);
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
+
+test("試合中のメインには knowledge/commands.md の中身を入れ、AGENTS.md（案内）は付けない", async () => {
+  Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
+  sent.length = 0;
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
+  await playPhases(agent, 1);
+  const main = sent.find((x) => x.label === "main")!;
+  expect(main.options.systemPrompt).toContain("## ゲームのコマンド（knowledge/commands.md）");
+  expect(main.options.systemPrompt).toContain("`w3u`");
+  expect(main.options.agentsGuide).toBe(false);
+  await agent.end();
+  delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
+});

@@ -10,6 +10,8 @@ export const PUBLIC_DIR = path.join(PROJECT_ROOT, "src/ui/public");
 export const KNOWLEDGE_DIR = path.join(PROJECT_ROOT, "knowledge");
 export const TILES_PATH = path.join(KNOWLEDGE_DIR, "tiles.json");
 export const STRATEGY_PATH = path.join(KNOWLEDGE_DIR, "strategy.md");
+/** ゲームのコマンド（公式の全61種）の唯一の置き場。試合中のメインにはこれをそのまま渡す */
+export const COMMANDS_PATH = path.join(KNOWLEDGE_DIR, "commands.md");
 
 /** 静的素材（公式 GIF 等） */
 export const ASSETS_DIR = path.join(PROJECT_ROOT, "assets");
