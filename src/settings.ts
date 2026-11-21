@@ -44,6 +44,11 @@ export const SETTINGS = {
     description: "Webマップ取得の通信1回あたりのタイムアウト（秒）。取得は裏で行うので試合は待たない",
     defaultValue: "10",
   },
+  CHASER_WARP_ALIGN_WAIT_SEC: {
+    group: "chaser",
+    description: "ワープを踏んだ直後（着地先のまわりが分からない）、次の手を決める前に Webマップでの位置合わせを待つ上限（秒）。0=待たない",
+    defaultValue: "5",
+  },
   CHASER_HTTP_TIMEOUT_SEC: {
     group: "chaser",
     description: "CHaser サーバへの通信1回あたりのタイムアウト（秒、0=無制限）。サーバが応答しないまま試合が止まり続けるのを防ぐ（他プレイヤー待ちは別の仕組みなので影響しない）",
@@ -140,7 +145,7 @@ export type SettingKey = keyof typeof SETTINGS;
 export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }[] = [
   { id: "server", title: "サーバ接続", keys: ["HOST_URL", "CHASER_USER", "CHASER_PASS", "CHASER_ROOM", "CHASER_HTTP_TIMEOUT_SEC", "CHASER_RETRY_MS"] },
   { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
-  { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC"] },
+  { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
   { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_API_URL", "LLM_API_KEY", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },
   { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },

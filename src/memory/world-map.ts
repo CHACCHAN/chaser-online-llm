@@ -1,4 +1,5 @@
 import {
+  isWarpTile,
   loadTilesKnowledge,
   MEASURED_MIN_SAMPLES,
   type WarpLinkRecord,
@@ -184,7 +185,8 @@ export const CMD1_SPECS: Record<Cmd1Command, CommandSpec> = {
 /**
  * 動作得点は公式の値（ステップアップヒント 2025 [3] §15「疲労について」）: walk -10, kei -20, dig -40, put3(search/look) -30,
  * put2&walk 上下左右 -1000（斜め -10000）。実戦ログの公式動作得点と一致を確認済み（room555/556/719）。
- * 注意: 公式の説明では dig は「一歩移動して、その方向を探査」。ここでは移動なしとして扱っている（未実測）。
+ * dig は公式の説明どおり「一歩移動して、その方向を探査」: 1マス移動し、移動後の位置から2マス先を中心に3×3 を見る（元の位置から3マス先）。
+ * 実測（room719 06-47 の T564・T688）: dd の後の観測はこの形でだけ噛み合う。以前は移動なしとして扱い、dig の後に地図が1マスずれてワープと誤検知していた。
  */
 export const CMD2_SPECS: Record<Cmd2Command, CommandSpec> = {
   wu: { category: "walk", move: [0, -1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "u" },
@@ -192,10 +194,10 @@ export const CMD2_SPECS: Record<Cmd2Command, CommandSpec> = {
   wl: { category: "walk", move: [-1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "l" },
   wr: { category: "walk", move: [1, 0], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -10, highFatigue: false, walkDir: "r" },
 
-  du: { category: "dig", move: [0, 0], obsOffset: [0, -2], obsShape: "3x3", estActionCost: -40, highFatigue: false },
-  dd: { category: "dig", move: [0, 0], obsOffset: [0, 2], obsShape: "3x3", estActionCost: -40, highFatigue: false },
-  dl: { category: "dig", move: [0, 0], obsOffset: [-2, 0], obsShape: "3x3", estActionCost: -40, highFatigue: false },
-  dr: { category: "dig", move: [0, 0], obsOffset: [2, 0], obsShape: "3x3", estActionCost: -40, highFatigue: false },
+  du: { category: "dig", move: [0, -1], obsOffset: [0, -2], obsShape: "3x3", estActionCost: -40, highFatigue: false, walkDir: "u" },
+  dd: { category: "dig", move: [0, 1], obsOffset: [0, 2], obsShape: "3x3", estActionCost: -40, highFatigue: false, walkDir: "d" },
+  dl: { category: "dig", move: [-1, 0], obsOffset: [-2, 0], obsShape: "3x3", estActionCost: -40, highFatigue: false, walkDir: "l" },
+  dr: { category: "dig", move: [1, 0], obsOffset: [2, 0], obsShape: "3x3", estActionCost: -40, highFatigue: false, walkDir: "r" },
 
   pu2wd: { category: "put_walk", move: [0, 1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -1000, highFatigue: true, putDir: "u", walkDir: "d" },
   pd2wu: { category: "put_walk", move: [0, -1], obsOffset: [0, 0], obsShape: "3x3", estActionCost: -1000, highFatigue: true, putDir: "d", walkDir: "u" },
@@ -359,11 +361,14 @@ export class WorldMap {
     blocked: boolean;
     newUnknownTiles: number[];
     globalLocalized: boolean;
+    /** ワープを踏んだ直後で、着地先のまわりがまだ分からない（観測の中心がワープの番号だった） */
+    warpPending: boolean;
   } = {
     warped: false,
     blocked: false,
     newUnknownTiles: [],
     globalLocalized: false,
+    warpPending: false,
   };
 
   // Global Web Map integration (when available via Playwright/HTTP scraper)
@@ -874,6 +879,7 @@ export class WorldMap {
       blocked: false,
       newUnknownTiles: [],
       globalLocalized: false,
+      warpPending: false,
     };
 
     const spec: CommandSpec | undefined =
@@ -983,6 +989,18 @@ export class WorldMap {
           } else {
             this.setTile(cx + ox, cy + oy, val, turn, 0);
           }
+        }
+
+        // 移動後の観測の中心が自機ではなくワープの番号なら、ワープを踏んだ。観測は入口のまわりで、このあと着地先へ飛ぶ
+        // （実測: CMD1 の中心が自機以外になるのはワープの番号の時だけ。room719 06-47 で 70 回。気づかずに次の手を古い地図で選び、罠に4回着地した）
+        const center = values[4];
+        if (!warped && hasMove && !blocked && spec.obsOffset[0] === 0 && spec.obsOffset[1] === 0 && center !== undefined && isWarpTile(center)) {
+          this.setTile(this.x, this.y, center, turn, 0);
+          this.startNewSegment(center, this.x, this.y, turn);
+          warped = true;
+          this.lastEventFlags.warped = true;
+          this.lastEventFlags.warpPending = true;
+          return;
         }
 
         if (spec.obsOffset[0] === 0 && spec.obsOffset[1] === 0) {

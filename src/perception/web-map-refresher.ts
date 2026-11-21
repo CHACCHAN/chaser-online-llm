@@ -30,6 +30,8 @@ export class WebMapRefresher {
   private lastSeenTurn: { ourTurn: number; webTurn: number | null } | null = null;
   private lastScoreSample: ScoreSample | null = null;
   private attempts = 0;
+  /** 取得中にワープした時、終わったらすぐ取り直す */
+  private rerunAfter: { turn: number; reason: string } | null = null;
 
   constructor(
     private readonly room: number,
@@ -82,7 +84,20 @@ export class WebMapRefresher {
 
   /** ワープ直後: 位置合わせのためすぐ取り直す */
   onWarp(turn: number): void {
-    if (webMapRefreshMode() !== "off") this.request(turn, "ワープ");
+    if (webMapRefreshMode() === "off") return;
+    // 取得中なら、その結果は座標系が変わって捨てられるので、終わったらすぐ取り直す
+    if (this.inFlight) this.rerunAfter = { turn, reason: "ワープ（取得中だったので取り直し）" };
+    else this.request(turn, "ワープ");
+  }
+
+  /** 位置合わせ（自機の絶対座標）が決まるまで待つ。決まれば true */
+  async waitForAlignment(maxMs: number): Promise<boolean> {
+    const until = Date.now() + maxMs;
+    while (Date.now() < until) {
+      if (this.worldMap.getGlobalPosition() !== null) return true;
+      await Bun.sleep(50);
+    }
+    return this.worldMap.getGlobalPosition() !== null;
   }
 
   /** 試合終了時: 実行中の取得が終わるのを少しだけ待つ（ログ・プロファイルの書き込みを揃える） */
@@ -129,6 +144,9 @@ export class WebMapRefresher {
         this.onFailure(reason, err instanceof Error ? err.message : String(err), startedAt);
       } finally {
         this.inFlight = null;
+        const rerun = this.rerunAfter;
+        this.rerunAfter = null;
+        if (rerun) this.request(rerun.turn, rerun.reason);
       }
     })();
   }

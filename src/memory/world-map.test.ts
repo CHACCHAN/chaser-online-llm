@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { WorldMap } from "./world-map";
+import { getTileInfo, WorldMap } from "./world-map";
 
 describe("WorldMap", () => {
   test("tracks gr, wu/wr, and gr* two-step collection accurately", () => {
@@ -16,7 +16,8 @@ describe("WorldMap", () => {
     expect(map.getTile(2, 0)?.value).toBe(5);
     expect(map.getStats().pickups["3"]).toBe(1);
     // 静止 gr は現在地(穴)への再着地として -20 (公式スコアとの突合で確認)
-    expect(map.getStats().estimatedItemScore).toBe(30 - 20);
+    // 得点は knowledge/tiles.json（実測で変わる）から
+    expect(map.getStats().estimatedItemScore).toBe(getTileInfo(3).score - 20);
 
     // Turn 2: grr moves onto (2,0) where fossil_1(5) was, collects 125
     map.applyObservation("CMD1", "grr", [0, 0, 0, 0, 1000, 2, 0, 0, 0], 2);
@@ -24,23 +25,26 @@ describe("WorldMap", () => {
     expect(map.getTile(2, 0)?.value).toBe(0);
     expect(map.getTile(3, 0)?.value).toBe(2);
     expect(map.getStats().pickups["5"]).toBe(1);
-    expect(map.getStats().estimatedItemScore).toBe(155 - 20);
+    expect(map.getStats().estimatedItemScore).toBe(getTileInfo(3).score + getTileInfo(5).score - 20);
   });
 
-  test("handles du (no move, +2 offset), pd2wu, pr3sr, pu3lu, and keiru matching live probe v2", () => {
+  test("dig は1マス移動し、移動後の位置から2マス先を中心に3×3 を見る（公式の説明どおり。実戦ログ18回で確認）", () => {
+    const map = new WorldMap();
+    map.applyObservation("CMD1", "gr", [0, 0, 0, 0, 1000, 0, 0, 0, 0], 1);
+    map.applyObservation("CMD2", "du", [12, 12, 12, 12, 12, 12, 0, 0, 0], 1);
+    expect(map.getPosition()).toEqual([0, -1]);
+    expect(map.getTile(0, -4)?.value).toBe(12);
+    expect(map.getTile(0, -3)?.value).toBe(12);
+    expect(map.getTile(0, -2)?.value).toBe(0);
+  });
+
+  test("handles pd2wu, pr3sr, pu3lu, and keiru matching live probe v2", () => {
     const map = new WorldMap();
 
     // Turn 1..3 simplified setup matching probe v2 Turn 4 state at (0, -2)
     map.applyObservation("CMD1", "gr", [0, 0, 0, 0, 1000, 0, 0, 0, 0], 1);
     map.applyObservation("CMD2", "wu", [0, 0, 0, 0, 0, 0, 0, 0, 0], 1);
     expect(map.getPosition()).toEqual([0, -1]);
-
-    // du: stays at (0,-1), observes center (0,-3) -> y=-4 and y=-3 are 12
-    map.applyObservation("CMD1", "gr", [0, 0, 0, 0, 1000, 0, 0, 0, 0], 2);
-    map.applyObservation("CMD2", "du", [12, 12, 12, 12, 12, 12, 0, 0, 0], 2);
-    expect(map.getPosition()).toEqual([0, -1]);
-    expect(map.getTile(0, -3)?.value).toBe(12);
-    expect(map.getTile(0, -4)?.value).toBe(12);
 
     // pd2wu: moves up to (0,-2), top row is 12
     map.applyObservation("CMD1", "gr", [0, 0, 0, 0, 1000, 0, 0, 0, 0], 3);
@@ -127,5 +131,27 @@ describe("公式の番号で決まるタイルの種類", () => {
     expect(getTileInfo(32)).toMatchObject({ name: "warp", symbol: "W", score: 5 });
     expect(getTileInfo(71)).toMatchObject({ name: "geometal", symbol: "G" });
     expect(getTileInfo(79).score).toBeGreaterThanOrEqual(200);
+  });
+});
+
+describe("ワープを踏んだ直後", () => {
+  test("移動後の観測の中心がワープの番号なら、その場でワープとして扱い、次の手を古い地図で選ばない", () => {
+    const map = new WorldMap();
+    map.applyObservation("CMD1", "gr", [0, 0, 12, 33, 1000, 12, 0, 0, 12], 1);
+    // 左の 33 を踏んだ。観測は入口のまわり（地図と矛盾しない）で、中心は自機ではなく 33
+    map.applyObservation("CMD1", "grl", [0, 0, 0, 0, 33, 0, 0, 0, 0], 2);
+    const f = map.getLastEventFlags();
+    expect(f.warped).toBe(true);
+    expect(f.warpPending).toBe(true);
+    expect(map.getPosition()).toEqual([0, 0]);
+    expect(map.getSegmentCount()).toBe(2);
+    expect(map.getTile(0, 0)).toBeUndefined(); // 着地先のまわりはまだ分からない
+    const link = map.getWarpLinks().at(-1)!;
+    expect(link.tileValue).toBe(33);
+    expect(link.fromPos).toEqual([-1, 0]);
+    // 着地先で歩いた観測は新しい区画に入り、二重にワープ扱いしない
+    map.applyObservation("CMD2", "wl", [0, 0, 0, 0, 12, 12, 0, 21, 0], 2);
+    expect(map.getLastEventFlags().warped).toBe(false);
+    expect(map.getPosition()).toEqual([-1, 0]);
   });
 });

@@ -12,6 +12,7 @@ import { type MeasureResult, measureTileScores, type ScoreSample } from "./memor
 import { WorldMap, type WebAlignInfo } from "./memory/world-map";
 import { totalTurnsFromWeb, WebMapRefresher } from "./perception/web-map-refresher";
 import { GameOver, logger } from "./tools";
+import { numSetting } from "./settings";
 import { decideTurnAction as defaultDecideTurnAction, type SolverDecision } from "./solver/active-solver";
 import { type UiPredictionState, uiBus } from "./ui/event-bus";
 
@@ -46,6 +47,8 @@ export interface TurnRecord {
   landed?: Record<string, number>;
   /** このターンの間に届いた Webマップの公式のアイテム得点（届いた時だけ） */
   webScore?: ScoreSample;
+  /** ワープを踏んだ直後に Webマップでの位置合わせを待った時間（aligned=false なら間に合わなかった） */
+  warpWaits?: { phase: string; ms: number; aligned: boolean }[];
   /** このターンの間の Webマップでの位置合わせ（あった時だけ。corrected があれば、それまでの位置合わせがずれていた） */
   webAlign?: WebAlignInfo;
   positionAfter: [number, number];
@@ -253,6 +256,7 @@ export async function runAgentMatch(
       const delegations: string[] = [];
       const tokensAtTurnStart = mainAgent?.usage().totalTokens ?? 0;
       const breakpointReasons: string[] = [];
+      const warpWaits: { phase: string; ms: number; aligned: boolean }[] = [];
 
       /** ソルバー候補 → メインエージェント判断 → 送信 → 観測反映 を1フェーズ分行う */
       const playPhase = async (phase: "CMD1" | "CMD2"): Promise<{ command: string; reason: string; values: number[] | null; source: "main" | "solver" }> => {
@@ -302,6 +306,15 @@ export async function runAgentMatch(
         uiBus.updateMap(worldMap.buildUiMapState(null, mainAgent?.currentPlan?.target ?? null));
         // ワープ直後は位置合わせのためすぐ取り直す（裏で実行）
         if (worldMap.getLastEventFlags().warped) webMap.onWarp(turn);
+        // ワープを踏んだ直後は着地先のまわりが分からない。次の手を古い地図で選ばないよう、Webマップでの位置合わせを少し待つ
+        if (worldMap.getLastEventFlags().warpPending && webMap.available) {
+          const waitSec = numSetting("CHASER_WARP_ALIGN_WAIT_SEC", { min: 0 });
+          if (waitSec > 0) {
+            const t0 = Date.now();
+            const ok = await webMap.waitForAlignment(waitSec * 1000);
+            warpWaits.push({ phase, ms: Date.now() - t0, aligned: ok });
+          }
+        }
         return { command: decision.command, reason: decision.reason, values: r.values, source };
       };
 
@@ -414,6 +427,7 @@ export async function runAgentMatch(
         landed,
         ...(newScore ? { webScore: newScore } : {}),
         ...(newAlign ? { webAlign: newAlign } : {}),
+        ...(warpWaits.length > 0 ? { warpWaits } : {}),
         positionAfter: worldMap.getPosition(),
         globalPositionAfter: worldMap.getGlobalPosition(),
         estimatedScoreAfter: curStats.estimatedTotalScore,
