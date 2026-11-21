@@ -3,404 +3,570 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
 <title>CHaser 解析</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
+/* =====================================================================
+   坑道の計器盤: 石灰岩の地に、メイン=コバルト / ソルバー=黄土 / 作戦=マゼンタ。
+   色は役割ごとのトークンだけを使う（直書きしない）。
+   ===================================================================== */
 :root {
-  --bg: #e9ecee;
-  --panel: #f6f7f8;
-  --sunk: #e0e4e7;
-  --ink: #1b2229;
-  --ink2: #56626d;
-  --ink3: #8794a0;
-  --line: #cfd5da;
-  --line2: #dde1e5;
-  --main: #3447c9;
-  --main-bg: rgba(52, 71, 201, .10);
-  --solver: #b06a00;
-  --solver-bg: rgba(176, 106, 0, .12);
-  --pos: #1d7a4a;
-  --neg: #c2392f;
-  --unk: #cdd3d8;
-  --s1: #0f8a8f; --s2: #a63f8a; --s3: #6f8a14; --s4: #7a63c9; --s5: #c0572a;
-  --focus: #3447c9;
-  --plan: #c0268a;
-  --plan-bg: rgba(192, 38, 138, .10);
-  --font: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic UI", "Noto Sans CJK JP", "Noto Sans JP", system-ui, sans-serif;
+  --bg: #e4e8e3;        /* 地（石灰岩） */
+  --panel: #f6f7f4;     /* 面 */
+  --sunk: #eceee9;      /* くぼみ（入力欄・コード） */
+  --hover: #ebeee9;
+  --ink: #1b2220;       /* 粘板岩 */
+  --ink2: #4a5551;
+  --ink3: #5e6965;      /* 最も淡い文字でも 4.5:1 以上 */
+  --line: #c8cfc9;
+  --line2: #dce1dc;
+  --main: #2c47c2;  --main-bg: rgba(44, 71, 194, .10);
+  --solver: #94620a; --solver-bg: rgba(148, 98, 10, .12);
+  --plan: #ae2477;  --plan-bg: rgba(174, 36, 119, .10);
+  --evo: #6a4fc9;   --evo-bg: rgba(106, 79, 201, .10);
+  --sub: #0e7c74;
+  --pos: #1c7547;   --pos-bg: rgba(28, 117, 71, .10);
+  --neg: #be3329;   --neg-bg: rgba(190, 51, 41, .09);
+  --warn: #94620a;  --warn-bg: rgba(148, 98, 10, .11);
+  --unk: #d3d9d3;
+  /* 比較グラフの系列（固定順。dataviz 検証済み） */
+  --c1: #1baf7a; --c2: #eb6834; --c3: #6250d6; --c4: #e87ba4; --c5: #008300;
+  --focus: #2c47c2;
+  --font: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* 文字の段 */
+  --t-xs: 11px; --t-s: 12px; --t-m: 13px; --t-l: 15px; --t-xl: 22px;
+  /* 間隔の段 */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
+  --r: 4px;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --bg: #0f1316;
-  --panel: #161b1f;
-  --sunk: #0c1013;
-  --ink: #dfe5ea;
-  --ink2: #94a1ac;
-  --ink3: #66737e;
-  --line: #28323a;
-  --line2: #1f282f;
-  --main: #8a9cff;
-  --main-bg: rgba(138, 156, 255, .13);
-  --solver: #e3a53f;
-  --solver-bg: rgba(227, 165, 63, .13);
-  --pos: #4cc38a;
-  --neg: #f07067;
-  --unk: #1b2227;
-  --s1: #3cc0c6; --s2: #e07cc0; --s3: #a8c43a; --s4: #a692f0; --s5: #f09064;
-  --focus: #8a9cff;
-  --plan: #f06cc0;
-  --plan-bg: rgba(240, 108, 192, .13);
+  --bg: #151a19; --panel: #1c2221; --sunk: #161b1a; --hover: #252c2b;
+  --ink: #e3e8e5; --ink2: #a6b0ac; --ink3: #8a9591; --line: #313a38; --line2: #262e2c;
+  --main: #93a3ff; --main-bg: rgba(147, 163, 255, .14);
+  --solver: #e2a848; --solver-bg: rgba(226, 168, 72, .14);
+  --plan: #ee79c2; --plan-bg: rgba(238, 121, 194, .13);
+  --evo: #a795f2; --evo-bg: rgba(167, 149, 242, .14);
+  --sub: #3fc2b5;
+  --pos: #56c68f; --pos-bg: rgba(86, 198, 143, .12);
+  --neg: #f27a70; --neg-bg: rgba(242, 122, 112, .12);
+  --warn: #e2a848; --warn-bg: rgba(226, 168, 72, .12);
+  --unk: #232a29;
+  --c1: #199e70; --c2: #d95926; --c3: #9085e9; --c4: #d55181; --c5: #0ca30c;
+  --focus: #93a3ff;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1316; --panel: #161b1f; --sunk: #0c1013; --ink: #dfe5ea; --ink2: #94a1ac; --ink3: #66737e;
-    --line: #28323a; --line2: #1f282f; --main: #8a9cff; --main-bg: rgba(138,156,255,.13);
-    --solver: #e3a53f; --solver-bg: rgba(227,165,63,.13); --pos: #4cc38a; --neg: #f07067; --unk: #1b2227;
-    --s1: #3cc0c6; --s2: #e07cc0; --s3: #a8c43a; --s4: #a692f0; --s5: #f09064; --focus: #8a9cff;
-    --plan: #f06cc0; --plan-bg: rgba(240,108,192,.13);
+    --bg: #151a19; --panel: #1c2221; --sunk: #161b1a; --hover: #252c2b;
+    --ink: #e3e8e5; --ink2: #a6b0ac; --ink3: #8a9591; --line: #313a38; --line2: #262e2c;
+    --main: #93a3ff; --main-bg: rgba(147, 163, 255, .14);
+    --solver: #e2a848; --solver-bg: rgba(226, 168, 72, .14);
+    --plan: #ee79c2; --plan-bg: rgba(238, 121, 194, .13);
+    --evo: #a795f2; --evo-bg: rgba(167, 149, 242, .14);
+    --sub: #3fc2b5;
+    --pos: #56c68f; --pos-bg: rgba(86, 198, 143, .12);
+    --neg: #f27a70; --neg-bg: rgba(242, 122, 112, .12);
+    --warn: #e2a848; --warn-bg: rgba(226, 168, 72, .12);
+    --unk: #232a29;
+    --c1: #199e70; --c2: #d95926; --c3: #9085e9; --c4: #d55181; --c5: #0ca30c;
+    --focus: #93a3ff;
     color-scheme: dark;
   }
 }
+
+/* ---------- 基本 ---------- */
 * { box-sizing: border-box; }
-/* スクロールバーは細く控えめに（ホバー時だけ濃く） */
-* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-*:hover { scrollbar-color: var(--line) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
-*:hover::-webkit-scrollbar-thumb { background: var(--line); }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
 html, body { height: 100%; margin: 0; }
 body {
-  background: var(--bg); color: var(--ink); font: 13px/1.5 var(--font);
+  background: var(--bg); color: var(--ink); font: var(--t-m)/1.55 var(--font);
   display: flex; flex-direction: column; overflow: hidden; min-width: 0;
   font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
-button, input, select { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
-:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+[hidden] { display: none !important; }
 .mono { font-family: var(--mono); }
 .dim { color: var(--ink2); }
 .faint { color: var(--ink3); }
 .num { font-variant-numeric: tabular-nums; }
-
-/* ---------- 上部バー ---------- */
-.top { background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
-.top-row { display: flex; align-items: center; gap: 14px; padding: 7px 16px; min-width: 0; }
-.top-row + .top-row { border-top: 1px solid var(--line2); background: var(--bg); gap: 12px; }
-.top-row .field { flex: 0 1 auto; }
-.top-row .field.chk { flex: none; }
-.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; letter-spacing: .02em; flex: none; }
-.glyph { display: grid; grid-template-columns: 7px 7px; gap: 2px; }
-.glyph i { width: 7px; height: 7px; background: var(--ink3); display: block; }
-.glyph i:nth-child(1) { background: var(--main); }
-.glyph i:nth-child(4) { background: var(--solver); }
-.status { display: flex; align-items: center; gap: 7px; flex: none; font-weight: 500; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink3); flex: none; }
-.dot.on { background: var(--pos); animation: pulse 1.6s ease-in-out infinite; }
-.dot.think { background: var(--main); animation: pulse 1s ease-in-out infinite; }
-.dot.evo { background: var(--s2); animation: pulse 1.2s ease-in-out infinite; }
-.dot.warn { background: var(--solver); }
-.dot.err { background: var(--neg); }
+.up { color: var(--pos); } .down { color: var(--neg); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @keyframes pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .dot { animation: none !important; } }
-.status-msg { color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 0; }
-.live-nums { display: flex; gap: 18px; flex: none; }
-.ln { display: flex; flex-direction: column; line-height: 1.15; align-items: flex-end; }
-.ln b { font-size: 16px; font-weight: 600; }
-.ln span { font-size: 11px; color: var(--ink3); }
-.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 3px; padding: 4px 12px; font-weight: 500; }
-.btn:hover { border-color: var(--ink3); }
-.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-.btn.danger { color: var(--neg); border-color: var(--neg); background: transparent; }
-.btn.ghost { border-color: transparent; background: transparent; color: var(--ink2); padding: 4px 8px; }
-.btn.ghost:hover { color: var(--ink); background: var(--sunk); }
-.btn[hidden] { display: none; }
-.field { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.field > label { color: var(--ink2); font-size: 12px; white-space: nowrap; }
-.field input, .field select {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 3px 7px; min-width: 0; height: 26px;
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- ボタン・入力 ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 30px; padding: 0 14px; border-radius: var(--r);
+  border: 1px solid var(--line); background: var(--panel); font-weight: 700; font-size: var(--t-m); white-space: nowrap;
 }
-.field input:hover, .field select:hover { border-color: var(--ink3); }
-#inMain, #inSub { width: 122px; }
-#selRoom { width: 170px; }
-#selEffort, #selSubEffort { width: 84px; }
-#inBudget { width: 56px; -moz-appearance: textfield; }
-#inBudget::-webkit-inner-spin-button, #inMax::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-#inMax { width: 76px; }
-.field.chk label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
-.sep { flex: 1; }
-.prep-info { font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+.btn:hover { border-color: var(--ink3); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); min-width: 92px; }
+.btn.primary:hover:not(:disabled) { background: var(--ink2); border-color: var(--ink2); }
+.btn.danger { color: var(--neg); border-color: var(--neg); background: transparent; }
+.btn.danger:hover { background: var(--neg-bg); }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--ink2); font-weight: 400; padding: 0 10px; }
+.btn.quiet:hover { color: var(--ink); background: var(--hover); }
+.btn .spin { display: none; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+.btn.busy { cursor: progress; opacity: .85; }
+.btn.busy .spin { display: inline-block; }
+.link { background: none; border: 0; color: var(--ink2); padding: 0; text-decoration: underline; text-underline-offset: 3px; font-size: var(--t-s); }
+.link:hover { color: var(--ink); }
+input[type="text"], input:not([type]), input[type="number"], input[type="password"], select {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  height: 28px; padding: 0 8px; min-width: 0;
+}
+input:hover, select:hover { border-color: var(--ink3); }
+input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="checkbox"] { accent-color: var(--ink); width: 15px; height: 15px; margin: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; flex: none; }
+.seg button { border: 0; background: transparent; padding: 3px 10px; font-size: var(--t-s); color: var(--ink2); border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button:hover { background: var(--hover); color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.hint { font-size: var(--t-xs); color: var(--ink3); }
+
+/* ---------- 上部: 操作バー ---------- */
+.top { background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+.bar { display: flex; align-items: center; gap: var(--s4); padding: 10px var(--s4); min-width: 0; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: var(--t-l); flex: none; letter-spacing: .01em; }
+.glyph { display: grid; grid-template-columns: repeat(3, 5px); gap: 2px; }
+.glyph i { width: 5px; height: 5px; display: block; background: var(--line); }
+.glyph i:nth-child(2), .glyph i:nth-child(4) { background: var(--ink3); }
+.glyph i:nth-child(5) { background: var(--main); }
+.glyph i:nth-child(9) { background: var(--solver); }
+
+/* 試合の流れ（このダッシュボードの主役）: 地層のように横に積んだ4つの段 */
+.flow { display: flex; list-style: none; margin: 0; padding: 0; min-width: 0; flex: 0 1 auto; }
+.flow li {
+  position: relative; display: flex; align-items: center; gap: 7px;
+  height: 32px; padding: 0 16px 0 22px; margin-right: -6px;
+  background: var(--sunk); color: var(--ink3); font-weight: 700; font-size: var(--t-s); white-space: nowrap;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%);
+}
+.flow li:first-child { padding-left: 14px; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); border-radius: var(--r) 0 0 var(--r); }
+.flow li:last-child { margin-right: 0; }
+.flow .pip { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
+.flow li.done { color: var(--ink2); background: var(--line2); }
+.flow li.done .pip { background: currentColor; }
+.flow li.skip { color: var(--ink3); text-decoration: line-through; text-decoration-thickness: 1px; }
+.flow li[aria-current="step"] { color: var(--panel); background: var(--ink); }
+.flow li[aria-current="step"] .pip { background: currentColor; }
+.flow li[data-tone="active"] .pip { animation: pulse 1.2s ease-in-out infinite; }
+.flow li[data-tone="todo"] .pip { background: transparent; }
+.flow li[data-tone="warn"] { background: var(--warn); color: var(--panel); }
+.flow li[data-tone="err"] { background: var(--neg); color: var(--panel); }
+.flow small { font-weight: 400; opacity: .85; font-size: var(--t-xs); }
+
+.actions { display: flex; align-items: center; gap: var(--s2); flex: none; margin-left: auto; }
+.util { display: flex; align-items: center; gap: 2px; flex: none; padding-left: var(--s2); border-left: 1px solid var(--line2); }
+#btnSetup { display: none; }
+.top.running #btnSetup { display: inline-flex; }
+.top.running:not(.setup-open) .setup { display: none; }
+
+/* 状態の帯: 何が起きているか + 計器の数字 */
+.strip { display: flex; align-items: center; gap: var(--s4); padding: 8px var(--s4); border-top: 1px solid var(--line2); background: var(--bg); min-width: 0; }
+.status { display: flex; align-items: baseline; gap: var(--s2); min-width: 0; flex: 1 1 0; line-height: 1.45; }
+.status b { font-weight: 700; flex: none; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink3); flex: none; align-self: center; }
+.dot.on { background: var(--pos); animation: pulse 1.6s ease-in-out infinite; }
+.dot.ok { background: var(--pos); }
+.dot.think { background: var(--main); animation: pulse 1s ease-in-out infinite; }
+.dot.evo { background: var(--evo); animation: pulse 1.2s ease-in-out infinite; }
+.dot.warn { background: var(--warn); }
+.dot.err { background: var(--neg); }
+.status-msg { color: var(--ink2); min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.strip.err { background: var(--neg-bg); }
+.strip.err .status b { color: var(--neg); }
+.strip.err .status-msg { color: var(--ink); }
+.prep-info { font-size: var(--t-s); color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34ch; flex: 0 1 auto; }
+.prep-info:empty { display: none; }
 .prep-info.ok { color: var(--pos); }
 .prep-info.warn { color: var(--neg); }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
-#btnStart { display: inline-flex; align-items: center; gap: 6px; min-width: 76px; justify-content: center; }
-#btnStart .spin { display: none; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
-#btnStart.busy { opacity: .8; cursor: progress; }
-#btnStart.busy .spin { display: inline-block; }
-@media (prefers-reduced-motion: reduce) { #btnStart .spin { animation-duration: 2.4s; } }
-.hint { font-size: 11px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-#modelHint { flex: 1 1 0; min-width: 0; text-align: right; }
+.readout { display: flex; gap: 2px; flex: none; margin: 0 0 0 auto; }
+.ro { display: flex; flex-direction: column; align-items: flex-end; padding: 0 12px; border-left: 1px solid var(--line); line-height: 1.15; min-width: 64px; }
+.ro:first-child { border-left: 0; }
+.ro > span { font-size: var(--t-xs); color: var(--ink3); white-space: nowrap; }
+.ro b { font-family: var(--mono); font-size: 19px; font-weight: 500; letter-spacing: -.01em; white-space: nowrap; }
+.ro b small { font-size: var(--t-s); color: var(--ink3); font-weight: 400; }
+.ro.lead b { font-size: var(--t-xl); font-weight: 600; }
+
+/* 試合の設定 */
+.setup { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); padding: 8px var(--s4); border-top: 1px solid var(--line2); }
+.grp { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.grp > label, .grp > .lb { color: var(--ink2); font-size: var(--t-s); white-space: nowrap; }
+.grp + .grp { padding-left: var(--s4); border-left: 1px solid var(--line2); }
+#selRoom { width: 170px; font-family: var(--mono); font-size: var(--t-s); }
+#inMain, #inSub { width: 150px; }
+#selEffort, #selSubEffort { width: 98px; }
+#inBudget { width: 52px; text-align: right; }
+#inMax { width: 72px; text-align: right; }
+.chk { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; font-size: var(--t-s); color: var(--ink2); white-space: nowrap; }
+#modelHint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#modelHint:empty { display: none; }
+#modelHint.err { color: var(--neg); }
+
+/* 知らせ（エラー・注意） */
+.alerts { flex: none; }
+.alerts:empty { display: none; }
+.alert { display: flex; gap: var(--s3); align-items: baseline; padding: 8px var(--s4); border-bottom: 1px solid var(--line); font-size: var(--t-m); }
+.alert b { flex: none; }
+.alert.err { background: var(--neg-bg); color: var(--ink); box-shadow: inset 4px 0 0 var(--neg); }
+.alert.err b { color: var(--neg); }
+.alert.warn { background: var(--warn-bg); box-shadow: inset 4px 0 0 var(--warn); }
+.alert.warn b { color: var(--warn); }
+.alert span { overflow-wrap: anywhere; }
 
 /* ---------- 3 カラム ---------- */
-.work { flex: 1; display: grid; grid-template-columns: 268px minmax(0, 1fr) 328px; min-height: 0; }
+.work { flex: 1; display: grid; grid-template-columns: 264px minmax(0, 1fr) 384px; min-height: 0; }
 .col { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .col.rail { border-right: 1px solid var(--line); background: var(--panel); }
-.col.right { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
 .col.center { overflow: hidden; }
-.tbl-wrap { overflow: auto; flex: 1 1 0; min-height: 160px; }
-.sec-h { display: flex; align-items: center; gap: 10px; padding: 8px 14px; min-height: 36px; flex: none; }
-.sec-h h2 { margin: 0; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.sec-h { flex-wrap: wrap; }
-.sec-h .right-end { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
-.seg button { border: 0; background: transparent; padding: 2px 10px; font-size: 12px; color: var(--ink2); border-right: 1px solid var(--line); }
-.seg button:last-child { border-right: 0; }
-.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
-.link { background: none; border: 0; color: var(--ink2); padding: 0; text-decoration: underline; text-underline-offset: 2px; font-size: 12px; }
-.link:hover { color: var(--ink); }
+.col.live { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+.sec-h { display: flex; align-items: center; gap: var(--s3); padding: 10px 14px 8px; min-height: 40px; flex: none; flex-wrap: wrap; }
+.sec-h h2 { margin: 0; font-size: var(--t-m); font-weight: 700; white-space: nowrap; }
+.sec-h .end { margin-left: auto; display: flex; gap: var(--s3); align-items: center; }
+.empty { padding: 18px 14px; color: var(--ink3); font-size: var(--t-s); line-height: 1.7; }
 
 /* ---------- 試合一覧 ---------- */
 .runs { overflow-y: auto; flex: 1; border-top: 1px solid var(--line); }
-.run { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; padding: 8px 12px 8px 10px; border-bottom: 1px solid var(--line2); border-left: 3px solid transparent; cursor: pointer; align-items: start; }
-.run:hover { background: var(--sunk); }
-.run[aria-current="true"] { background: var(--sunk); border-left-color: var(--ink); }
-.run input { margin: 3px 0 0; accent-color: var(--ink); }
+.run { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; border-bottom: 1px solid var(--line2); position: relative; }
+.run:hover { background: var(--hover); }
+.run.is-sel { background: var(--sunk); }
+.run.is-sel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--ink); }
+.run .ck { display: flex; justify-content: center; padding-top: 11px; }
+.run-open { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; text-align: left; border: 0; background: none; padding: 8px 12px 8px 0; width: 100%; }
+.run-open:focus-visible { outline-offset: -2px; }
 .run-t { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-.run-t b { font-weight: 600; }
-.run-m { display: flex; gap: 8px; align-items: center; color: var(--ink2); font-size: 12px; margin-top: 2px; white-space: nowrap; }
-.run-s { text-align: right; line-height: 1.2; }
-.run-s b { font-size: 15px; font-weight: 600; display: block; }
-.run-s small { font-size: 11px; color: var(--ink3); }
-.up { color: var(--pos); } .down { color: var(--neg); }
-.tag { font-size: 11px; border: 1px solid var(--line); border-radius: 2px; padding: 0 4px; color: var(--ink2); line-height: 1.5; }
+.run-t b { font-weight: 700; }
+.run-m { display: flex; gap: 8px; align-items: center; color: var(--ink2); font-size: var(--t-s); margin-top: 3px; white-space: nowrap; }
+.run-s { text-align: right; line-height: 1.2; display: flex; flex-direction: column; align-items: flex-end; }
+.run-s b { font-family: var(--mono); font-size: var(--t-l); font-weight: 500; }
+.run-s small { font-size: var(--t-xs); color: var(--ink3); }
+.tag { font-size: var(--t-xs); border: 1px solid var(--line); border-radius: 2px; padding: 0 5px; color: var(--ink2); line-height: 1.6; white-space: nowrap; }
 .tag.best { border-color: var(--solver); color: var(--solver); }
-.tag.evo { border-color: var(--s2); color: var(--s2); }
+.tag.evo { border-color: var(--evo); color: var(--evo); }
 .tag.live { border-color: var(--pos); color: var(--pos); }
-.mbar { display: inline-block; width: 34px; height: 5px; background: var(--solver-bg); position: relative; vertical-align: middle; }
+.tag.plan { border-color: var(--plan); color: var(--plan); }
+.tag.sub { border-color: var(--sub); color: var(--sub); }
+.mbar { display: inline-block; width: 34px; height: 5px; background: var(--solver-bg); position: relative; vertical-align: middle; border-radius: 1px; overflow: hidden; }
 .mbar i { position: absolute; inset: 0 auto 0 0; background: var(--main); }
-.empty { padding: 18px 14px; color: var(--ink3); }
 
 /* ---------- 中央 ---------- */
 .chart-wrap { border-bottom: 1px solid var(--line); background: var(--panel); flex: none; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0 14px 6px; min-height: 22px; }
-.lg { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink2); }
-.lg i { width: 14px; height: 0; border-top: 2px solid; display: inline-block; }
-.lg b { color: var(--ink); font-weight: 500; }
-.lg button { border: 0; background: none; color: var(--ink3); padding: 0 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0 14px 6px; min-height: 22px; }
+.lg { display: inline-flex; gap: 6px; align-items: center; font-size: var(--t-s); color: var(--ink2); }
+.lg i { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+.lg b { color: var(--ink); font-weight: 700; }
+.lg .v { font-family: var(--mono); color: var(--ink); }
+.lg button { border: 0; background: none; color: var(--ink3); padding: 0 3px; font-size: var(--t-m); line-height: 1; }
 .lg button:hover { color: var(--neg); }
-.chart { position: relative; padding: 0 6px 6px 0; }
+.chart { position: relative; padding: 0 6px 8px 0; }
 .chart svg { display: block; width: 100%; overflow: visible; }
-.chart text { font-family: var(--font); font-size: 11px; fill: var(--ink3); }
-.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); padding: 5px 8px; border-radius: 3px; font-size: 12px; line-height: 1.45; white-space: nowrap; z-index: 5; }
-.tip .k { display: inline-block; width: 8px; height: 8px; margin-right: 5px; }
-.run-head { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; padding: 10px 14px 6px; border-bottom: 1px solid var(--line2); }
-.run-head h2 { margin: 0 8px 0 0; font-size: 14px; font-weight: 600; }
-.kv { display: inline-flex; gap: 5px; align-items: baseline; }
-.kv span { color: var(--ink3); font-size: 12px; }
-.kv b { font-weight: 600; }
-.tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--bg); align-items: flex-end; flex: none; }
-.tabs button { border: 0; background: transparent; padding: 7px 12px 6px; color: var(--ink2); border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
-.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
-.tabs .tools { margin-left: auto; display: flex; gap: 10px; align-items: center; padding-bottom: 4px; }
-.key { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; color: var(--ink2); }
-.key i { width: 9px; height: 9px; display: inline-block; }
+.chart text { font-family: var(--font); font-size: var(--t-xs); fill: var(--ink3); }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--panel); padding: 6px 9px; border-radius: var(--r); font-size: var(--t-s); line-height: 1.5; white-space: nowrap; z-index: 5; }
+.tip .k { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 1px; }
+.run-head { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; padding: 12px 14px 8px; border-bottom: 1px solid var(--line2); background: var(--panel); }
+.run-head h2 { margin: 0 6px 0 0; font-size: var(--t-l); font-weight: 700; }
+.kv { display: inline-flex; gap: 6px; align-items: baseline; }
+.kv span { color: var(--ink3); font-size: var(--t-s); }
+.kv b { font-family: var(--mono); font-weight: 500; }
+.agent-line { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: var(--t-s); flex-basis: 100%; }
+.agent-line code { font-family: var(--mono); font-size: var(--t-xs); background: var(--sunk); border: 1px solid var(--line2); padding: 0 5px; border-radius: 2px; }
+.tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--panel); align-items: flex-end; flex: none; flex-wrap: wrap; }
+.tabs [role="tab"] { border: 0; background: transparent; padding: 9px 12px 7px; color: var(--ink2); border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 700; display: inline-flex; gap: 6px; align-items: baseline; white-space: nowrap; }
+.tabs [role="tab"]:hover { color: var(--ink); }
+.tabs [role="tab"][aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tabs .tools { margin-left: auto; display: flex; gap: var(--s3); align-items: center; padding: 6px 0; }
+.cnt { font-family: var(--mono); font-size: var(--t-xs); color: var(--ink3); font-weight: 400; }
+.cnt.hot { color: var(--plan); font-weight: 600; }
+.key { display: inline-flex; gap: 5px; align-items: center; font-size: var(--t-s); color: inherit; }
+.key i { width: 9px; height: 9px; display: inline-block; border-radius: 1px; }
 .key .m { background: var(--main); } .key .s { background: var(--solver); }
-.tbl-wrap { background: var(--panel); }
-table.turns { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.turns th { text-align: left; font-weight: 500; color: var(--ink3); font-size: 12px; padding: 5px 6px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; white-space: nowrap; }
-.turns td { padding: 3px 6px; border-bottom: 1px solid var(--line2); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbl-wrap { overflow: auto; flex: 1 1 0; min-height: 160px; background: var(--panel); }
+table.turns { width: 100%; min-width: 620px; border-collapse: collapse; table-layout: fixed; }
+.turns th { text-align: left; font-weight: 400; color: var(--ink3); font-size: var(--t-s); padding: 6px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; white-space: nowrap; }
+.turns td { padding: 4px 6px; border-bottom: 1px solid var(--line2); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .turns .r { text-align: right; }
+.turns td.r { font-family: var(--mono); font-size: var(--t-s); }
 .turns tr.row { cursor: pointer; }
-.turns tr.row:hover td { background: var(--sunk); }
+.turns tr.row:hover td { background: var(--hover); }
 .turns tr.hi td { background: var(--main-bg) !important; }
 .turns tr.bad td:first-child { box-shadow: inset 3px 0 0 var(--neg); }
-.cmd { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-left: 3px solid var(--ink3); background: var(--sunk); display: inline-block; min-width: 38px; }
+.cmd { font-family: var(--mono); font-size: var(--t-s); padding: 1px 6px; border-left: 3px solid var(--ink3); background: var(--sunk); display: inline-block; min-width: 38px; border-radius: 0 2px 2px 0; }
 .cmd.main { border-color: var(--main); background: var(--main-bg); }
 .cmd.solver { border-color: var(--solver); background: var(--solver-bg); }
 .cmd.none { color: var(--ink3); }
-.who { font-size: 12px; font-weight: 500; }
+.who { font-size: var(--t-s); font-weight: 700; }
+.who small { font-weight: 400; color: var(--ink2); }
 .who.main { color: var(--main); } .who.solver { color: var(--solver); } .who.mix { color: var(--ink2); }
-.ev { display: inline-block; font-size: 11px; border: 1px solid var(--line); padding: 0 5px; border-radius: 2px; margin-right: 4px; color: var(--ink2); }
+.who.plan { color: var(--plan); } .who.cmdx { color: var(--evo); }
+.ev { display: inline-block; font-size: var(--t-xs); border: 1px solid var(--line); padding: 0 5px; border-radius: 2px; margin-right: 4px; color: var(--ink2); }
 .ev.bad { color: var(--neg); border-color: var(--neg); }
 .ev.plan { color: var(--plan); border-color: var(--plan); }
-.ev.sub { color: var(--s1); border-color: var(--s1); }
-.detail td { background: var(--sunk); white-space: normal; padding: 8px 12px 10px 28px; }
-.detail dl { margin: 0; display: grid; grid-template-columns: 60px 1fr; gap: 3px 10px; }
-.detail dt { color: var(--ink3); font-size: 12px; }
+.ev.sub { color: var(--sub); border-color: var(--sub); }
+.detail td { background: var(--sunk); white-space: normal; padding: 10px 14px 12px 44px; }
+.detail dl { margin: 0; display: grid; grid-template-columns: 64px 1fr; gap: 4px 12px; }
+.detail dt { color: var(--ink3); font-size: var(--t-s); }
 .detail dd { margin: 0; overflow-wrap: anywhere; }
-.report { padding: 12px 18px 30px; max-width: 78ch; }
-.report h1, .report h2, .report h3, .report h4 { margin: 1.1em 0 .4em; line-height: 1.3; }
-.report h1 { font-size: 15px; } .report h2 { font-size: 14px; } .report h3, .report h4 { font-size: 13px; }
-.report p { margin: .4em 0; } .report ul { margin: .3em 0; padding-left: 1.3em; }
-.report li { margin: .15em 0; }
-.report code { font-family: var(--mono); font-size: 12px; background: var(--sunk); padding: 0 3px; }
-.report pre { background: var(--sunk); padding: 8px 10px; overflow-x: auto; font-family: var(--mono); font-size: 12px; }
-.report .part { border-left: 3px solid var(--line); padding-left: 12px; margin-bottom: 18px; }
-.report .part > .ph { font-weight: 600; margin: 8px 0 0; font-size: 12px; color: var(--ink2); }
-.report .part.evo { border-left-color: var(--s2); }
+.report { padding: 14px 20px 32px; max-width: 80ch; }
+.report h1, .report h2, .report h3, .report h4 { margin: 1.2em 0 .4em; line-height: 1.35; }
+.report h1 { font-size: var(--t-l); } .report h2 { font-size: 14px; } .report h3, .report h4 { font-size: var(--t-m); }
+.report p { margin: .45em 0; line-height: 1.75; } .report ul { margin: .3em 0; padding-left: 1.3em; }
+.report li { margin: .2em 0; line-height: 1.7; }
+.report code { font-family: var(--mono); font-size: var(--t-s); background: var(--sunk); padding: 0 4px; }
+.report pre { background: var(--sunk); padding: 8px 10px; overflow-x: auto; font-family: var(--mono); font-size: var(--t-s); }
+.report .part { border-left: 3px solid var(--line); padding-left: 14px; margin-bottom: 22px; }
+.report .part > .ph { font-weight: 700; margin: 6px 0 0; font-size: var(--t-s); color: var(--ink2); }
+.report .part.evo { border-left-color: var(--evo); }
 
-/* ---------- 右 ---------- */
+/* ---------- 右: いまの試合 ---------- */
 .block { border-bottom: 1px solid var(--line); flex: none; }
-.decide { padding: 0 14px 12px; }
-.now { display: flex; gap: 10px; align-items: center; }
-.big { font-family: var(--mono); font-size: 26px; font-weight: 500; line-height: 1; padding: 6px 12px; border-left: 4px solid var(--ink3); background: var(--sunk); min-width: 80px; }
+.decide { padding: 0 14px 14px; }
+.now { display: flex; gap: var(--s3); align-items: center; }
+.big { font-family: var(--mono); font-size: 28px; font-weight: 500; line-height: 1; padding: 8px 14px; border-left: 4px solid var(--ink3); background: var(--sunk); min-width: 84px; border-radius: 0 var(--r) var(--r) 0; }
 .big.main { border-color: var(--main); background: var(--main-bg); }
 .big.solver { border-color: var(--solver); background: var(--solver-bg); }
-.big.fallback { border-color: var(--neg); }
-.chip { font-weight: 600; font-size: 12px; }
-.chip.main { color: var(--main); } .chip.solver { color: var(--solver); } .chip.fallback { color: var(--neg); }
-.why { margin: 8px 0 0; color: var(--ink); overflow-wrap: anywhere; }
-.meter { height: 4px; background: var(--sunk); margin: 5px 0 2px; position: relative; }
+.big.fallback { border-color: var(--neg); background: var(--neg-bg); }
+.why { margin: 10px 0 0; color: var(--ink); overflow-wrap: anywhere; line-height: 1.65; }
+.meter { height: 4px; background: var(--sunk); margin: 6px 0 2px; position: relative; border-radius: 2px; overflow: hidden; }
 .meter i { position: absolute; inset: 0 auto 0 0; background: var(--main); }
 .meter.over i { background: var(--solver); }
-.prev { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 12px; color: var(--ink2); }
-details.cand { margin-top: 8px; font-size: 12px; }
+.prev { display: flex; gap: var(--s2); align-items: center; margin-top: 10px; font-size: var(--t-s); color: var(--ink2); flex-wrap: wrap; }
+details.cand { margin-top: 10px; font-size: var(--t-s); }
 details summary { cursor: pointer; color: var(--ink2); }
-details.cand ul { margin: 4px 0 0; padding: 0; list-style: none; }
-details.cand li { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
-.mapbox { padding: 0 14px 12px; position: relative; }
-.mapbox canvas[hidden] { display: none; }
-.mapbox canvas { display: block; image-rendering: pixelated; border: 1px solid var(--line); background: var(--unk); max-width: 100%; }
-.mapinfo { font-size: 12px; color: var(--ink2); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 2px 14px; }
-.maptip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; padding: 2px 6px; border-radius: 3px; white-space: nowrap; z-index: 4; }
-.log-block { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 140px; border-bottom: 0; }
-.log { padding: 0 0 8px; }
-.log-block.collapsed .log { display: none; }
-.lg-ev { border-top: 1px solid var(--line2); }
-.lg-ev summary { list-style: none; padding: 4px 14px; display: grid; grid-template-columns: 52px 54px 1fr; gap: 6px; align-items: baseline; }
-.lg-ev summary::-webkit-details-marker { display: none; }
-.lg-ev summary:hover { background: var(--sunk); }
-.lg-ev .t { color: var(--ink3); font-size: 11px; }
-.lg-ev .k { font-size: 11px; font-weight: 600; }
-.lg-ev .k.thinking { color: var(--s4); } .lg-ev .k.tool_use { color: var(--solver); } .lg-ev .k.tool_result { color: var(--ink3); }
-.lg-ev .k.error { color: var(--neg); } .lg-ev .k.text { color: var(--main); } .lg-ev .k.system { color: var(--ink3); }
-.lg-ev .c { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lg-ev .ctx { font-size: 11px; color: var(--ink3); }
-.lg-ev pre { margin: 0; padding: 4px 14px 8px 112px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); }
-.lg-ev.tool pre { font-family: var(--mono); font-size: 11px; }
-
-/* ---------- 作戦・サブ ---------- */
-.badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 0 7px; border-radius: 2px; border: 1px solid currentColor; line-height: 1.55; white-space: nowrap; }
+details.cand ul { margin: 6px 0 0; padding: 0; list-style: none; }
+details.cand li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-bottom: 1px dotted var(--line2); }
+.badge { display: inline-block; font-size: var(--t-s); font-weight: 700; padding: 1px 8px; border-radius: 2px; border: 1px solid currentColor; line-height: 1.5; white-space: nowrap; }
 .badge.b-continue { color: var(--main); background: var(--main-bg); }
 .badge.b-plan { color: var(--plan); background: var(--plan-bg); }
-.badge.b-command { color: var(--s4); background: transparent; }
+.badge.b-command { color: var(--evo); background: transparent; }
 .badge.b-solver { color: var(--solver); background: var(--solver-bg); }
 .badge.b-wait { color: var(--ink2); background: var(--sunk); }
-.planline { margin-top: 8px; padding: 5px 8px; border-left: 3px solid var(--plan); background: var(--plan-bg); font-size: 12px; overflow-wrap: anywhere; }
-.planline b { color: var(--plan); font-weight: 600; }
+.planline { margin-top: 10px; padding: 6px 9px; border-left: 3px solid var(--plan); background: var(--plan-bg); font-size: var(--t-s); overflow-wrap: anywhere; }
+.planline b { color: var(--plan); font-weight: 700; }
 .planline.none { border-left-color: var(--line); background: var(--sunk); color: var(--ink3); }
-.dline { margin-top: 6px; font-size: 12px; overflow-wrap: anywhere; }
+.dline { margin-top: 6px; font-size: var(--t-s); overflow-wrap: anywhere; }
 .dline .k { color: var(--ink3); margin-right: 6px; }
-.sub-block .sec-h { flex-wrap: nowrap; }
-.sub-block .sub-n { flex: 1; min-width: 0; flex-wrap: wrap; }
-.sub-block .sub-body { padding-bottom: 6px; }
-.sub-block.collapsed .sub-body { display: none; }
-.memo-block .memo-body { margin: 0; padding: 8px 10px 10px; white-space: pre-wrap; word-break: break-word; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink2); }
-.sub-block .sub-n { display: inline-flex; gap: 8px; font-size: 12px; color: var(--ink2); }
-.st-t { border-top: 1px solid var(--line2); }
-.st-t summary { list-style: none; display: grid; grid-template-columns: 18px 1fr auto; gap: 6px; align-items: baseline; padding: 4px 14px; }
+
+.mapbox { padding: 0 14px 12px; position: relative; }
+.mapbox canvas { display: block; image-rendering: pixelated; border: 1px solid var(--line); background: var(--unk); max-width: 100%; cursor: crosshair; }
+.mapinfo { font-size: var(--t-s); color: var(--ink2); margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.mapinfo .sw { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.mapinfo .sw i { display: inline-block; width: 14px; height: 0; border-top: 3px solid; }
+.mapinfo .sw i.dot2 { width: 9px; height: 9px; border: 0; border-radius: 50%; }
+.mapinfo .sw i.dash { border-top-style: dashed; }
+.maptip { position: absolute; pointer-events: none; background: var(--ink); color: var(--panel); font-size: var(--t-s); padding: 3px 7px; border-radius: var(--r); white-space: nowrap; z-index: 4; }
+
+/* エージェント（思考ログ・サブ・メモ）: タブで切替 */
+.agent { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 280px; }
+.agent .tabs { padding: 0 8px; }
+.ag-pane { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.pane-tools { display: flex; align-items: center; gap: var(--s3); padding: 8px 14px; flex: none; flex-wrap: wrap; border-bottom: 1px solid var(--line2); }
+.pane-tools .end { margin-left: auto; }
+.scroll { flex: 1 1 0; min-height: 120px; overflow-y: auto; }
+.lg-ev { border-bottom: 1px solid var(--line2); }
+.lg-ev summary { list-style: none; padding: 5px 14px; display: grid; grid-template-columns: 54px 44px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.lg-ev summary::-webkit-details-marker { display: none; }
+.lg-ev summary:hover { background: var(--hover); }
+.lg-ev .t { color: var(--ink3); font-size: var(--t-xs); font-family: var(--mono); }
+.lg-ev .k { font-size: var(--t-xs); font-weight: 700; }
+.lg-ev .k.thinking { color: var(--evo); } .lg-ev .k.tool_use { color: var(--solver); } .lg-ev .k.tool_result { color: var(--ink3); }
+.lg-ev .k.error { color: var(--neg); } .lg-ev .k.text { color: var(--main); } .lg-ev .k.system { color: var(--ink3); }
+.lg-ev .c { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-s); }
+.lg-ev .ctx { font-size: var(--t-xs); color: var(--evo); }
+.lg-ev pre { margin: 0; padding: 4px 14px 10px 120px; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--t-s)/1.6 var(--font); }
+.lg-ev.tool pre { font-family: var(--mono); font-size: var(--t-xs); }
+.sub-n { display: inline-flex; gap: 10px; font-size: var(--t-s); color: var(--ink2); flex-wrap: wrap; }
+.st-t { border-bottom: 1px solid var(--line2); }
+.st-t summary { list-style: none; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 6px 14px; }
 .st-t summary::-webkit-details-marker { display: none; }
-.st-t summary:hover { background: var(--sunk); }
+.st-t summary:hover { background: var(--hover); }
 .st-t .rq { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-t[open] .rq { white-space: normal; overflow: visible; }
-.st-t .du { font-size: 11px; color: var(--ink3); white-space: nowrap; }
-.st-t pre { margin: 0; padding: 2px 14px 8px 38px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); }
+.st-t .du { font-size: var(--t-xs); color: var(--ink3); white-space: nowrap; }
+.st-t pre { margin: 0; padding: 2px 14px 10px 38px; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--t-s)/1.6 var(--font); }
 .st-t.failed pre { color: var(--neg); }
 .st-ic { width: 12px; height: 12px; border-radius: 50%; display: inline-block; align-self: center; border: 2px solid var(--ink3); }
 .st-ic.queued { border-style: dotted; }
 .st-ic.running { border-color: var(--plan-bg); border-top-color: var(--plan); animation: spin .9s linear infinite; }
 .st-ic.done { border-color: var(--pos); background: var(--pos); }
 .st-ic.failed { border-color: var(--neg); background: var(--neg); }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .st-ic.running { animation: none; border-top-color: var(--plan); } }
-.tag.plan { border-color: var(--plan); color: var(--plan); }
-.tag.sub { border-color: var(--s1); color: var(--s1); }
-.who small { font-weight: 400; color: var(--ink2); }
-.who.plan { color: var(--plan); } .who.cmdx { color: var(--s4); }
-.agent-line { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-.agent-line code { font-family: var(--mono); font-size: 12px; background: var(--sunk); padding: 0 4px; }
+.memo-body { margin: 0; padding: 12px 14px 16px; white-space: pre-wrap; word-break: break-word; font: var(--t-s)/1.7 var(--mono); color: var(--ink); }
 
 /* ---------- ダイアログ ---------- */
-dialog { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 4px; padding: 0; width: min(940px, 94vw); height: min(680px, 86vh); }
+dialog { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 0; width: min(960px, 94vw); height: min(700px, 88vh); box-shadow: 0 18px 50px rgba(0, 0, 0, .25); }
 dialog[open] { display: flex; flex-direction: column; }
-.dlg-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 190px minmax(0, 1fr); }
-.dlg-nav { border-right: 1px solid var(--line); background: var(--sunk); overflow-y: auto; padding: 6px 0; }
-.dlg-nav .grp { font-size: 11px; color: var(--ink3); padding: 10px 14px 4px; }
-.dlg-nav button { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 6px 14px; font-size: 13px; color: var(--ink2); border-left: 3px solid transparent; }
+dialog::backdrop { background: rgba(10, 14, 13, .45); }
+.dlg-h { display: flex; align-items: center; padding: 10px 12px 10px 18px; border-bottom: 1px solid var(--line); gap: 12px; }
+.dlg-h h2 { margin: 0; font-size: var(--t-l); }
+.dlg-h .hint { flex: 1; color: var(--warn); }
+.dlg-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 196px minmax(0, 1fr); }
+.dlg-nav { border-right: 1px solid var(--line); background: var(--bg); overflow-y: auto; padding: 6px 0; }
+.dlg-nav .gl { font-size: var(--t-xs); color: var(--ink3); padding: 12px 16px 4px; }
+.dlg-nav button { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 7px 16px; font-size: var(--t-m); color: var(--ink2); border-left: 3px solid transparent; }
 .dlg-nav button:hover { background: var(--panel); color: var(--ink); }
-.dlg-nav button[aria-current="true"] { background: var(--panel); color: var(--ink); border-left-color: var(--main); font-weight: 600; }
-.dlg-nav .n { font-size: 11px; color: var(--ink3); font-weight: 400; }
-.dlg-nav .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--solver); }
-.hint-p { margin: 0 0 10px; font-size: 12px; color: var(--ink3); }
-.op-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
-.op { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-@media (max-width: 640px) { .dlg-main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } .dlg-nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 0; } .dlg-nav .grp { display: none; } .dlg-nav button { width: auto; white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; } .dlg-nav button[aria-current="true"] { border-bottom-color: var(--main); } }
-dialog::backdrop { background: rgba(0,0,0,.4); }
-.dlg-h { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); gap: 10px; }
-.dlg-h h2 { margin: 0; font-size: 14px; }
-.dlg-b { padding: 14px 18px; overflow-y: auto; min-height: 0; }
-.dlg-b h3 { font-size: 14px; margin: 0 0 6px; color: var(--ink); font-weight: 600; }
-.dlg-b h3:first-child { margin-top: 0; }
-.pol-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
-.pol-row select, .pol-row input { font: inherit; padding: 4px 6px; border: 1px solid var(--line, #ccc); border-radius: 6px; background: var(--bg, #fff); color: inherit; }
-#polText { width: 100%; box-sizing: border-box; min-height: 180px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px; border: 1px solid var(--line, #ccc); border-radius: 6px; background: var(--bg, #fff); color: inherit; resize: vertical; }
-.envrow { display: grid; grid-template-columns: 230px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line2); }
-.envrow.changed .mono { color: var(--solver); }
-.envrow input { background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 3px 7px; height: 26px; width: 100%; font-family: var(--mono); font-size: 12px; }
-.envrow .d { font-size: 11px; color: var(--ink3); grid-column: 1 / -1; margin-top: -2px; }
-.dlg-f { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); align-items: center; }
+.dlg-nav button[aria-current="true"] { background: var(--panel); color: var(--ink); border-left-color: var(--ink); font-weight: 700; }
+.dlg-nav .n { font-size: var(--t-xs); color: var(--ink3); font-weight: 400; font-family: var(--mono); }
+.dlg-nav .chg { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.dlg-b { padding: 16px 20px; overflow-y: auto; min-height: 0; }
+.dlg-b h3 { font-size: var(--t-l); margin: 0 0 6px; color: var(--ink); font-weight: 700; }
+.hint-p { margin: 0 0 14px; font-size: var(--t-s); color: var(--ink3); line-height: 1.7; }
+.op-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.op { display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: center; }
+.op .btn { justify-self: start; }
+.pol-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+#polText { width: 100%; min-height: 220px; font: var(--t-s)/1.6 var(--mono); padding: 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--sunk); color: inherit; resize: vertical; margin-bottom: 8px; }
+.envrow { display: grid; grid-template-columns: 240px minmax(0, 1fr) 56px; gap: 8px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line2); }
+.envrow .key-n { font-family: var(--mono); font-size: var(--t-s); overflow-wrap: anywhere; }
+.envrow.changed .key-n { color: var(--warn); font-weight: 600; }
+.envrow input { width: 100%; font-family: var(--mono); font-size: var(--t-s); background: var(--sunk); }
+.envrow .d { font-size: var(--t-xs); color: var(--ink3); grid-column: 1 / -1; margin-top: -2px; line-height: 1.6; }
+.dlg-f { display: flex; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
 
+/* ---------- 幅に合わせる ---------- */
+@media (max-width: 1360px) {
+  .ro { padding: 0 9px; min-width: 56px; }
+  .ro b { font-size: 17px; } .ro.lead b { font-size: 20px; }
+  #inMain, #inSub { width: 128px; }
+}
+@media (max-width: 1279px) {
+  .work { grid-template-columns: 224px minmax(0, 1fr) 340px; }
+  .bar { gap: var(--s3); }
+  .flow li { padding: 0 12px 0 19px; }
+  .grp + .grp { padding-left: 0; border-left: 0; }
+  .setup { gap: var(--s2) var(--s3); }
+  #selRoom { width: 130px; } #inMain, #inSub { width: 124px; }
+  .ro { padding: 0 8px; min-width: 0; }
+  .ro b { font-size: 16px; } .ro.lead b { font-size: 19px; }
+}
 @media (max-width: 1100px) {
-  .work { grid-template-columns: 230px minmax(0,1fr) 280px; }
-  #inMain, #inSub { width: 120px; }
+  .brand .bt { display: none; }
+}
+@media (max-width: 900px) {
+  html, body { height: auto; }
+  body { overflow: auto; }
+  .bar { flex-wrap: wrap; row-gap: 10px; }
+  .strip { flex-wrap: wrap; }
+  .status { flex-wrap: wrap; }
+  .status-msg { white-space: normal; }
+  .ag-pane { flex: none; }
+  .brand .bt { display: inline; }
+  .flow { order: 5; flex-basis: 100%; }
+  .flow li { flex: 1 1 0; justify-content: center; padding: 0 6px 0 14px; }
+  .flow li:first-child { padding-left: 8px; }
+  #btnSetup { display: inline-flex; }
+  .setup { display: none; }
+  .top.setup-open .setup { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .top.setup-open .setup .grp { flex-wrap: wrap; }
+  .top.setup-open .grp.wide { grid-column: 1 / -1; }
+  #selRoom, #inMain, #inSub { width: auto; flex: 1 1 120px; }
+  .readout { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; gap: 8px 0; margin-left: 0; padding-top: 10px; border-top: 1px solid var(--line2); }
+  .ro { align-items: flex-start; border-left: 0; padding: 0; }
+  .work { display: flex; flex-direction: column; }
+  .col.live { order: 1; border-left: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+  .col.center { order: 2; overflow: visible; }
+  .col.rail { order: 3; border-right: 0; border-top: 1px solid var(--line); }
+  .runs { max-height: 60vh; }
+  .tbl-wrap { flex: none; max-height: 70vh; }
+  .agent { min-height: 0; }
+  .scroll { flex: none; max-height: 60vh; }
+}
+@media (max-width: 640px) {
+  .bar, .strip { padding-left: var(--s4); padding-right: var(--s4); }
+  .actions { order: 7; flex-basis: 100%; }
+  .actions .btn { flex: 1; }
+  .util { margin-left: auto; border-left: 0; padding-left: 0; }
+  .top.setup-open .setup { grid-template-columns: 1fr; }
+  .tabs .tools { margin-left: 0; flex-wrap: wrap; }
+  .lg-ev pre { padding-left: 14px; }
+  .dlg-main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .dlg-nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 0; }
+  .dlg-nav .gl { display: none; }
+  .dlg-nav button { width: auto; white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; gap: 6px; }
+  .dlg-nav button[aria-current="true"] { border-bottom-color: var(--ink); }
+  .envrow { grid-template-columns: minmax(0, 1fr) 56px; }
+  .envrow .key-n, .envrow > input[data-k] { grid-column: 1 / -1; }
+  .op { grid-template-columns: 1fr; gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0s !important; animation-iteration-count: 1 !important; }
+  .btn .spin, .st-ic.running { animation: spin 2.4s linear infinite !important; }
+}
+@media (forced-colors: active) {
+  .flow li[aria-current="step"] { outline: 2px solid CanvasText; }
 }
 </style>
 </head>
 <body>
 
-<header class="top">
-  <div class="top-row">
-    <div class="brand"><span class="glyph" aria-hidden="true"><i></i><i></i><i></i><i></i></span>CHaser 解析</div>
-    <div class="status"><span class="dot" id="dot"></span><span id="statusLabel">接続中</span></div>
-    <div class="status-msg" id="statusMsg"></div>
-    <div class="live-nums">
-      <div class="ln"><b id="nTurn" class="num">0</b><span id="nTurnSub">ターン</span></div>
-      <div class="ln"><b id="nEst" class="num">0</b><span>推定スコア</span></div>
-      <div class="ln" id="lnTok" title="この試合でエージェント（メイン・サブ）が使ったトークン"><b id="nTok" class="num">-</b><span id="nTokSub">トークン</span></div>
-      <div class="ln"><b id="nOff" class="num">-</b><span>公式(途中)</span></div>
-      <div class="ln"><b id="nBest" class="num">-</b><span id="nBestSub">ルーム最高</span></div>
+<header class="top" id="top">
+  <div class="bar">
+    <div class="brand"><span class="glyph" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="bt">CHaser 解析</span></div>
+    <ol class="flow" id="flow" aria-label="試合の流れ">
+      <li data-step="prep"><span class="pip" aria-hidden="true"></span><span class="fl">準備</span></li>
+      <li data-step="standby"><span class="pip" aria-hidden="true"></span><span class="fl">スタンバイ</span></li>
+      <li data-step="play"><span class="pip" aria-hidden="true"></span><span class="fl">対戦</span></li>
+      <li data-step="evo"><span class="pip" aria-hidden="true"></span><span class="fl">振り返り</span></li>
+    </ol>
+    <div class="actions">
+      <button class="btn primary" id="btnStart" type="button"><i class="spin" aria-hidden="true"></i><span id="btnStartLabel">開始</span></button>
+      <button class="btn" id="btnPause" type="button" hidden>試合後に一時停止</button>
+      <button class="btn danger" id="btnStop" type="button" hidden>停止</button>
     </div>
-    <span class="prep-info" id="prepInfo" role="status"></span>
-    <button class="btn primary" id="btnStart" type="button"><i class="spin" aria-hidden="true"></i><span id="btnStartLabel">開始</span></button>
-    <button class="btn" id="btnPause" type="button" hidden>試合後に一時停止</button>
-    <button class="btn danger" id="btnStop" type="button" hidden>停止</button>
-    <button class="btn ghost" id="btnTheme" type="button" title="ライト/ダーク切替" aria-label="テーマ切替">テーマ</button>
-    <button class="btn ghost" id="btnSettings" type="button" title="環境変数・操作">設定</button>
+    <div class="util">
+      <button class="btn quiet" id="btnSetup" type="button" aria-expanded="false" aria-controls="setup">試合の設定</button>
+      <button class="btn quiet" id="btnTheme" type="button">自動</button>
+      <button class="btn quiet" id="btnSettings" type="button" title="操作・作戦方針・.env">設定</button>
+    </div>
   </div>
-  <div class="top-row">
-    <div class="field"><label for="selRoom" title="719 のように1つ、555-560 のように範囲、555,568 のように並べて指定できる。複数なら「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る">ルーム</label><input id="selRoom" list="dlRooms" placeholder="719 / 555-560 / 555,568" autocomplete="off" /><datalist id="dlRooms"></datalist></div>
-    <div class="field"><label for="inMain">メイン</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
-    <div class="field"><label for="inSub">サブ</label><input id="inSub" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
-    <div class="field"><label for="selEffort" title="メインの思考の深さ">メイン effort</label><select id="selEffort"></select></div>
-    <div class="field"><label for="selSubEffort" title="サブの思考の深さ。同上=メインと同じ">サブ effort</label><select id="selSubEffort"></select></div>
-    <div class="field"><label for="inBudget" title="メインが1手に使える思考時間。超えると solver が代わりに打つ">思考予算</label><input id="inBudget" type="number" min="3" step="1" /><span class="dim">秒</span></div>
-    <div class="field"><label for="inMax">最大ターン</label><input id="inMax" type="number" min="1" step="1" placeholder="無制限" /></div>
-    <div class="field chk"><label><input type="checkbox" id="chkAuto" title="試合後に自動で次の試合を始める" />自動で次へ</label></div>
+
+  <div class="strip">
+    <div class="status" role="status" aria-live="polite"><span class="dot" id="dot" aria-hidden="true"></span><b id="statusLabel">接続中</b><span class="status-msg" id="statusMsg"></span></div>
+    <span class="prep-info" id="prepInfo"></span>
+    <div class="readout" aria-label="スコア">
+      <div class="ro lead"><span>推定スコア</span><b id="nEst" class="num">0</b></div>
+      <div class="ro"><span>公式（途中）</span><b id="nOff" class="num">-</b></div>
+      <div class="ro"><span id="nBestSub">ルーム最高</span><b id="nBest" class="num">-</b></div>
+      <div class="ro"><span>ターン</span><b><span id="nTurn" class="num">0</span><small id="nTurnSub"></small></b></div>
+      <div class="ro" id="lnTok"><span id="nTokSub">トークン</span><b id="nTok" class="num">-</b></div>
+    </div>
+  </div>
+
+  <div class="setup" id="setup" role="group" aria-label="試合の設定">
+    <div class="grp wide"><label for="selRoom" title="719 のように1つ、555-560 のように範囲、555,568 のように並べて指定できる。複数なら「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る">ルーム</label><input id="selRoom" list="dlRooms" placeholder="719 / 555-560 / 555,568" autocomplete="off" spellcheck="false" /><datalist id="dlRooms"></datalist></div>
+    <div class="grp wide"><label for="inMain">メイン</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selEffort" aria-label="メインの effort（思考の深さ）" title="メインの思考の深さ"></select></div>
+    <div class="grp wide"><label for="inSub">サブ</label><input id="inSub" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selSubEffort" aria-label="サブの effort（思考の深さ）" title="サブの思考の深さ。「同上」はメインと同じ"></select></div>
+    <div class="grp"><label for="inBudget" title="メインが1手に使える思考時間。超えるとソルバーが代わりに打つ">思考予算</label><input id="inBudget" type="number" min="3" step="1" inputmode="numeric" /><span class="lb">秒</span></div>
+    <div class="grp"><label for="inMax">最大ターン</label><input id="inMax" type="number" min="1" step="1" placeholder="無制限" inputmode="numeric" /></div>
+    <div class="grp"><label class="chk" title="試合が終わったら自動で次の試合を始める"><input type="checkbox" id="chkAuto" />自動で次へ</label></div>
     <span class="hint" id="modelHint"></span>
     <datalist id="dlModels"></datalist>
   </div>
 </header>
 
+<div class="alerts" id="alerts"></div>
+
 <div class="work">
   <!-- 左: 試合一覧 -->
-  <aside class="col rail" aria-label="試合一覧">
+  <aside class="col rail" aria-labelledby="hRuns">
     <div class="sec-h">
-      <h2>試合</h2>
-      <div class="right-end">
-        <div class="seg" role="group" aria-label="表示範囲">
+      <h2 id="hRuns">試合</h2>
+      <div class="end">
+        <div class="seg" role="group" aria-label="表示する試合">
           <button type="button" id="rfRoom" aria-pressed="true">このルーム</button>
           <button type="button" id="rfAll" aria-pressed="false">全部</button>
         </div>
@@ -411,111 +577,108 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
   <!-- 中央: 推移と履歴 -->
   <main class="col center" id="center">
-    <section class="chart-wrap">
+    <section class="chart-wrap" aria-labelledby="chartTitle">
       <div class="sec-h">
         <h2 id="chartTitle">スコア推移</h2>
         <div class="seg" role="group" aria-label="グラフの種類">
           <button type="button" id="cmTurns" aria-pressed="true">ターンごと</button>
           <button type="button" id="cmRuns" aria-pressed="false">試合ごと</button>
         </div>
-        <div class="right-end"><span class="hint" id="chartHint"></span></div>
+        <div class="end"><span class="hint" id="chartHint"></span></div>
       </div>
       <div class="legend" id="legend"></div>
       <div class="chart" id="chart"></div>
     </section>
 
-    <section class="run-head" id="runHead"></section>
-    <div class="tabs" role="tablist">
-      <button type="button" role="tab" id="tabTurns" aria-selected="true">ターン履歴</button>
-      <button type="button" role="tab" id="tabReport" aria-selected="false">診断と進化レポート</button>
+    <section class="run-head" id="runHead" aria-live="off"></section>
+    <div class="tabs" role="tablist" aria-label="選んだ試合の記録">
+      <button type="button" role="tab" id="tabTurns" aria-selected="true" aria-controls="tblWrap">ターン履歴</button>
+      <button type="button" role="tab" id="tabReport" aria-selected="false" aria-controls="tblWrap" tabindex="-1">診断と進化レポート</button>
       <div class="tools" id="tblTools">
-        <span class="key"><i class="m"></i>main</span>
-        <span class="key"><i class="s"></i>solver</span>
-        <div class="seg" role="group" aria-label="絞り込み">
+        <div class="seg" role="group" aria-label="ターンの絞り込み（色: main=青・solver=黄土）">
           <button type="button" data-tf="all" aria-pressed="true">全て</button>
-          <button type="button" data-tf="main" aria-pressed="false">main</button>
-          <button type="button" data-tf="solver" aria-pressed="false">solver</button>
+          <button type="button" data-tf="main" aria-pressed="false"><span class="key"><i class="m"></i>main</span></button>
+          <button type="button" data-tf="solver" aria-pressed="false"><span class="key"><i class="s"></i>solver</span></button>
           <button type="button" data-tf="event" aria-pressed="false">イベント</button>
         </div>
       </div>
     </div>
-    <div class="tbl-wrap" id="tblWrap"></div>
+    <div class="tbl-wrap" id="tblWrap" role="tabpanel" tabindex="0" aria-label="ターン履歴"></div>
   </main>
 
-  <!-- 右: 判断・マップ・思考 -->
-  <aside class="col right" aria-label="現在の判断">
-    <section class="block">
-      <div class="sec-h"><h2>いまの判断</h2><div class="right-end faint" id="decWhen"></div></div>
+  <!-- 右: いまの試合（判断・マップ・エージェント） -->
+  <aside class="col live" aria-label="いまの試合">
+    <section class="block" aria-labelledby="hDecide">
+      <div class="sec-h"><h2 id="hDecide">いまの判断</h2><div class="end faint" id="decWhen"></div></div>
       <div class="decide" id="decide"></div>
     </section>
-    <section class="block">
-      <div class="sec-h"><h2>マップ</h2><div class="right-end faint" id="mapSrc"></div></div>
-      <div class="mapbox" id="mapbox"><canvas id="map" width="10" height="10"></canvas><div class="maptip" id="maptip" hidden></div><div class="mapinfo" id="mapinfo"></div></div>
+    <section class="block" aria-labelledby="hMap">
+      <div class="sec-h"><h2 id="hMap">マップ</h2><div class="end faint" id="mapSrc"></div></div>
+      <div class="mapbox" id="mapbox"><canvas id="map" width="10" height="10" role="img" aria-label="盤面"></canvas><div class="maptip" id="maptip" hidden></div><div class="mapinfo" id="mapinfo"></div></div>
     </section>
-    <section class="block memo-block" id="memoBlock">
-      <div class="sec-h"><h2 title="メインは毎フェーズ前の会話なしで呼ばれる。次のフェーズへ引き継ぐのはこのメモと直近の経過・現在の状況だけ">メインのメモ</h2><div class="right-end faint" id="memoLen"></div></div>
-      <pre class="memo-body" id="memoBody">(まだない)</pre>
-    </section>
-    <section class="block sub-block" id="subBlock">
-      <div class="sec-h">
-        <h2 title="メインが依頼した裏の仕事(調査・ツール作成・ログ分析)">サブの仕事</h2>
-        <span class="sub-n" id="subCount"></span>
-        <div class="right-end"><button type="button" class="link" id="subToggle" aria-expanded="true">折りたたむ</button></div>
+    <section class="agent" aria-label="エージェント">
+      <div class="tabs" role="tablist" aria-label="エージェント">
+        <button type="button" role="tab" id="agLog" data-ag="log" aria-controls="paneLog" aria-selected="true" title="Claude Code の思考・ツール呼び出しログ">思考ログ <span class="cnt" id="logCount"></span></button>
+        <button type="button" role="tab" id="agSub" data-ag="sub" aria-controls="paneSub" aria-selected="false" tabindex="-1" title="メインが依頼した裏の仕事（調査・ツール作成・ログ分析）">サブの仕事 <span class="cnt" id="subBadge"></span></button>
+        <button type="button" role="tab" id="agMemo" data-ag="memo" aria-controls="paneMemo" aria-selected="false" tabindex="-1" title="メインは毎フェーズ前の会話なしで呼ばれる。次のフェーズへ引き継ぐのはこのメモと直近の経過・現在の状況だけ">メモ <span class="cnt" id="memoLen"></span></button>
       </div>
-      <div class="sub-body" id="subBody"></div>
-    </section>
-    <section class="block log-block" id="logBlock">
-      <div class="sec-h">
-        <h2 title="Claude Code の思考・ツール呼び出しログ">思考ログ</h2>
-        <span class="faint" id="logCount"></span>
-        <div class="right-end">
-          <div class="seg" role="group" aria-label="種別">
+      <div class="ag-pane" id="paneLog" role="tabpanel" aria-labelledby="agLog">
+        <div class="pane-tools">
+          <div class="seg" role="group" aria-label="ログの種別">
             <button type="button" data-lf="all" aria-pressed="true">全て</button>
             <button type="button" data-lf="in_game" aria-pressed="false">対戦</button>
             <button type="button" data-lf="evolution" aria-pressed="false">進化</button>
           </div>
-          <button type="button" class="link" id="logToggle" aria-expanded="true">折りたたむ</button>
+          <span class="hint end">行を押すと全文</span>
         </div>
+        <div class="scroll" id="log"></div>
       </div>
-      <div class="log" id="log"></div>
+      <div class="ag-pane" id="paneSub" role="tabpanel" aria-labelledby="agSub" hidden>
+        <div class="pane-tools"><span class="sub-n" id="subCount"></span><span class="hint end">調査・ツール作成・ログ分析</span></div>
+        <div class="scroll" id="subBody"></div>
+      </div>
+      <div class="ag-pane" id="paneMemo" role="tabpanel" aria-labelledby="agMemo" hidden>
+        <div class="pane-tools"><span class="hint">次のフェーズへ引き継ぐメモ。メインは毎回前の会話なしで呼ばれる</span></div>
+        <div class="scroll"><pre class="memo-body" id="memoBody"></pre></div>
+      </div>
     </section>
   </aside>
 </div>
 
-<dialog id="dlg">
-  <div class="dlg-h"><h2>設定</h2><span class="hint" id="envDirty"></span><span class="sep"></span><button class="btn ghost" id="dlgClose" type="button">閉じる</button></div>
+<dialog id="dlg" aria-labelledby="dlgTitle">
+  <div class="dlg-h"><h2 id="dlgTitle">設定</h2><span class="hint" id="envDirty" role="status"></span><button class="btn quiet" id="dlgClose" type="button">閉じる</button></div>
   <div class="dlg-main">
     <nav class="dlg-nav" id="dlgNav" aria-label="設定の分類"></nav>
     <div class="dlg-b">
       <section class="pane" data-pane="ops" hidden>
         <h3>操作</h3>
-        <p class="hint-p">試合とは別に、手動で実行できる操作です。結果は思考ログに出ます。</p>
+        <p class="hint-p">試合とは別に手動で実行する操作です。結果は思考ログに出ます。</p>
         <div class="op-list">
-          <div class="op"><button class="btn" id="btnPreview" type="button">選択ルームのマップを取得</button><span class="hint">Webマップ (MapView.jsp) を取得してマップ欄に表示</span></div>
-          <div class="op"><button class="btn" id="btnVerify" type="button">ソルバーを検証</button><span class="hint">今のソルバーを過去の試合でリプレイ検証</span></div>
+          <div class="op"><button class="btn" id="btnPreview" type="button">マップを取得</button><span class="hint">選んだルームの Webマップ（MapView.jsp）を取得してマップ欄に表示する</span></div>
+          <div class="op"><button class="btn" id="btnVerify" type="button">ソルバーを検証</button><span class="hint">今のソルバーを過去の試合でリプレイ検証する</span></div>
           <div class="op"><button class="btn" id="btnModels" type="button">モデル一覧を再取得</button><span class="hint">ゲートウェイの /models を取り直す</span></div>
         </div>
-        <div class="hint" id="opMsg"></div>
+        <div class="hint" id="opMsg" role="status"></div>
       </section>
       <section class="pane" data-pane="policy" hidden>
         <h3>作戦方針</h3>
         <p class="hint-p">メインエージェントが最優先で守る方針（agent/policies/&lt;名前&gt;.md）。次の試合から有効です。</p>
         <div class="pol-row">
           <select id="polSel" aria-label="方針"></select>
-          <span class="hint" id="polActive"></span>
           <button class="btn" id="polUse" type="button">この方針を使う</button>
+          <span class="hint" id="polActive"></span>
         </div>
         <textarea id="polText" spellcheck="false" aria-label="方針の内容"></textarea>
-        <div class="pol-row"><button class="btn primary" id="polSave" type="button">方針を保存</button><span class="hint" id="polMsg"></span></div>
-        <div class="pol-row"><input id="polNew" placeholder="新しい方針名 (英数字)" size="18" aria-label="新しい方針名"><button class="btn" id="polCreate" type="button">複製して作成</button></div>
+        <div class="pol-row"><button class="btn primary" id="polSave" type="button">方針を保存</button><span class="hint" id="polMsg" role="status"></span></div>
+        <div class="pol-row"><input id="polNew" placeholder="新しい方針名（英数字）" size="20" aria-label="新しい方針名" spellcheck="false"><button class="btn" id="polCreate" type="button">複製して作成</button></div>
       </section>
       <section class="pane" data-pane="env" hidden>
         <h3 id="envTitle"></h3>
-        <div id="envBody" class="dim">読み込み中...</div>
+        <div id="envBody" class="dim">読み込み中…</div>
       </section>
     </div>
   </div>
-  <div class="dlg-f" id="envFoot" hidden><button class="btn primary" id="envSave" type="button">.env を保存</button><button class="btn" id="envAdd" type="button" hidden>変数を追加</button><span class="hint" id="envMsg"></span></div>
+  <div class="dlg-f" id="envFoot" hidden><button class="btn primary" id="envSave" type="button">.env を保存</button><button class="btn" id="envAdd" type="button" hidden>変数を追加</button><span class="hint" id="envMsg" role="status"></span></div>
 </dialog>
 
 <script>
@@ -531,11 +694,13 @@ const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const load = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
+/* 状態ラベル・点の色・流れの段 */
 const STATUS = {
-  idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], waiting: ["他プレイヤー待ち", "warn"], claude_in_game: ["メインが思考中", "think"], preparing: ["準備中(資料を読んでメモ作成)", "think"], standby: ["スタンバイOK", "on"],
-  evolving: ["進化中(ソルバー改修)", "evo"], cooldown: ["次の試合を準備中", "warn"], paused: ["一時停止", "warn"], error: ["エラー", "err"],
+  idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], waiting: ["他プレイヤー待ち", "warn"], claude_in_game: ["メインが思考中", "think"],
+  preparing: ["準備中", "think"], standby: ["スタンバイOK", "ok"],
+  evolving: ["振り返り中（ソルバー改修）", "evo"], cooldown: ["次の試合を準備中", "warn"], paused: ["一時停止", "warn"], error: ["エラー", "err"],
 };
-const SERIES_VARS = ["--s1", "--s2", "--s3", "--s4", "--s5"];
+const SERIES_VARS = ["--c1", "--c2", "--c3", "--c4", "--c5"];
 
 /* ============ 状態 ============ */
 const S = {
@@ -543,11 +708,12 @@ const S = {
   liveTurns: [], liveRunId: null,
   focus: "live", compare: [], compareInit: false,
   chartMode: "turns", tab: "turns", tf: "all", lf: "all", roomAll: false,
-  hiTurn: null, expanded: new Set(), models: [], logCollapsed: false,
+  hiTurn: null, expanded: new Set(), models: [],
   imgs: new Map(), tileFiles: null, mapHit: null,
-  subCollapsed: false, subClosed: new Set(), subSeen: {}, planKeep: undefined, planOff: null,
+  subClosed: new Set(), subSeen: {}, planKeep: undefined, planOff: null,
+  agTab: "log", disconnected: false,
 };
-{ const t = load("chaser.roomAll"); if (t === "1") S.roomAll = true; if (load("chaser.logCollapsed") === "1") S.logCollapsed = true; if (load("chaser.subCollapsed") === "1") S.subCollapsed = true; }
+{ if (load("chaser.roomAll") === "1") S.roomAll = true; const a = load("chaser.agentTab"); if (a === "log" || a === "sub" || a === "memo") S.agTab = a; }
 
 /* ============ 再描画スケジューラ ============ */
 const dirty = new Set(); let raf = 0;
@@ -650,7 +816,7 @@ async function fetchRuns() {
     S.runs = (d.runs || []).map(normRun).sort((a, b) => (a.id < b.id ? 1 : -1));
     mark("rail", "chart", "settings", "head");
     prefetchRuns();
-  } catch { $("#runs").innerHTML = `<div class="empty">試合一覧を取得できません。サーバの状態を確認してください。</div>`; }
+  } catch { $("#runs").innerHTML = `<div class="empty">試合一覧を取得できません。サーバが動いているか確かめてください。</div>`; }
 }
 const queue = []; let active = 0;
 function prefetchRuns() {
@@ -680,32 +846,71 @@ async function fetchDiag(id) {
   if (S.focus === id && S.tab === "report") mark("table");
 }
 async function loadModels() {
-  $("#modelHint").textContent = "モデル一覧を取得中...";
+  const hint = $("#modelHint"); hint.className = "hint"; hint.textContent = "モデル一覧を取得中…";
   try {
     const d = await jget("/api/models");
     S.models = d.models || [];
     $("#dlModels").innerHTML = S.models.map((m) => `<option value="${esc(m)}"></option>`).join("");
     const eff = d.efforts || ["low", "medium", "high", "xhigh", "max"];
     S.efforts = eff; syncSettings(true);
-    $("#modelHint").textContent = d.error ? `モデル一覧: ${d.error}` : `モデル ${S.models.length} 件(入力で絞り込み)`;
-  } catch { $("#modelHint").textContent = "モデル一覧を取得できません"; }
+    hint.textContent = d.error ? `モデル一覧を取得できません: ${d.error}` : "";
+    hint.classList.toggle("err", !!d.error);
+    ["#inMain", "#inSub"].forEach((q) => { $(q).placeholder = S.models.length ? `${S.models.length}件から検索` : "モデル名"; });
+  } catch { hint.textContent = "モデル一覧を取得できません"; hint.classList.add("err"); }
 }
 
-/* ============ 上部バー ============ */
+/* ============ 上部: 流れ・状態・操作 ============ */
+const FLOW = ["prep", "standby", "play", "evo"];
+/** 今の状態を「準備 → スタンバイ → 対戦 → 振り返り」のどの段か・どんな調子かに直す */
+function flowOf(st) {
+  const prep = st.prep || { required: false, state: "none" }, s = st.status;
+  let cur = "prep", tone = "";
+  if (s === "preparing") { cur = "prep"; tone = "active"; }
+  else if (s === "standby") cur = "standby";
+  else if (s === "connecting" || s === "playing" || s === "waiting" || s === "claude_in_game") { cur = "play"; tone = "active"; }
+  else if (s === "evolving") { cur = "evo"; tone = "active"; }
+  else if (s === "cooldown") { cur = "evo"; tone = "warn"; }
+  else if (s === "paused") { cur = "standby"; tone = "warn"; }
+  else if (s === "error") { cur = st.running ? "play" : "prep"; tone = "err"; }
+  else if (prep.required && prep.state === "failed") { cur = "prep"; tone = "err"; }
+  else if (prep.required && prep.state === "preparing") { cur = "prep"; tone = "active"; }
+  else if (prep.required && prep.state !== "ready") { cur = "prep"; tone = "todo"; }
+  else cur = "standby";
+  return { cur, tone, skipPrep: !prep.required };
+}
+const FLOW_NOTE = { prep: { err: "失敗" }, standby: { warn: "一時停止" }, play: { err: "エラー" }, evo: { warn: "次の試合へ" } };
+function renderFlow(st) {
+  const f = flowOf(st), ci = FLOW.indexOf(f.cur);
+  $$("#flow li").forEach((li) => {
+    const k = li.dataset.step, i = FLOW.indexOf(k), isCur = i === ci;
+    li.classList.toggle("done", i < ci);
+    li.classList.toggle("skip", k === "prep" && f.skipPrep && !isCur);
+    if (isCur) { li.setAttribute("aria-current", "step"); li.dataset.tone = f.tone; } else { li.removeAttribute("aria-current"); delete li.dataset.tone; }
+    const note = isCur ? (k === "play" && st.turn ? `T${st.turn}` : FLOW_NOTE[k]?.[f.tone] || "") : (k === "prep" && f.skipPrep ? "不要" : "");
+    let sm = $("small", li); if (!sm) { sm = document.createElement("small"); li.append(sm); }
+    sm.textContent = note; sm.hidden = !note;
+  });
+}
 function render_status() {
   const st = S.st; if (!st) return;
-  const [label, cls] = STATUS[st.status] || [st.status, ""];
+  const [label, cls] = S.disconnected ? ["サーバに再接続中", "warn"] : STATUS[st.status] || [st.status, ""];
   $("#statusLabel").textContent = label; $("#dot").className = "dot " + cls;
-  $("#statusMsg").textContent = st.statusMessage || ""; $("#statusMsg").title = st.statusMessage || "";
+  // サーバの文言は「待機中 — …」のように状態名から始まることが多いので、重ねて出さない
+  const msg = String(st.statusMessage || "").replace(new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[—–-]\\s*`), "");
+  $("#statusMsg").textContent = msg; $("#statusMsg").title = st.statusMessage || "";
 }
 function renderHead() {
   const st = S.st; if (!st) return;
   render_status();
+  renderFlow(st);
+  $("#top").classList.toggle("running", !!st.running);
+  $(".strip").classList.toggle("err", st.status === "error" && !S.disconnected);
   const prep = st.prep || { required: false, state: "none" };
   const preparingNow = prep.state === "preparing";
   const needPrep = prep.required && prep.state !== "ready";
   // 1つのボタン: 「準備」→（準備中くるくる）→「開始」。準備が要らない設定なら最初から「開始」
   $("#btnStart").hidden = st.running; $("#btnPause").hidden = !st.running; $("#btnStop").hidden = !st.running && !preparingNow;
+  $("#btnStop").textContent = preparingNow && !st.running ? "準備を中止" : "停止";
   $("#btnStart").disabled = preparingNow;
   $("#btnStart").classList.toggle("busy", preparingNow);
   $("#btnStart").dataset.mode = needPrep ? "prepare" : "start";
@@ -716,15 +921,29 @@ function renderHead() {
   renderPrepInfo(prep, st.running);
   $("#btnPause").disabled = !!st.pauseRequested; $("#btnPause").textContent = st.pauseRequested ? "一時停止を予約済み" : "試合後に一時停止";
   $("#nTurn").textContent = st.turn || 0;
-  $("#nTurnSub").textContent = st.maxTurns ? `/ ${st.maxTurns} ターン` : "ターン";
+  $("#nTurnSub").textContent = st.maxTurns ? ` /${st.maxTurns}` : "";
   $("#nEst").textContent = fmt(st.scores.estimatedTotal);
   renderUsage(st.agentUsage);
-  $("#memoBody").textContent = st.agentMemo || "(まだない)";
+  $("#memoBody").textContent = st.agentMemo || "まだメモはありません。準備が終わると、メインの最初のメモがここに入ります。";
+  $("#memoBody").classList.toggle("faint", !st.agentMemo);
   $("#memoLen").textContent = st.agentMemo ? `${st.agentMemo.length}字` : "";
   const live = st.scores.liveOfficial ? st.scores.liveOfficial.totalScore : st.scores.lastOfficialTotal;
   $("#nOff").textContent = fmt(live);
   const hs = st.scores.roomHighScore ?? S.rooms[String(st.room)]?.highScore ?? null;
   $("#nBest").textContent = fmt(hs); $("#nBestSub").textContent = `Room ${st.room} 最高`;
+  renderAlerts();
+}
+/* 知らせ: 見落とすと困ることだけを帯で出す（エラー・準備失敗・公式ver変更・トークン上限・接続切れ） */
+let alertSig = "";
+function renderAlerts() {
+  const st = S.st; if (!st) return;
+  const out = [], prep = st.prep || {};
+  if (S.disconnected) out.push(["warn", "接続が切れました", "ダッシュボードのサーバに自動で再接続しています。続く場合は bun run start のターミナルを確かめてください。"]);
+  if (prep.required && prep.state === "failed" && !st.running) out.push(["err", "準備できませんでした", `${prep.error || "原因不明"} — 設定を確かめて「準備」をやり直してください。`]);
+  if (prep.versionChanged) out.push(["warn", "公式のバージョンが変わりました", `記録 ${prep.knownVersion ?? "-"} → 公式 ${prep.officialVersion ?? "-"}。アイテムID・コマンド・ルールが変わった可能性があります（agent/SETUP.md §4）。`]);
+  if (st.agentUsage?.limitReached) out.push(["warn", "トークンの上限に達しました", "この試合の残りはソルバーだけで打ちます。"]);
+  const sig = JSON.stringify(out); if (sig === alertSig) return; alertSig = sig;
+  $("#alerts").innerHTML = out.map(([k, t, m]) => `<div class="alert ${k}" role="${k === "err" ? "alert" : "status"}"><b>${esc(t)}</b><span>${esc(m)}</span></div>`).join("");
 }
 /** 並びを入力の形に戻す（続く番号は範囲にまとめる）。[555,556,557,568] → "555-557,568" */
 function fmtRooms(list) {
@@ -735,7 +954,7 @@ function fmtRooms(list) {
 function syncSettings(force) {
   const st = S.st; if (!st) return;
   const set = (el, v) => { if (document.activeElement !== el || force) el.value = v; };
-  // ルーム
+  // ルーム（候補にはルームごとの最高点を添える）
   const ids = new Set([3, st.room, ...Object.keys(S.rooms).map(Number), ...Object.keys(st.roomProfiles || {}).map(Number)].filter(Boolean));
   $("#dlRooms").innerHTML = [...ids].sort((a, b) => a - b).map((id) => {
     const hs = (S.rooms[String(id)] || st.roomProfiles?.[String(id)])?.highScore;
@@ -743,7 +962,7 @@ function syncSettings(force) {
   }).join("");
   const sel = $("#selRoom");
   if (document.activeElement !== sel || force) sel.value = st.roomQueue?.length > 1 ? fmtRooms(st.roomQueue) : String(st.room);
-  sel.title = st.roomQueue?.length > 1 ? `${st.roomQueue.join(",")} を順に（今は Room ${st.room}）` : `Room ${st.room}`;
+  sel.title = st.roomQueue?.length > 1 ? `${st.roomQueue.join(",")} を順に（今は Room ${st.room}）` : `Room ${st.room}。719 / 555-560 / 555,568 のように指定できる`;
   const eff = S.efforts || ["low", "medium", "high", "xhigh", "max"];
   const es = $("#selEffort");
   if (document.activeElement !== es) {
@@ -774,17 +993,39 @@ $("#selRoom").addEventListener("change", () => control({ action: "update_setting
 $("#btnStart").addEventListener("click", () => control({ action: $("#btnStart").dataset.mode === "prepare" ? "prepare" : "start", ...settingsPayload() }));
 $("#btnStop").addEventListener("click", () => control({ action: "stop" }));
 $("#btnPause").addEventListener("click", () => control({ action: "pause" }));
+$("#btnSetup").addEventListener("click", () => {
+  const open = $("#top").classList.toggle("setup-open"); $("#btnSetup").setAttribute("aria-expanded", String(open));
+});
 
+/* テーマ: 自動（OS に合わせる）→ ライト → ダーク の順に切り替え */
+const THEME_LABEL = { auto: "テーマ: 自動", light: "テーマ: ライト", dark: "テーマ: ダーク" };
 function applyTheme(t) {
-  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else { delete document.documentElement.dataset.theme; t = "auto"; }
+  const b = $("#btnTheme"); b.textContent = THEME_LABEL[t]; b.setAttribute("aria-label", `${THEME_LABEL[t]}（押すと切り替え）`); b.title = "テーマ: 自動 → ライト → ダーク";
   mark("chart", "map");
 }
 $("#btnTheme").addEventListener("click", () => {
-  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  const next = cur === "dark" ? "light" : "dark"; save("chaser.theme", next); applyTheme(next);
+  const cur = document.documentElement.dataset.theme || "auto";
+  const next = { auto: "light", light: "dark", dark: "auto" }[cur]; save("chaser.theme", next); applyTheme(next);
 });
-{ const t = load("chaser.theme"); if (t) applyTheme(t); }
+applyTheme(load("chaser.theme"));
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => mark("chart", "map"));
+
+/* タブ: ←→ で移動（WAI-ARIA の tabs の作法） */
+document.addEventListener("keydown", (e) => {
+  const tab = e.target.closest?.('[role="tab"]'); if (!tab || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+  const tabs = $$('[role="tab"]', tab.closest('[role="tablist"]')), i = tabs.indexOf(tab);
+  const next = tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+  e.preventDefault(); next.focus(); next.click();
+});
+function setTabs(list, cur) { list.forEach(([el, on]) => { el.setAttribute("aria-selected", String(on)); el.tabIndex = on ? 0 : -1; }); }
+
+/* 描き直してもキーボードの位置を失わない */
+function keepFocus(box, fn) {
+  const a = document.activeElement, key = a && box.contains(a) ? (a.dataset.open ? `[data-open="${a.dataset.open}"]` : a.dataset.ov ? `[data-ov="${a.dataset.ov}"]` : null) : null;
+  fn();
+  if (key) { const n = box.querySelector(key); if (n) n.focus({ preventScroll: true }); }
+}
 
 /* ============ 試合一覧 ============ */
 function renderRail() {
@@ -794,32 +1035,29 @@ function renderRail() {
   const liveShown = st && (st.running || S.liveTurns.length > 0);
   if (liveShown) {
     const ls = statsOf(S.liveTurns); const sel = S.focus === "live";
-    rows.push(`<div class="run" data-id="live" tabindex="0" role="button" aria-current="${sel}">
-      <input type="checkbox" checked disabled aria-label="常に表示" />
-      <div><div class="run-t"><b>いまの試合</b><span class="tag live">${st.running ? "進行中" : "直近"}</span></div>
-      <div class="run-m"><span>Room ${st.room}</span><span>${S.liveTurns.length}T</span>${ls ? `<span title="main 判断率"><span class="mbar"><i style="width:${(ls.mainRate || 0) * 100}%"></i></span> ${pct(ls.mainRate)}</span>` : ""}</div></div>
-      <div class="run-s"><b>${fmt(st.scores.estimatedTotal)}</b><small>推定</small></div></div>`);
+    rows.push(`<div class="run${sel ? " is-sel" : ""}"><span class="ck"><input type="checkbox" checked disabled aria-label="いまの試合は常にグラフに表示" /></span>
+      <button type="button" class="run-open" data-open="live" aria-current="${sel}">
+        <span><span class="run-t"><b>いまの試合</b><span class="tag live">${st.running ? "進行中" : "直近"}</span></span>
+        <span class="run-m"><span>Room ${st.room}</span><span>${S.liveTurns.length}T</span>${ls ? `<span title="main 判断率"><span class="mbar"><i style="width:${(ls.mainRate || 0) * 100}%"></i></span> ${pct(ls.mainRate)}</span>` : ""}</span></span>
+        <span class="run-s"><b>${fmt(st.scores.estimatedTotal)}</b><small>推定</small></span></button></div>`);
   }
   const list = runsForView().filter((r) => !(liveShown && r.id === S.liveRunId));
   for (const r of list) {
     const s = rateOfRun(r); const prev = prevOf(r);
     const d = prev && r.score !== null && prev.score !== null ? r.score - prev.score : null;
-    const best = bestId(r.room) === r.id;
-    rows.push(`<div class="run" data-id="${esc(r.id)}" tabindex="0" role="button" aria-current="${S.focus === r.id}">
-      <input type="checkbox" data-ov="${esc(r.id)}" ${S.compare.includes(r.id) ? "checked" : ""} title="グラフに重ねる" aria-label="グラフに重ねる" />
-      <div><div class="run-t"><b>${esc(runLabel(r))}</b><span class="faint">Room ${r.room ?? "?"}</span>${best ? `<span class="tag best">最高</span>` : ""}${evolved(r.id) ? `<span class="tag evo" title="${r.evolution?.rolledBack ? "ソルバーを改修したが検証に失敗し巻き戻した" : "この試合の後にソルバー改修(進化)が行われた"}">進化${r.evolution?.rolledBack ? "(戻し)" : ""}</span>` : ""}</div>
-      <div class="run-m"><span>${r.turns}T</span><span title="main 判断率"><span class="mbar"><i style="width:${(s.mainRate || 0) * 100}%"></i></span> ${s.ready ? pct(s.mainRate ?? null) : "…"}</span><span title="main の平均応答時間">${s.ready ? sec(s.avgLat) : ""}</span></div></div>
-      <div class="run-s"><b>${fmt(r.score)}</b><small>${r.isOfficial ? "公式" : "推定"}${d !== null ? ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${fmt(d)}</span>` : ""}</small></div></div>`);
+    const best = bestId(r.room) === r.id, sel = S.focus === r.id;
+    rows.push(`<div class="run${sel ? " is-sel" : ""}"><span class="ck"><input type="checkbox" data-ov="${esc(r.id)}" ${S.compare.includes(r.id) ? "checked" : ""} title="グラフに重ねる" aria-label="${esc(runLabel(r))} の試合をグラフに重ねる" /></span>
+      <button type="button" class="run-open" data-open="${esc(r.id)}" aria-current="${sel}">
+        <span><span class="run-t"><b>${esc(runLabel(r))}</b><span class="faint">Room ${r.room ?? "?"}</span>${best ? `<span class="tag best">最高</span>` : ""}${evolved(r.id) ? `<span class="tag evo" title="${r.evolution?.rolledBack ? "ソルバーを改修したが検証に失敗し巻き戻した" : "この試合の後にソルバー改修（進化）が行われた"}">進化${r.evolution?.rolledBack ? "（戻し）" : ""}</span>` : ""}</span>
+        <span class="run-m"><span>${r.turns}T</span><span title="main 判断率"><span class="mbar"><i style="width:${(s.mainRate || 0) * 100}%"></i></span> ${s.ready ? pct(s.mainRate ?? null) : "…"}</span><span title="main の平均応答時間">${s.ready ? sec(s.avgLat) : ""}</span></span></span>
+        <span class="run-s"><b>${fmt(r.score)}</b><small>${r.isOfficial ? "公式" : "推定"}${d !== null ? ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${fmt(d)}</span>` : ""}</small></span></button></div>`);
   }
-  box.innerHTML = rows.join("") || `<div class="empty">この範囲に試合がありません。開始すると、ここに試合が並びます。</div>`;
+  keepFocus(box, () => { box.innerHTML = rows.join("") || `<div class="empty">この範囲の試合はまだありません。「準備」→「開始」で試合を始めると、ここに並びます。</div>`; });
 }
 $("#runs").addEventListener("click", (e) => {
   const ov = e.target.closest("[data-ov]");
-  if (ov) { toggleCompare(ov.dataset.ov, ov.checked); e.stopPropagation(); return; }
-  const row = e.target.closest(".run"); if (row) setFocus(row.dataset.id);
-});
-$("#runs").addEventListener("keydown", (e) => {
-  if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("run")) { e.preventDefault(); setFocus(e.target.dataset.id); }
+  if (ov) { toggleCompare(ov.dataset.ov, ov.checked); return; }
+  const b = e.target.closest("[data-open]"); if (b) setFocus(b.dataset.open);
 });
 function toggleCompare(id, on) {
   S.compare = S.compare.filter((x) => x !== id); if (on) S.compare.push(id);
@@ -856,64 +1094,67 @@ function renderChart() {
   $("#cmTurns").setAttribute("aria-pressed", String(S.chartMode === "turns")); $("#cmRuns").setAttribute("aria-pressed", String(S.chartMode === "runs"));
   if (S.chartMode === "turns") chartTurns(el); else chartRuns(el);
 }
-const CH = { padL: 52, padR: 20, padT: 8, plotH: 140, axisH: 20, ribbonH: 40 };
-function frame(el) {
+const CH = { padL: 60, padR: 20, padT: 8, plotH: 140, axisH: 20, ribbonH: 40 };
+/** 左の余白は目盛りの一番長い数字に合わせる（大きな点数で切れないように） */
+function frame(el, yLabels = []) {
   const W = Math.max(320, el.clientWidth - 6);
-  return { W, H: CH.padT + CH.plotH + CH.axisH + CH.ribbonH + 8, x0: CH.padL, x1: W - CH.padR, y0: CH.padT, y1: CH.padT + CH.plotH, rTop: CH.padT + CH.plotH + CH.axisH + 4 };
+  const padL = Math.max(CH.padL, 12 + 7 * Math.max(0, ...yLabels.map((v) => fmt(v).length)));
+  return { W, H: CH.padT + CH.plotH + CH.axisH + CH.ribbonH + 8, x0: padL, x1: W - CH.padR, y0: CH.padT, y1: CH.padT + CH.plotH, rTop: CH.padT + CH.plotH + CH.axisH + 4 };
 }
 function chartTurns(el) {
-  const ser = seriesList(), f = frame(el), st = S.st;
+  const ser = seriesList(), st = S.st;
   const hs = S.rooms[String(st?.room)]?.highScore ?? null;
   const legend = $("#legend");
-  $("#chartTitle").textContent = "スコア推移(ターンごとの推定スコア)";
-  $("#chartHint").textContent = "行をクリックで比較に追加。チェックで重ね表示";
+  $("#chartTitle").textContent = "スコア推移（ターンごとの推定）";
+  $("#chartHint").textContent = "左の一覧のチェックで重ねて比べる";
   legend.innerHTML = ser.map((s) => {
     const last = s.turns[s.turns.length - 1];
-    return `<span class="lg"><i style="border-color:${s.color};${S.focus === s.id ? "border-top-width:4px" : ""}"></i><b>${esc(s.label)}</b>${last ? fmt(last.estimatedScoreAfter) : "…"}${s.live ? "" : `<button type="button" data-rm="${esc(s.id)}" aria-label="${esc(s.label)}を外す">×</button>`}</span>`;
-  }).join("") + (hs != null ? `<span class="lg"><i style="border-color:var(--ink3);border-top-style:dashed"></i>Room ${st.room} の最高 ${fmt(hs)}</span>` : "");
-  if (!ser.length) { el.innerHTML = `<div class="empty">まだ描くデータがありません。左の試合を選ぶか、開始してください。</div>`; return; }
+    return `<span class="lg"><i style="border-color:${s.color};${S.focus === s.id ? "border-top-width:4px" : ""}"></i><b>${esc(s.label)}</b><span class="v">${last ? fmt(last.estimatedScoreAfter) : "…"}</span>${s.live ? "" : `<button type="button" data-rm="${esc(s.id)}" aria-label="${esc(s.label)} をグラフから外す">×</button>`}</span>`;
+  }).join("") + (hs != null ? `<span class="lg"><i style="border-color:var(--ink3);border-top-style:dashed"></i>Room ${st.room} の最高 <span class="v">${fmt(hs)}</span></span>` : "");
+  if (!ser.length) { el.innerHTML = `<div class="empty">まだ描くデータがありません。左の一覧から試合を選ぶか、試合を始めてください。</div>`; return; }
   const all = ser.flatMap((s) => s.turns);
   const maxT = Math.max(10, ...all.map((t) => t.turn));
   const ys = all.map((t) => t.estimatedScoreAfter);
   let yMin = Math.min(0, ...ys), yMax = Math.max(100, ...ys, hs ?? 0);
   yMax += (yMax - yMin) * 0.04;
+  const f = frame(el, niceTicks(yMin, yMax, 5));
   const X = (t) => f.x0 + ((t - 1) / Math.max(1, maxT - 1)) * (f.x1 - f.x0);
   const Y = (v) => f.y1 - ((v - yMin) / (yMax - yMin)) * (f.y1 - f.y0);
   let g = "";
   for (const v of niceTicks(yMin, yMax, 5)) g += `<line x1="${f.x0}" x2="${f.x1}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line2)"/><text x="${f.x0 - 6}" y="${Y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
-  for (const v of niceTicks(1, maxT, 8)) g += `<line x1="${X(v)}" x2="${X(v)}" y1="${f.y1}" y2="${f.y1 + 4}" stroke="var(--ink3)"/><text x="${X(v)}" y="${f.y1 + 16}" text-anchor="middle">${v}</text>`;
-  g += `<line x1="${f.x0}" x2="${f.x1}" y1="${f.y1}" y2="${f.y1}" stroke="var(--ink3)"/>`;
+  for (const v of niceTicks(1, maxT, 8)) g += `<line x1="${X(v)}" x2="${X(v)}" y1="${f.y1}" y2="${f.y1 + 4}" stroke="var(--line)"/><text x="${X(v)}" y="${f.y1 + 16}" text-anchor="middle">${v}</text>`;
+  g += `<line x1="${f.x0}" x2="${f.x1}" y1="${f.y1}" y2="${f.y1}" stroke="var(--line)"/>`;
   if (hs != null) g += `<line x1="${f.x0}" x2="${f.x1}" y1="${Y(hs)}" y2="${Y(hs)}" stroke="var(--ink3)" stroke-dasharray="4 4"/>`;
-  const ordered = [...ser].sort((a, b) => (S.focus === a.id) - (S.focus === b.id) + (a.live ? 0.5 : 0) * 0);
+  const ordered = [...ser].sort((a, b) => (S.focus === a.id) - (S.focus === b.id));
   for (const s of ordered) {
     if (!s.turns.length) continue;
-    const w = S.focus === s.id ? 2.6 : 1.5, op = S.focus === s.id || s.live ? 1 : 0.8;
-    g += `<polyline fill="none" stroke="${s.color}" stroke-width="${w}" stroke-linejoin="round" opacity="${op}" points="${s.turns.map((t) => `${X(t.turn).toFixed(1)},${Y(t.estimatedScoreAfter).toFixed(1)}`).join(" ")}"/>`;
+    const w = S.focus === s.id ? 2.6 : 1.6, op = S.focus === s.id || s.live ? 1 : 0.85;
+    g += `<polyline fill="none" stroke="${s.color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" opacity="${op}" points="${s.turns.map((t) => `${X(t.turn).toFixed(1)},${Y(t.estimatedScoreAfter).toFixed(1)}`).join(" ")}"/>`;
   }
-  // 注目試合のイベント点(スコアが減った/ゲーム終了)
+  // 注目試合のイベント点（スコアが減った・ゲーム終了）
   const ft = getFocusTurns();
   ft.forEach((t, i) => {
     const d = scoreDelta(ft, i);
-    if (d < 0) g += `<circle cx="${X(t.turn)}" cy="${Y(t.estimatedScoreAfter)}" r="4" fill="var(--neg)" stroke="var(--panel)" stroke-width="1.5"><title>T${t.turn} スコア減 ${fmt(d)}</title></circle>`;
-    if (t.gameOver) g += `<rect x="${X(t.turn) - 4}" y="${Y(t.estimatedScoreAfter) - 4}" width="8" height="8" fill="var(--ink)" stroke="var(--panel)"><title>T${t.turn} 終了: ${esc(t.gameOverReason || "")}</title></rect>`;
+    if (d < 0) g += `<circle cx="${X(t.turn)}" cy="${Y(t.estimatedScoreAfter)}" r="4.5" fill="var(--neg)" stroke="var(--panel)" stroke-width="2"><title>T${t.turn} スコア減 ${fmt(d)}</title></circle>`;
+    if (t.gameOver) g += `<rect x="${X(t.turn) - 4}" y="${Y(t.estimatedScoreAfter) - 4}" width="8" height="8" fill="var(--ink)" stroke="var(--panel)" stroke-width="2"><title>T${t.turn} 終了: ${esc(t.gameOverReason || "")}</title></rect>`;
   });
   if (S.hiTurn != null) g += `<line x1="${X(S.hiTurn)}" x2="${X(S.hiTurn)}" y1="${f.y0}" y2="${f.rTop + CH.ribbonH}" stroke="var(--main)" stroke-width="1.5"/>`;
   // リボン: 決めた主体と応答時間
   const budget = (st?.turnBudgetSec || 20) * 1000;
   const lats = ft.map(latencyOf); const scale = Math.max(budget, ...lats) || 1, rb = f.rTop + CH.ribbonH;
-  const bw = Math.max(1.5, ((f.x1 - f.x0) / Math.max(1, maxT)) * 0.78);
-  g += `<text x="${f.x0 - 6}" y="${f.rTop + 10}" text-anchor="end">応答</text><line x1="${f.x0}" x2="${f.x1}" y1="${rb}" y2="${rb}" stroke="var(--ink3)"/>`;
+  const bw = Math.min(16, Math.max(1.5, ((f.x1 - f.x0) / Math.max(1, maxT)) * 0.78));
+  g += `<text x="${f.x0 - 6}" y="${f.rTop + 10}" text-anchor="end">応答</text><line x1="${f.x0}" x2="${f.x1}" y1="${rb}" y2="${rb}" stroke="var(--line)"/>`;
   const by = rb - (budget / scale) * (CH.ribbonH - 4);
-  g += `<line x1="${f.x0}" x2="${f.x1}" y1="${by}" y2="${by}" stroke="var(--ink3)" stroke-dasharray="2 3"/><text x="${f.x1}" y="${by - 2}" text-anchor="end">予算 ${st?.turnBudgetSec ?? 20}秒</text>`;
+  g += `<line x1="${f.x0}" x2="${f.x1}" y1="${by}" y2="${by}" stroke="var(--ink3)" stroke-dasharray="2 3"/><text x="${f.x0 - 6}" y="${Math.max(by + 4, f.rTop + 24)}" text-anchor="end">予算${st?.turnBudgetSec ?? 20}秒</text>`;
   ft.forEach((t, i) => {
     const who = whoOf(t), l = lats[i], x = X(t.turn) - bw / 2;
     if (who === "main" || who === "mix") {
       const h = Math.max(2, (l / scale) * (CH.ribbonH - 4));
-      g += `<rect x="${x}" y="${rb - h}" width="${bw}" height="${h}" fill="var(--main)"><title>T${t.turn} main ${sec(l)}</title></rect>`;
+      g += `<rect x="${x}" y="${rb - h}" width="${bw}" height="${h}" rx="1" fill="var(--main)"><title>T${t.turn} main ${sec(l)}</title></rect>`;
       if (who === "mix") g += `<rect x="${x}" y="${rb - 3}" width="${bw}" height="3" fill="var(--solver)"/>`;
     } else if (who === "solver") g += `<rect x="${x}" y="${rb - 3}" width="${bw}" height="3" fill="var(--solver)"><title>T${t.turn} solver</title></rect>`;
   });
-  el.innerHTML = `<svg viewBox="0 0 ${f.W} ${f.H}" height="${f.H}" role="img" aria-label="スコア推移">${g}<rect id="hit" x="${f.x0}" y="${f.y0}" width="${f.x1 - f.x0}" height="${f.rTop + CH.ribbonH - f.y0}" fill="transparent" style="cursor:crosshair"/></svg><div class="tip" hidden></div>`;
+  el.innerHTML = `<svg viewBox="0 0 ${f.W} ${f.H}" height="${f.H}" role="img" aria-label="ターンごとの推定スコアの推移">${g}<rect id="hit" x="${f.x0}" y="${f.y0}" width="${f.x1 - f.x0}" height="${f.rTop + CH.ribbonH - f.y0}" fill="transparent" style="cursor:crosshair"/></svg><div class="tip" hidden></div>`;
   const hit = $("#hit", el), tip = $(".tip", el), svg = $("svg", el);
   hit.addEventListener("mousemove", (e) => {
     const r = svg.getBoundingClientRect(), px = ((e.clientX - r.left) / r.width) * f.W;
@@ -921,8 +1162,8 @@ function chartTurns(el) {
     const rows = ser.map((s) => { const x = s.turns.find((q) => q.turn === t); return x ? `<div><span class="k" style="background:${s.color}"></span>${esc(s.label)} <b>${fmt(x.estimatedScoreAfter)}</b></div>` : ""; }).join("");
     const cur = ft.find((q) => q.turn === t);
     tip.hidden = false;
-    tip.innerHTML = `<div>ターン ${t}</div>${rows}${cur ? `<div>${esc(cur.cmd1 || "-")} / ${esc(cur.cmd2 || "-")} (${whoOf(cur) || "?"} ${sec(latencyOf(cur))})</div>` : ""}`;
-    const tx = (X(t) / f.W) * r.width + 12; tip.style.left = Math.min(tx, r.width - tip.offsetWidth - 4) + "px"; tip.style.top = "6px";
+    tip.innerHTML = `<div>ターン ${t}</div>${rows}${cur ? `<div>${esc(cur.cmd1 || "-")} / ${esc(cur.cmd2 || "-")}（${whoOf(cur) || "?"} ${sec(latencyOf(cur))}）</div>` : ""}`;
+    const tx = (X(t) / f.W) * r.width + 12; tip.style.left = Math.max(0, Math.min(tx, r.width - tip.offsetWidth - 4)) + "px"; tip.style.top = "6px";
   });
   hit.addEventListener("mouseleave", () => { tip.hidden = true; });
   hit.addEventListener("click", (e) => {
@@ -932,18 +1173,19 @@ function chartTurns(el) {
   });
 }
 function chartRuns(el) {
-  const f = frame(el), st = S.st;
+  const st = S.st;
   const runs = runsForView().filter((r) => r.score !== null).slice().reverse();
-  $("#chartTitle").textContent = `試合ごとの最終スコア${S.roomAll ? "(全ルーム)" : `(Room ${st?.room})`}`;
-  $("#chartHint").textContent = "点をクリックでその試合を開く";
-  $("#legend").innerHTML = `<span class="lg"><b style="color:var(--ink)">●</b>公式スコア</span><span class="lg"><b style="color:var(--ink)">○</b>推定のみ</span><span class="lg"><i style="border-color:var(--ink3);border-top-style:dashed"></i>それまでの最高</span><span class="lg"><b style="color:var(--s2)">▲</b>この試合の後に進化(ソルバー改修)</span>`;
+  $("#chartTitle").textContent = `試合ごとの最終スコア（${S.roomAll ? "全ルーム" : `Room ${st?.room}`}）`;
+  $("#chartHint").textContent = "点を押すとその試合を開く";
+  $("#legend").innerHTML = `<span class="lg"><b>●</b>公式スコア</span><span class="lg"><b>○</b>推定のみ</span><span class="lg"><i style="border-color:var(--ink3);border-top-style:dashed"></i>それまでの最高</span><span class="lg"><b style="color:var(--evo)">▲</b>この試合の後に進化（ソルバー改修）</span>`;
   if (!runs.length) { el.innerHTML = `<div class="empty">過去の試合がまだありません。</div>`; return; }
   const n = runs.length, ys = runs.map((r) => r.score);
   const yMin = Math.min(0, ...ys), yMax0 = Math.max(100, ...ys), yMax = yMax0 + (yMax0 - yMin) * 0.06;
+  const f = frame(el, niceTicks(yMin, yMax, 5));
   const X = (i) => f.x0 + ((i + 0.5) / n) * (f.x1 - f.x0), Y = (v) => f.y1 - ((v - yMin) / (yMax - yMin)) * (f.y1 - f.y0);
   let g = "";
   for (const v of niceTicks(yMin, yMax, 5)) g += `<line x1="${f.x0}" x2="${f.x1}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line2)"/><text x="${f.x0 - 6}" y="${Y(v) + 4}" text-anchor="end">${fmt(v)}</text>`;
-  g += `<line x1="${f.x0}" x2="${f.x1}" y1="${f.y1}" y2="${f.y1}" stroke="var(--ink3)"/>`;
+  g += `<line x1="${f.x0}" x2="${f.x1}" y1="${f.y1}" y2="${f.y1}" stroke="var(--line)"/>`;
   const every = Math.ceil(n / 10);
   runs.forEach((r, i) => { if (i % every === 0 || i === n - 1) g += `<text x="${X(i)}" y="${f.y1 + 16}" text-anchor="middle">${esc(runLabel(r).slice(0, 5))}</text>`; });
   let best = -Infinity, bp = "";
@@ -953,10 +1195,10 @@ function chartRuns(el) {
   runs.forEach((r, i) => {
     const sel = S.focus === r.id;
     g += `<circle data-id="${esc(r.id)}" cx="${X(i)}" cy="${Y(r.score)}" r="${sel ? 6 : 4.5}" fill="${r.isOfficial ? "var(--ink)" : "var(--panel)"}" stroke="${sel ? "var(--main)" : "var(--ink)"}" stroke-width="${sel ? 3 : 1.6}" style="cursor:pointer"><title>${esc(runLabel(r))} Room ${r.room}: ${fmt(r.score)} ${r.isOfficial ? "(公式)" : "(推定)"}</title></circle>`;
-    if (evolved(r.id)) g += `<path d="M${X(i)},${f.y1 - 2}l-5,-9h10z" fill="var(--s2)"><title>この試合の後に進化(ソルバー改修)</title></path>`;
+    if (evolved(r.id)) g += `<path d="M${X(i)},${f.y1 - 2}l-5,-9h10z" fill="var(--evo)"><title>この試合の後に進化（ソルバー改修）</title></path>`;
   });
   const rb = f.rTop + CH.ribbonH;
-  g += `<text x="${f.x0 - 6}" y="${f.rTop + 10}" text-anchor="end">main率</text><line x1="${f.x0}" x2="${f.x1}" y1="${rb}" y2="${rb}" stroke="var(--ink3)"/>`;
+  g += `<text x="${f.x0 - 6}" y="${f.rTop + 10}" text-anchor="end">main率</text><line x1="${f.x0}" x2="${f.x1}" y1="${rb}" y2="${rb}" stroke="var(--line)"/>`;
   const bw = Math.min(26, ((f.x1 - f.x0) / n) * 0.6);
   runs.forEach((r, i) => {
     const s = rateOfRun(r); if (s.mainRate === undefined || s.mainRate === null) return;
@@ -964,13 +1206,14 @@ function chartRuns(el) {
     g += `<rect x="${X(i) - bw / 2}" y="${rb - h}" width="${bw}" height="${h}" fill="var(--main)"><title>${esc(runLabel(r))} main ${pct(s.mainRate)} 平均応答 ${sec(s.avgLat)}</title></rect>`;
     g += `<rect x="${X(i) - bw / 2}" y="${rb - (CH.ribbonH - 4)}" width="${bw}" height="${CH.ribbonH - 4 - h}" fill="var(--solver-bg)"/>`;
   });
-  el.innerHTML = `<svg viewBox="0 0 ${f.W} ${f.H}" height="${f.H}" role="img" aria-label="試合ごとのスコア">${g}</svg>`;
+  el.innerHTML = `<svg viewBox="0 0 ${f.W} ${f.H}" height="${f.H}" role="img" aria-label="試合ごとの最終スコア">${g}</svg>`;
   $$("circle[data-id]", el).forEach((c) => c.addEventListener("click", () => setFocus(c.dataset.id)));
 }
 $("#legend").addEventListener("click", (e) => { const b = e.target.closest("[data-rm]"); if (b) { S.compare = S.compare.filter((x) => x !== b.dataset.rm); if (S.focus === b.dataset.rm) S.focus = "live"; mark("rail", "chart", "runhead", "table"); } });
 $("#cmTurns").addEventListener("click", () => { S.chartMode = "turns"; mark("chart"); });
 $("#cmRuns").addEventListener("click", () => { S.chartMode = "runs"; mark("chart"); });
 new ResizeObserver(() => mark("chart", "map")).observe($("#chart"));
+new ResizeObserver(() => mark("map")).observe($("#mapbox"));
 
 /* ============ 選択中の試合の見出し ============ */
 function renderRunHead() {
@@ -978,7 +1221,7 @@ function renderRunHead() {
   const fr = S.focus === "live" ? null : focusRun();
   const rr = fr ? rateOfRun(fr) : { mainRate: s?.mainRate, avgLat: s?.avgLat, ready: !!s };
   let title, off = null, est = null, d = null, room = S.st?.room;
-  if (S.focus === "live") { title = `いまの試合${S.st?.runId ? ` (${S.st.runId})` : ""}`; est = S.st?.scores.estimatedTotal ?? s?.lastScore ?? null; off = S.st?.scores.liveOfficial?.totalScore ?? null; }
+  if (S.focus === "live") { title = `いまの試合${S.st?.runId ? `（${S.st.runId}）` : ""}`; est = S.st?.scores.estimatedTotal ?? s?.lastScore ?? null; off = S.st?.scores.liveOfficial?.totalScore ?? null; }
   else {
     const r = focusRun();
     title = r ? `${runLabel(r)} の試合` : S.focus; room = r?.room; off = r?.official; est = r?.est ?? s?.lastScore ?? null;
@@ -990,12 +1233,13 @@ function renderRunHead() {
 function agentLine(r) {
   let a;
   if (r) a = r.agent; else if (S.st) a = { model: S.st.model, subModel: S.st.subModel, effort: S.st.effort, subEffort: S.st.subEffort, turnBudgetSec: S.st.turnBudgetSec };
-  if (!a) return `<span class="agent-line faint" style="flex-basis:100%">モデル情報: この試合には記録がありません</span>`;
+  if (!a) return `<span class="agent-line faint">この試合にはモデルの記録がありません</span>`;
   const m = (v) => (v ? `<code>${esc(v)}</code>` : `<span class="faint">既定</span>`);
   const ef = (v) => (v ? esc(v) : "既定");
-  const ev = r?.evolution ? ` <span class="faint">/</span> 進化後: ${r.evolution.solverChanged ? "ソルバー変更あり" : "変更なし"}${r.evolution.solverChanged ? (r.evolution.replayVerified ? "・リプレイ検証OK" : "・検証NG") : ""}${r.evolution.rolledBack ? "・巻き戻し" : ""}` : "";
+  const sep = ` <span class="faint">/</span> `;
+  const ev = r?.evolution ? `${sep}進化後: ${r.evolution.solverChanged ? "ソルバー変更あり" : "変更なし"}${r.evolution.solverChanged ? (r.evolution.replayVerified ? "・リプレイ検証OK" : "・検証NG") : ""}${r.evolution.rolledBack ? "・巻き戻し" : ""}` : "";
   const mx = a.maxLatencyMs != null ? ` / 最大 ${sec(a.maxLatencyMs)}` : "";
-  return `<span class="agent-line dim" style="flex-basis:100%">メイン ${m(a.model)} effort ${ef(a.effort)} <span class="faint">/</span> サブ ${a.subModel ? m(a.subModel) : '<span class="faint">メインと同じ</span>'} effort ${a.subEffort ? esc(a.subEffort) : "メインと同じ"} <span class="faint">/</span> 思考予算 ${a.turnBudgetSec ?? "-"}秒${a.avgLatencyMs != null ? ` <span class="faint">/</span> 平均応答 ${sec(a.avgLatencyMs)}${mx}` : ""}${ev}</span>`;
+  return `<span class="agent-line dim">メイン ${m(a.model)} effort ${ef(a.effort)}${sep}サブ ${a.subModel ? m(a.subModel) : '<span class="faint">メインと同じ</span>'} effort ${a.subEffort ? esc(a.subEffort) : "メインと同じ"}${sep}思考予算 ${a.turnBudgetSec ?? "-"}秒${a.avgLatencyMs != null ? `${sep}平均応答 ${sec(a.avgLatencyMs)}${mx}` : ""}${ev}</span>`;
 }
 
 /* ============ ターン履歴 / レポート ============ */
@@ -1015,17 +1259,18 @@ function whoCell(t) {
   if (!a && !b) return `<span class="who">-</span>`;
   const one = (p, pre) => `<span class="who ${p.cls}" title="${esc(pre + p.text + (p.full ? " : " + p.full : ""))}">${esc(p.text)}</span>`;
   if (a && b && a.text === b.text) return one(a, "CMD1/2 ");
-  const stack = (p, n) => (p ? `<div style="line-height:1.25;font-size:11.5px"><small class="faint">${n}</small> ${one(p, "CMD" + n + " ")}</div>` : "");
+  const stack = (p, n) => (p ? `<div style="line-height:1.3;font-size:11.5px"><small class="faint">${n}</small> ${one(p, "CMD" + n + " ")}</div>` : "");
   return stack(a, 1) + stack(b, 2);
 }
 function renderMain() {
   const wrap = $("#tblWrap");
-  $("#tabTurns").setAttribute("aria-selected", String(S.tab === "turns")); $("#tabReport").setAttribute("aria-selected", String(S.tab === "report"));
+  setTabs([[$("#tabTurns"), S.tab === "turns"], [$("#tabReport"), S.tab === "report"]]);
+  wrap.setAttribute("aria-label", S.tab === "turns" ? "ターン履歴" : "診断と進化レポート");
   $("#tblTools").style.display = S.tab === "turns" ? "" : "none";
   $$("[data-tf]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tf === S.tf)));
   if (S.tab === "report") return renderReport(wrap);
   const turns = getFocusTurns();
-  if (!turns.length) { wrap.innerHTML = `<div class="empty">${S.focus === "live" ? "まだターンがありません。「開始」で対戦が始まると、1手ごとにここへ記録されます。" : "ターン記録を読み込み中、または記録がありません。"}</div>`; return; }
+  if (!turns.length) { wrap.innerHTML = `<div class="empty">${S.focus === "live" ? "まだターンがありません。試合が始まると、1手ごとにここへ記録されます。" : "ターン記録を読み込み中か、記録がありません。"}</div>`; return; }
   const near = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 80;
   const rows = [];
   turns.forEach((t, i) => {
@@ -1034,7 +1279,7 @@ function renderMain() {
     if (S.tf === "solver" && who !== "solver" && who !== "mix") return;
     if (S.tf === "event" && !ev.length) return;
     const c1 = srcOf(t, 1), c2 = srcOf(t, 2), l = latencyOf(t), d = scoreDelta(turns, i), open = S.expanded.has(t.turn);
-    rows.push(`<tr class="row${S.hiTurn === t.turn ? " hi" : ""}${d < 0 ? " bad" : ""}" data-turn="${t.turn}">
+    rows.push(`<tr class="row${S.hiTurn === t.turn ? " hi" : ""}${d < 0 ? " bad" : ""}" data-turn="${t.turn}" tabindex="0" aria-expanded="${open}">
       <td class="r faint">${t.turn}</td>
       <td><span class="cmd ${c1 || "none"}" title="${c1 ? c1 + (derived(t) ? "(旧ログから推定)" : "") : ""}">${esc(t.cmd1 || "-")}</span></td>
       <td><span class="cmd ${c2 || "none"}" title="${c2 ? c2 + (derived(t) ? "(旧ログから推定)" : "") : ""}">${esc(t.cmd2 || "-")}</span></td>
@@ -1052,14 +1297,15 @@ function renderMain() {
       <dt>位置</dt><dd>(${(t.positionAfter || []).join(", ")})${t.globalPositionAfter ? ` 全体 (${t.globalPositionAfter.join(", ")})` : ""}</dd>
       ${t.breakpointReasons?.length ? `<dt>停止点</dt><dd>${esc(t.breakpointReasons.join(" / "))}</dd>` : ""}</dl></td></tr>`);
   });
-  wrap.innerHTML = `<table class="turns"><colgroup><col style="width:38px"><col style="width:62px"><col style="width:72px"><col style="width:136px"><col style="width:58px"><col style="width:56px"><col style="width:62px"><col></colgroup>
+  const ft = document.activeElement?.closest?.("tr.row")?.dataset.turn;
+  wrap.innerHTML = `<table class="turns"><colgroup><col style="width:40px"><col style="width:64px"><col style="width:72px"><col style="width:138px"><col style="width:60px"><col style="width:58px"><col style="width:64px"><col></colgroup>
     <thead><tr><th class="r">T</th><th>CMD1</th><th>CMD2</th><th>決めた主体</th><th class="r">応答</th><th class="r">増減</th><th class="r">推定</th><th>イベント / 理由</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  if (ft) $(`tr.row[data-turn="${ft}"]`, wrap)?.focus({ preventScroll: true });
   if (S.focus === "live" && near && S.hiTurn == null) wrap.scrollTop = wrap.scrollHeight;
 }
-$("#tblWrap").addEventListener("click", (e) => {
-  const tr = e.target.closest("tr.row"); if (!tr) return;
-  const n = Number(tr.dataset.turn); S.expanded.has(n) ? S.expanded.delete(n) : S.expanded.add(n); S.hiTurn = n; mark("table", "chart");
-});
+function toggleTurn(tr) { const n = Number(tr.dataset.turn); S.expanded.has(n) ? S.expanded.delete(n) : S.expanded.add(n); S.hiTurn = n; mark("table", "chart"); }
+$("#tblWrap").addEventListener("click", (e) => { const tr = e.target.closest("tr.row"); if (tr) toggleTurn(tr); });
+$("#tblWrap").addEventListener("keydown", (e) => { const tr = e.target.closest?.("tr.row"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleTurn(tr); } });
 $("#tabTurns").addEventListener("click", () => { S.tab = "turns"; mark("table"); });
 $("#tabReport").addEventListener("click", () => { S.tab = "report"; if (S.focus !== "live") fetchDiag(S.focus).catch(() => {}); mark("table"); });
 $$("[data-tf]").forEach((b) => b.addEventListener("click", () => { S.tf = b.dataset.tf; mark("table"); }));
@@ -1082,10 +1328,10 @@ function md(src) {
 function renderReport(wrap) {
   let diag = "", evo = "";
   if (S.focus === "live") diag = S.st?.diagnosisMarkdown || "";
-  else { const d = S.diag[S.focus]; if (!d) { wrap.innerHTML = `<div class="empty">読み込み中...</div>`; return; } diag = d.diagnosis; evo = d.evolution; }
+  else { const d = S.diag[S.focus]; if (!d) { wrap.innerHTML = `<div class="empty">読み込み中…</div>`; return; } diag = d.diagnosis; evo = d.evolution; }
   wrap.innerHTML = `<div class="report">
-    <div class="part"><div class="ph">診断(この試合で何が起きたか)</div>${diag ? md(diag) : `<p class="faint">診断はまだありません。試合が終わると作られます。</p>`}</div>
-    <div class="part evo"><div class="ph">進化レポート(この後のソルバー改修)</div>${evo ? md(evo) : `<p class="faint">この試合の後に進化は行われていません。</p>`}</div></div>`;
+    <div class="part"><div class="ph">診断（この試合で何が起きたか）</div>${diag ? md(diag) : `<p class="faint">診断はまだありません。試合が終わると作られます。</p>`}</div>
+    <div class="part evo"><div class="ph">進化レポート（この後のソルバー改修）</div>${evo ? md(evo) : `<p class="faint">この試合の後に進化は行われていません。</p>`}</div></div>`;
 }
 
 /* ============ いまの判断 ============ */
@@ -1102,7 +1348,7 @@ function decideBadge(st, p) {
   }
   if (p.source === "fallback") return { cls: "b-solver", text: "fallback" };
   if (p.mainAction === undefined && p.mainNote === undefined) {
-    return st.status === "claude_in_game" ? { cls: "b-wait", text: "main 思考中(solver 案)" } : { cls: "b-solver", text: "solver が決定" };
+    return st.status === "claude_in_game" ? { cls: "b-wait", text: "main 思考中（solver 案）" } : { cls: "b-solver", text: "solver が決定" };
   }
   return { cls: "b-solver", text: "solver 代行" };
 }
@@ -1110,8 +1356,8 @@ function renderDecide() {
   const st = S.st, p = st?.prediction, el = $("#decide");
   if (!st) return;
   const turns = S.liveTurns, last = turns[turns.length - 1];
-  $("#decWhen").textContent = p ? `ターン ${p.turn}  ${p.phase}` : "";
-  if (!p) { el.innerHTML = `<div class="faint">対戦が始まると、1手ごとの判断がここに出ます。</div>`; return; }
+  $("#decWhen").textContent = p ? `ターン ${p.turn} ・ ${p.phase}` : "";
+  if (!p) { el.innerHTML = `<div class="faint" style="font-size:var(--t-s)">試合が始まると、1手ごとの判断と理由がここに出ます。</div>`; return; }
   trackPrediction(p);
   const src = p.source, badge = decideBadge(st, p);
   const budget = (st.turnBudgetSec || 20) * 1000;
@@ -1126,18 +1372,18 @@ function renderDecide() {
   const plan = curPlan(), hasMain = p.mainAction !== undefined || p.mainNote !== undefined || plan;
   const planLine = plan
     ? `<div class="planline"><b>作戦目標 (${esc(plan.target[0])}, ${esc(plan.target[1])})</b>${plan.note ? ` ${esc(plan.note)}` : ""}</div>`
-    : hasMain ? `<div class="planline none">作戦なし(ソルバーの貪欲探索)</div>` : "";
+    : hasMain ? `<div class="planline none">作戦なし（ソルバーの貪欲探索）</div>` : "";
   const deleg = p.delegated ? `<div class="dline"><span class="k">サブ依頼</span>${esc(p.delegated)}</div>` : "";
   const ratio = Math.min(1, lat / budget);
   const cands = (p.topTargets || []).slice(0, 3).map((t) => `<li><span>${esc(t.tileLabel)} (${t.x},${t.y}) 距離${t.distance}</span><span class="mono">${esc(t.recommendedCmd2)}</span></li>`).join("");
   const fr = (p.nearestFrontiers || []).slice(0, 3).map((t) => `<li><span>未探索 (${t.x},${t.y}) 距離${t.distance}</span><span class="mono">${esc(t.recommendedCmd2)}</span></li>`).join("");
   const chip = (t, n) => `<span class="cmd ${srcOf(t, n) || "none"}">${esc(t["cmd" + n] || "-")}</span>`;
   el.innerHTML = `
-    <div class="now"><div class="big ${src}">${esc(p.command)}</div><div><span class="badge ${badge.cls}">${esc(badge.text)}</span><div class="faint" style="font-size:12px;margin-top:3px">確信度 ${Math.round((p.confidence ?? 0) * 100)}%</div></div></div>
+    <div class="now"><div class="big ${src}">${esc(p.command)}</div><div><span class="badge ${badge.cls}">${esc(badge.text)}</span><div class="faint" style="font-size:var(--t-s);margin-top:4px">確信度 ${Math.round((p.confidence ?? 0) * 100)}%</div></div></div>
     <p class="why">${esc(p.reason || "")}</p>${why}${planLine}${deleg}
-    <div style="margin-top:10px;font-size:12px" class="dim">メイン応答(${hasLat ? "このフェーズ" : "直前ターン"}) <b style="color:var(--ink)">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
-    <div class="meter ${lat >= budget ? "over" : ""}"><i style="width:${ratio * 100}%"></i></div>
-    ${last ? `<div class="prev"><span>直前 T${last.turn}</span>${chip(last, 1)}${chip(last, 2)}<span>${fmt(last.estimatedScoreAfter)}点</span></div>` : ""}
+    <div style="margin-top:12px;font-size:var(--t-s)" class="dim">メイン応答（${hasLat ? "このフェーズ" : "直前ターン"}） <b style="color:var(--ink)" class="mono">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
+    <div class="meter ${lat >= budget ? "over" : ""}" role="meter" aria-label="思考予算の使用" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(ratio * 100)}"><i style="width:${ratio * 100}%"></i></div>
+    ${last ? `<div class="prev"><span>直前 T${last.turn}</span>${chip(last, 1)}${chip(last, 2)}<span class="mono">${fmt(last.estimatedScoreAfter)}点</span></div>` : ""}
     ${cands || fr ? `<details class="cand"><summary>候補ルート</summary><ul>${cands}${fr}</ul></details>` : ""}`;
 }
 
@@ -1145,14 +1391,14 @@ function renderDecide() {
 function renderPrepInfo(prep, running) {
   const el = $("#prepInfo");
   el.className = "prep-info";
-  if (running || !prep.required) { el.textContent = ""; el.title = ""; return; }
-  const ver = prep.versionChanged ? ` · 公式ver変更 ${prep.knownVersion}→${prep.officialVersion}` : "";
-  if (prep.state === "preparing") { el.textContent = `準備中 Room ${prep.room}…`; }
+  if (running || !prep.required || prep.state === "failed") { el.textContent = ""; el.title = ""; return; }   // 失敗は上の知らせの帯に出す
+  const ver = prep.versionChanged ? `・公式ver変更 ${prep.knownVersion}→${prep.officialVersion}` : "";
+  if (prep.state === "preparing") { el.textContent = `Room ${prep.room} を準備中…`; }
   else if (prep.state === "ready") {
     el.classList.add(prep.versionChanged ? "warn" : "ok");
-    el.textContent = `スタンバイOK Room ${prep.room}（${Math.round((prep.durationMs || 0) / 1000)}秒・${fmtTok(prep.tokens)}）${ver}`;
+    el.textContent = `Room ${prep.room} 準備済み（${Math.round((prep.durationMs || 0) / 1000)}秒・${fmtTok(prep.tokens)}）${ver}`;
   } else if (prep.state === "failed") { el.classList.add("warn"); el.textContent = `準備できず: ${prep.error || ""}`; }
-  else { el.textContent = "未準備"; }
+  else { el.textContent = ""; }
   el.title = [el.textContent, prep.officialVersion ? `公式 ver ${prep.officialVersion}（記録 ${prep.knownVersion ?? "-"}）` : ""].filter(Boolean).join("\n");
 }
 
@@ -1161,19 +1407,28 @@ function fmtTok(n) { return n == null ? "-" : n >= 1e6 ? `${(n / 1e6).toFixed(n 
 function sumTok(u) { return u ? u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens : 0; }
 function renderUsage(u) {
   const b = $("#nTok"), sub = $("#nTokSub"), box = $("#lnTok");
-  if (!u) { b.textContent = "-"; sub.textContent = "トークン"; b.style.color = ""; return; }
-  b.textContent = fmtTok(u.totalTokens) + (u.limitTokens ? ` / ${fmtTok(u.limitTokens)}` : "");
+  if (!u) { b.textContent = "-"; sub.textContent = "トークン"; b.style.color = ""; box.title = "この試合でエージェント（メイン・サブ）が使ったトークン"; return; }
+  b.innerHTML = esc(fmtTok(u.totalTokens)) + (u.limitTokens ? `<small> /${esc(fmtTok(u.limitTokens))}</small>` : "");
   const ratio = u.limitTokens ? u.totalTokens / u.limitTokens : 0;
-  b.style.color = u.limitReached ? "#c0392b" : ratio > 0.8 ? "#b7791f" : "";
-  sub.textContent = u.limitReached ? "上限到達・ソルバーのみ" : `1回 ${fmtTok(u.lastCallInputTokens)}`;
+  b.style.color = u.limitReached ? "var(--neg)" : ratio > 0.8 ? "var(--warn)" : "";
+  sub.textContent = u.limitReached ? "トークン上限到達" : "トークン";
   box.title = [
     `合計 ${(u.totalTokens || 0).toLocaleString()} トークン（上限 ${u.limitTokens ? u.limitTokens.toLocaleString() : "なし"}）`,
     `メイン ${fmtTok(sumTok(u.main))}（${u.main?.calls ?? 0}回） / サブ ${fmtTok(sumTok(u.sub))}`,
     `メインの直近1回の入力 ${u.lastCallInputTokens == null ? "-" : u.lastCallInputTokens.toLocaleString()} トークン（毎回前の会話なしで聞くので一定）`,
     u.estimatedTimeoutTokens ? `うち予算切れで止めた分の見積もり ${u.estimatedTimeoutTokens.toLocaleString()}` : "",
-    u.total.costUsd ? `推定コスト ${u.total.costUsd.toFixed(2)}` : "",
+    u.total?.costUsd ? `推定コスト ${u.total.costUsd.toFixed(2)}` : "",
   ].filter(Boolean).join("\n");
 }
+
+/* ============ エージェントのタブ ============ */
+function showAgTab(k) {
+  S.agTab = k; save("chaser.agentTab", k);
+  setTabs([[$("#agLog"), k === "log"], [$("#agSub"), k === "sub"], [$("#agMemo"), k === "memo"]]);
+  $("#paneLog").hidden = k !== "log"; $("#paneSub").hidden = k !== "sub"; $("#paneMemo").hidden = k !== "memo";
+  if (k === "log") { logSig = ""; mark("log"); }
+}
+$$("[data-ag]").forEach((b) => b.addEventListener("click", () => showAgTab(b.dataset.ag)));
 
 /* ============ サブの仕事 ============ */
 let subSig = "";
@@ -1181,28 +1436,28 @@ function fmtElapsed(ms) { const s = Math.max(0, Math.round(ms / 1000)); return s
 const SUB_LABEL = { queued: "待機", running: "実行中", done: "完了", failed: "失敗" };
 function renderSub() {
   const tasks = S.st?.subTasks || [];
-  $("#subBlock").classList.toggle("collapsed", S.subCollapsed);
-  $("#subToggle").textContent = S.subCollapsed ? "開く" : "折りたたむ"; $("#subToggle").setAttribute("aria-expanded", String(!S.subCollapsed));
   const n = (k) => tasks.filter((t) => t.status === k).length;
-  $("#subCount").innerHTML = tasks.length ? [n("running") ? `<span style="color:var(--plan)">実行中 ${n("running")}</span>` : "", n("queued") ? `<span>待機 ${n("queued")}</span>` : "", `<span>完了 ${n("done")}</span>`, n("failed") ? `<span class="down">失敗 ${n("failed")}</span>` : ""].filter(Boolean).join("") : "";
+  const badge = $("#subBadge");
+  badge.textContent = n("running") ? `実行中 ${n("running")}` : tasks.length ? String(tasks.length) : "";
+  badge.classList.toggle("hot", n("running") > 0);
+  $("#subCount").innerHTML = tasks.length ? [n("running") ? `<span style="color:var(--plan)">実行中 ${n("running")}</span>` : "", n("queued") ? `<span>待機 ${n("queued")}</span>` : "", `<span>完了 ${n("done")}</span>`, n("failed") ? `<span class="down">失敗 ${n("failed")}</span>` : ""].filter(Boolean).join("") : `<span class="faint">依頼なし</span>`;
   const now = Date.now();
   for (const t of tasks) if (t.status === "running" && !S.subSeen[t.id]) S.subSeen[t.id] = now;
   const sig = JSON.stringify([tasks, [...S.subClosed]]);
   if (sig === subSig) return; subSig = sig;
   const box = $("#subBody");
-  if (!tasks.length) { box.innerHTML = `<div class="empty">まだ仕事はありません。メインが調査・ツール作成・ログ分析を頼むと、ここに並びます。</div>`; return; }
+  if (!tasks.length) { box.innerHTML = `<div class="empty">まだ依頼はありません。メインが調査・ツール作成・ログ分析を頼むと、ここに並びます。</div>`; return; }
   box.innerHTML = [...tasks].reverse().map((t) => {
     const fin = t.status === "done" || t.status === "failed";
     const du = fin ? (t.durationMs != null ? sec(t.durationMs) : "") : t.status === "running" ? `<span data-since="${t.id}">${fmtElapsed(now - (S.subSeen[t.id] || now))}</span>` : "";
     const open = fin && !S.subClosed.has(t.id) && t.result;
-    return `<details class="st-t ${t.status}" data-id="${t.id}" ${open ? "open" : ""}><summary><span class="st-ic ${t.status}" title="${SUB_LABEL[t.status] || t.status}"></span><span class="rq" title="${esc(t.request)}"><span class="faint">#${t.id}</span> ${esc(t.request)}</span><span class="du">${SUB_LABEL[t.status] || ""} ${du}</span></summary>${t.result ? `<pre>${esc(t.result)}</pre>` : ""}</details>`;
+    return `<details class="st-t ${t.status}" data-id="${t.id}" ${open ? "open" : ""}><summary><span class="st-ic ${t.status}" title="${SUB_LABEL[t.status] || t.status}" aria-label="${SUB_LABEL[t.status] || t.status}"></span><span class="rq" title="${esc(t.request)}"><span class="faint">#${t.id}</span> ${esc(t.request)}</span><span class="du">${SUB_LABEL[t.status] || ""} ${du}</span></summary>${t.result ? `<pre>${esc(t.result)}</pre>` : ""}</details>`;
   }).join("");
 }
 $("#subBody").addEventListener("toggle", (e) => {
   const d = e.target; if (!d.dataset || !d.dataset.id) return;
   const id = Number(d.dataset.id); if (d.open) S.subClosed.delete(id); else S.subClosed.add(id);
 }, true);
-$("#subToggle").addEventListener("click", () => { S.subCollapsed = !S.subCollapsed; save("chaser.subCollapsed", S.subCollapsed ? "1" : "0"); mark("sub"); });
 setInterval(() => {
   const now = Date.now();
   $$("[data-since]").forEach((el) => { const t0 = S.subSeen[el.dataset.since]; if (t0) el.textContent = fmtElapsed(now - t0); });
@@ -1267,9 +1522,11 @@ function playerTip(m) {
   if (m.role === "self") return `自機${m.tileId ? " " + m.tileId : ""}`;
   return `敵${m.tileId ? " " + m.tileId : "(ID不明)"}${m.lastSeenTurn != null ? `  T${m.lastSeenTurn} に目撃${isStale(m) ? "(古い情報)" : ""}` : ""}`;
 }
+/* 盤面の上の印（自機・敵・軌跡・予測ルート・作戦目標）の色。タイルの上に描くのでテーマに関係なく固定 */
+const MAPC = { self: "#2c47c2", enemy: "#d92d20", trail: "#2c47c2", path: "#ffd23f", plan: "#e0208f" };
 function drawPlayer(c, m, cell, enemy) {
   const px = m.x * cell, py = m.y * cell, cx = px + cell / 2, cy = py + cell / 2, r = Math.max(4, cell / 2 - 1);
-  const img = m.tileId ? tileImg(m.tileId) : null, col = enemy ? "#d92d20" : "#3447c9";
+  const img = m.tileId ? tileImg(m.tileId) : null, col = enemy ? MAPC.enemy : MAPC.self;
   c.save();
   if (enemy && isStale(m)) c.globalAlpha = 0.5;
   if (img) {
@@ -1289,20 +1546,21 @@ function drawPlayer(c, m, cell, enemy) {
 }
 function renderMap() {
   const map = S.st?.map, cv = $("#map"), info = $("#mapinfo");
-  $("#mapSrc").textContent = map ? `${typeof map.updatedTurn === "number" ? `更新: T${map.updatedTurn}・` : ""}${map.source === "web_map" ? "Webマップ" : "自前マップ"}` : "";
+  $("#mapSrc").textContent = map ? `${typeof map.updatedTurn === "number" ? `T${map.updatedTurn} 時点・` : ""}${map.source === "web_map" ? "Webマップ" : "自前マップ"}` : "";
   if (!map || !map.grid?.length) {
-    cv.hidden = true; info.innerHTML = `<span class="faint">盤面はまだありません。設定の「選択ルームのマップを取得」か、開始すると表示されます。</span>`; return;
+    cv.hidden = true; info.innerHTML = `<span class="faint">盤面はまだありません。試合を始めるか、設定 › 操作 の「マップを取得」で表示します。</span>`; return;
   }
   cv.hidden = false;
-  const w = map.width, h = map.height, avail = $("#mapbox").clientWidth - 28 || 296;
-  const cell = Math.max(6, Math.min(24, Math.floor(Math.min(avail / w, 340 / h))));
+  const w = map.width, h = map.height, avail = $("#mapbox").clientWidth - 30 || 296;
+  const maxH = innerWidth <= 900 ? Math.max(300, innerHeight * 0.6) : Math.max(300, Math.min(440, innerHeight * 0.42));
+  const cell = Math.max(5, Math.min(26, Math.floor(Math.min(avail / w, maxH / h))));
   const dpr = 1; cv.width = w * cell * dpr; cv.height = h * cell * dpr; cv.style.width = w * cell + "px"; cv.style.height = h * cell + "px";
   const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.clearRect(0, 0, cv.width, cv.height);
   c.fillStyle = cssVar("--unk"); c.fillRect(0, 0, cv.width, cv.height);
   const hatch = cssVar("--ink3");
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const v = map.grid[y]?.[x]; const px = x * cell, py = y * cell;
-    if (v === null || v === undefined) { c.strokeStyle = hatch; c.globalAlpha = .35; c.lineWidth = 1; c.beginPath(); c.moveTo(px + 1, py + cell - 1); c.lineTo(px + cell - 1, py + 1); c.stroke(); c.globalAlpha = 1; continue; }
+    if (v === null || v === undefined) { c.strokeStyle = hatch; c.globalAlpha = .3; c.lineWidth = 1; c.beginPath(); c.moveTo(px + 1, py + cell - 1); c.lineTo(px + cell - 1, py + 1); c.stroke(); c.globalAlpha = 1; continue; }
     const img = tileImg(v);
     if (img) c.drawImage(img, px, py, cell, cell);
     else {
@@ -1312,14 +1570,14 @@ function renderMap() {
   }
   const mid = (p) => [p[0] * cell + cell / 2, p[1] * cell + cell / 2];
   if (map.trail?.length > 1) { c.strokeStyle = "rgba(255,255,255,.85)"; c.lineWidth = Math.max(4, cell * .38); c.lineJoin = "round"; c.beginPath(); map.trail.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke();
-    c.strokeStyle = "#3447c9"; c.lineWidth = Math.max(2, cell * .22); c.beginPath(); map.trail.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke(); }
+    c.strokeStyle = MAPC.trail; c.lineWidth = Math.max(2, cell * .22); c.beginPath(); map.trail.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke(); }
   if (map.plannedPath?.length) { c.setLineDash([4, 3]); c.strokeStyle = "#111"; c.lineWidth = Math.max(4, cell * .38); c.beginPath(); map.plannedPath.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke();
-    c.strokeStyle = "#ffd23f"; c.lineWidth = Math.max(2, cell * .22); c.beginPath(); map.plannedPath.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke(); c.setLineDash([]); }
-  if (map.nextLandingPos) { const [x, y] = map.nextLandingPos; c.strokeStyle = "#ffd23f"; c.lineWidth = 2; c.strokeRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2); }
+    c.strokeStyle = MAPC.path; c.lineWidth = Math.max(2, cell * .22); c.beginPath(); map.plannedPath.forEach((p, i) => { const [a, b] = mid(p); i ? c.lineTo(a, b) : c.moveTo(a, b); }); c.stroke(); c.setLineDash([]); }
+  if (map.nextLandingPos) { const [x, y] = map.nextLandingPos; c.strokeStyle = MAPC.path; c.lineWidth = 2; c.strokeRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2); }
   const pls = playersOf(map), self = pls.find((q) => q.role === "self");
   const pc = planCell(map);
   if (pc) {
-    const [x, y] = pc, px = x * cell, py = y * cell, pk = "#e0208f";
+    const [x, y] = pc, px = x * cell, py = y * cell, pk = MAPC.plan;
     c.fillStyle = "rgba(224,32,143,.28)"; c.fillRect(px, py, cell, cell);
     c.strokeStyle = "#fff"; c.lineWidth = 4; c.strokeRect(px + 1, py + 1, cell - 2, cell - 2);
     c.strokeStyle = pk; c.lineWidth = 2; c.strokeRect(px + 1, py + 1, cell - 2, cell - 2);
@@ -1329,7 +1587,15 @@ function renderMap() {
   for (const m of pls.filter((q) => q.role === "enemy")) drawPlayer(c, m, cell, true);
   for (const m of pls.filter((q) => q.role === "self")) drawPlayer(c, m, cell, false);
   S.mapHit = { cell, w, h, players: pls };
-  info.innerHTML = `<span>${w} × ${h}</span>${self ? `<span>自機 (${self.x}, ${self.y})</span>` : ""}${pls.some((q) => q.role === "enemy") ? `<span style="color:var(--neg)">赤 敵 ${pls.filter((q) => q.role === "enemy").length}</span>` : ""}<span>青線 軌跡</span><span>黄点線 予測ルート</span>${pc ? `<span style="color:var(--plan)">桃 ✕ 作戦目標 (${pc.join(", ")})</span>` : curPlan() ? `<span class="faint">作戦目標 (${curPlan().target.join(", ")}) は表示範囲外</span>` : ""}`;
+  const enemies = pls.filter((q) => q.role === "enemy").length;
+  const sw = (style, label, cls = "") => `<span class="sw"><i class="${cls}" style="${style}"></i>${label}</span>`;
+  cv.setAttribute("aria-label", `盤面 ${w}×${h}${self ? `、自機 (${self.x}, ${self.y})` : ""}${enemies ? `、敵 ${enemies}` : ""}`);
+  info.innerHTML = `<span class="mono">${w}×${h}</span>${self ? `<span>自機 <span class="mono">(${self.x}, ${self.y})</span></span>` : ""}`
+    + sw(`background:${MAPC.self}`, "自機", "dot2")
+    + (enemies ? sw(`background:${MAPC.enemy}`, `敵 ${enemies}`, "dot2") : "")
+    + sw(`border-color:${MAPC.trail}`, "軌跡")
+    + sw(`border-color:#c9a400`, "予測ルート", "dash")
+    + (pc ? sw(`border-color:${MAPC.plan}`, `作戦目標 <span class="mono">(${pc.join(", ")})</span>`) : curPlan() ? `<span class="faint">作戦目標 (${curPlan().target.join(", ")}) は表示範囲外</span>` : "");
 }
 {
   const cv = $("#map"), tip = $("#maptip");
@@ -1339,7 +1605,7 @@ function renderMap() {
     if (x < 0 || y < 0 || x >= map.width || y >= map.height) { tip.hidden = true; return; }
     const v = map.grid[y]?.[x], pm = (S.mapHit.players || []).filter((q) => q.x === x && q.y === y); tip.hidden = false;
     tip.textContent = `(${x}, ${y}) ${pm.length ? pm.map(playerTip).join(" / ") : tileName(v)}`;
-    const box = $("#mapbox").getBoundingClientRect(); tip.style.left = Math.min(e.clientX - box.left + 10, box.width - tip.offsetWidth - 4) + "px"; tip.style.top = (e.clientY - box.top - 26) + "px";
+    const box = $("#mapbox").getBoundingClientRect(); tip.style.left = Math.max(0, Math.min(e.clientX - box.left + 10, box.width - tip.offsetWidth - 4)) + "px"; tip.style.top = (e.clientY - box.top - 28) + "px";
   });
   cv.addEventListener("mouseleave", () => { tip.hidden = true; });
 }
@@ -1348,21 +1614,19 @@ function renderMap() {
 let logSig = "";
 function renderLog() {
   const list = (S.st?.claudeStream || []).filter((e) => S.lf === "all" || e.context === S.lf);
-  $("#logCount").textContent = `${list.length} 件`;
+  $("#logCount").textContent = list.length ? String(list.length) : "";
   $$("[data-lf]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lf === S.lf)));
-  $("#logBlock").classList.toggle("collapsed", S.logCollapsed);
-  $("#logToggle").textContent = S.logCollapsed ? "開く" : "折りたたむ"; $("#logToggle").setAttribute("aria-expanded", String(!S.logCollapsed));
+  if (S.agTab !== "log") return;
   const sig = S.lf + "|" + list.length + "|" + (list[list.length - 1]?.id ?? 0); if (sig === logSig) return; logSig = sig;
   const box = $("#log"); const near = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
   const opened = new Set($$("details[open]", box).map((d) => d.dataset.id));
   box.innerHTML = list.length ? list.map((e) => {
     const first = (e.title ? e.title + ": " : "") + e.content.replace(/\s+/g, " ").slice(0, 140);
-    return `<details class="lg-ev ${e.kind.startsWith("tool") ? "tool" : ""}" data-id="${e.id}" ${opened.has(String(e.id)) ? "open" : ""}><summary><span class="t">${esc((e.timestamp || "").slice(11, 19))}</span><span class="k ${e.kind}">${esc({ thinking: "思考", text: "発言", tool_use: "ツール", tool_result: "結果", system: "システム", error: "エラー" }[e.kind] || e.kind)}</span><span class="c">${esc(first)} <span class="ctx">${e.context === "evolution" ? "進化" : e.context === "in_game" ? "" : ""}</span></span></summary><pre>${esc(e.content)}</pre></details>`;
+    return `<details class="lg-ev ${e.kind.startsWith("tool") ? "tool" : ""}" data-id="${e.id}" ${opened.has(String(e.id)) ? "open" : ""}><summary><span class="t">${esc((e.timestamp || "").slice(11, 19))}</span><span class="k ${e.kind}">${esc({ thinking: "思考", text: "発言", tool_use: "ツール", tool_result: "結果", system: "システム", error: "エラー" }[e.kind] || e.kind)}</span><span class="c">${e.context === "evolution" ? `<span class="ctx">進化</span> ` : ""}${esc(first)}</span></summary><pre>${esc(e.content)}</pre></details>`;
   }).join("") : `<div class="empty">この種別のログはまだありません。</div>`;
   if (near) box.scrollTop = box.scrollHeight;
 }
 $$("[data-lf]").forEach((b) => b.addEventListener("click", () => { S.lf = b.dataset.lf; logSig = ""; mark("log"); }));
-$("#logToggle").addEventListener("click", () => { S.logCollapsed = !S.logCollapsed; save("chaser.logCollapsed", S.logCollapsed ? "1" : "0"); mark("log"); });
 
 /* ============ 設定ダイアログ ============ */
 const dlg = $("#dlg"); let envRows = [], envSaved = new Map(), envSections = [];
@@ -1372,10 +1636,10 @@ $("#btnSettings").addEventListener("click", () => { dlg.showModal(); loadEnv(); 
 function renderNav() {
   const count = (id) => envRows.filter((e) => e.section === id).length;
   const changed = (id) => envRows.some((e) => e.section === id && isChanged(e));
-  $("#dlgNav").innerHTML = `<div class="grp">操作・方針</div>`
+  $("#dlgNav").innerHTML = `<div class="gl">操作・方針</div>`
     + [["ops", "操作"], ["policy", "作戦方針"]].map(([id, t]) => `<button type="button" data-pane="${id}" aria-current="${dlgPane === id}">${t}</button>`).join("")
-    + `<div class="grp">環境設定 (.env)</div>`
-    + envSections.filter((s) => count(s.id) > 0 || s.id === "other").map((s) => `<button type="button" data-pane="env:${s.id}" aria-current="${dlgPane === "env:" + s.id}">${esc(s.title)}${changed(s.id) ? '<i class="dot" title="未保存の変更"></i>' : `<span class="n">${count(s.id)}</span>`}</button>`).join("");
+    + `<div class="gl">環境設定（.env）</div>`
+    + envSections.filter((s) => count(s.id) > 0 || s.id === "other").map((s) => `<button type="button" data-pane="env:${s.id}" aria-current="${dlgPane === "env:" + s.id}">${esc(s.title)}${changed(s.id) ? '<i class="chg" title="未保存の変更"></i>' : `<span class="n">${count(s.id)}</span>`}</button>`).join("");
 }
 function showPane(id) {
   dlgPane = id; save("dlgPane", id);
@@ -1447,8 +1711,8 @@ function renderEnv() {
   $("#envTitle").textContent = envSections.find((s) => s.id === sec)?.title || "その他";
   const rows = envRows.map((e, i) => [e, i]).filter(([e]) => e.section === sec);
   const custom = (e) => e.description === "カスタム環境変数";
-  $("#envBody").innerHTML = rows.length === 0 ? `<p class="hint-p">項目はありません。</p>` : rows.map(([e, i]) => `<div class="envrow${isChanged(e) ? " changed" : ""}">${custom(e) ? `<input data-k="${i}" value="${esc(e.key)}" placeholder="KEY" />` : `<span class="mono" style="font-size:12px">${esc(e.key)}</span>`}
-      <input data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" />${custom(e) ? `<button class="btn ghost" data-del="${i}" type="button" aria-label="削除">×</button>` : e.secret ? `<button class="btn ghost" data-sec="${i}" type="button">表示</button>` : "<span></span>"}
+  $("#envBody").innerHTML = rows.length === 0 ? `<p class="hint-p">項目はありません。</p>` : rows.map(([e, i]) => `<div class="envrow${isChanged(e) ? " changed" : ""}">${custom(e) ? `<input data-k="${i}" value="${esc(e.key)}" placeholder="KEY" aria-label="変数名" spellcheck="false" />` : `<label class="key-n" for="envv${i}">${esc(e.key)}</label>`}
+      <input id="envv${i}" data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" ${custom(e) ? `aria-label="値"` : ""} spellcheck="false" autocomplete="off" />${custom(e) ? `<button class="btn quiet" data-del="${i}" type="button" aria-label="この変数を削除">×</button>` : e.secret ? `<button class="btn quiet" data-sec="${i}" type="button" aria-label="${esc(e.key)} を表示">表示</button>` : "<span></span>"}
       ${e.description && !custom(e) ? `<div class="d">${esc(e.description)}</div>` : ""}</div>`).join("");
 }
 $("#envBody").addEventListener("input", (e) => {
@@ -1469,11 +1733,11 @@ $("#envSave").addEventListener("click", async () => {
     const d = await (await fetch("/api/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) })).json();
     $("#envMsg").textContent = d.ok ? "保存しました。実行中のプロセスにも反映済みです" : `保存できません: ${d.error || ""}`;
     if (d.ok) await loadEnv();
-  } catch { $("#envMsg").textContent = "保存に失敗しました"; }
+  } catch { $("#envMsg").textContent = "保存できませんでした（通信エラー）"; }
 });
 async function op(url, body, label) {
-  $("#opMsg").textContent = `${label}...`;
-  try { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }); const d = await r.json(); $("#opMsg").textContent = `${label}: ${d.ok === false ? "失敗" : "完了"}(詳細は思考ログ)`; } catch { $("#opMsg").textContent = `${label}: 通信エラー`; }
+  $("#opMsg").textContent = `${label}…`;
+  try { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }); const d = await r.json(); $("#opMsg").textContent = `${label}: ${d.ok === false ? "失敗" : "完了"}（詳細は思考ログ）`; } catch { $("#opMsg").textContent = `${label}: 通信エラー`; }
 }
 $("#btnPreview").addEventListener("click", () => op("/api/action/preview-map", { room: Number($("#selRoom").value) || S.st?.room }, "マップ取得"));
 $("#btnVerify").addEventListener("click", () => op("/api/action/verify-solver", {}, "ソルバー検証"));
@@ -1509,7 +1773,8 @@ function initCompare() {
 }
 function connect() {
   const es = new EventSource("/api/events");
-  es.addEventListener("state", (e) => applyState(JSON.parse(e.data)));
+  es.addEventListener("open", () => { if (S.disconnected) { S.disconnected = false; mark("head"); } });
+  es.addEventListener("state", (e) => { S.disconnected = false; applyState(JSON.parse(e.data)); });
   es.addEventListener("map", (e) => { if (S.st) { S.st.map = JSON.parse(e.data); mark("map"); } });
   es.addEventListener("prediction", (e) => { if (S.st) { S.st.prediction = JSON.parse(e.data); trackPrediction(S.st.prediction); mark("decide", "map"); } });
   es.addEventListener("scores", (e) => { if (S.st) { S.st.scores = JSON.parse(e.data); mark("head", "rail", "runhead"); } });
@@ -1522,9 +1787,10 @@ function connect() {
   es.addEventListener("claude", (e) => {
     if (!S.st) return; const ev = JSON.parse(e.data); S.st.claudeStream = [...(S.st.claudeStream || []).slice(-199), ev]; mark("log");
   });
-  es.onerror = () => { $("#statusLabel").textContent = "サーバに再接続中"; $("#dot").className = "dot warn"; };
+  es.onerror = () => { S.disconnected = true; $("#statusLabel").textContent = "サーバに再接続中"; $("#dot").className = "dot warn"; mark("head"); };
 }
 (async function boot() {
+  showAgTab(S.agTab);
   connect();
   await fetchRuns();
   try { const st = await jget("/api/state"); if (!S.st) applyState(st); } catch {}
