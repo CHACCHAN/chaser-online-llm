@@ -8,6 +8,7 @@
 - モデル: メインは `--model` / `LLM_MODEL_NAME`。`ANTHROPIC_MODEL` と `sonnet` / `opus` の各エイリアスを選択中のモデルに差し替え、ゲートウェイにない既定モデルが裏で呼ばれないようにする。サブは `--sub-model` / `LLM_SUB_MODEL_NAME`（空ならメインと同じ）で、`haiku` 系エイリアスと `CLAUDE_CODE_SUBAGENT_MODEL` に入る。
 - effort: メインは `--effort` / `LLM_MODEL_EFFORT`、サブは `--sub-effort` / `LLM_SUB_MODEL_EFFORT`（空ならメインと同じ）。
 - 起動引数の共通部分: `-p --output-format stream-json --verbose --dangerously-skip-permissions --disable-slash-commands`、さらに `--model`, `--effort`。全て `--input-format stream-json` で起動する。試合中のメインは `--system-prompt <main.md＋方針＋strategy.md> --tools "" --no-session-persistence`（Claude Code 既定のシステムプロンプトとツール定義を送らない）、サブは `--append-system-prompt <sub.md> --no-session-persistence`。
+- **説明書**: `CLAUDE.md` は開発者向けなので読ませない（`CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`）。エージェント向けの説明書 `agent/AGENTS.md`（役割・触ってよい範囲・CLI・スコア規則）を、全セッションのシステムプロンプトの末尾に入れる（`ClaudeSession.buildArgs`）。
 - モデル一覧は `GET /api/models`（`src/agent/models.ts`）でゲートウェイの `/v1/models` から取る。
 
 ## 2. セッション (`src/agent/claude-session.ts`)
@@ -77,7 +78,7 @@
 - 依頼の状態は `queued` / `running` / `done` / `failed` で、ダッシュボードの `subTasks` に出る。
 - 完了した結果は `takeFinished()` で一度だけメインに渡る（次のフェーズのメッセージ、または試合後の `postMatch` に含まれる）。メインは結果を待たない。
 - 仕事の例: ログ分析、未知タイルの得点推定と `knowledge/tiles.json` への登録、公式サイトの調査、素材収集、`agent/tools/` のツール作成と動作確認。
-- 制約（`prompts/sub.md`）: `src/`（ソルバー含む）・`agent/prompts/`・`agent/policies/`・`.env`・`CLAUDE.md` は編集しない。試合開始時にスナップショットを取り、試合終了時に変更を元に戻す（`edit-guard.ts`）。CHaserOnline サーバにはログインしない。`.env` の値を出力・送信しない。
+- 制約（`prompts/sub.md`）: `src/`（ソルバー含む）・`agent/prompts/`・`agent/policies/`・`agent/AGENTS.md`・`agent/REVIEW.md`・`.env`・`CLAUDE.md` は編集しない。試合開始時にスナップショットを取り、試合終了時に変更を元に戻す（`edit-guard.ts`）。CHaserOnline サーバにはログインしない。`.env` の値を出力・送信しない。
 - 旧方式（Claude Code 内蔵の `--agents` によるサブ定義）は廃止した。
 
 ## 5. 試合後の進化 (`src/evolve.ts`)
@@ -89,6 +90,7 @@
 5. 検証に失敗したら退避したコードへ戻す（自動ロールバック）。
 6. 最高得点を出した試合のソルバー（改修前の、実際に試合で使ったもの）は、試合直後に runner が `var/best-solvers/room<N>.ts` にコピーし、`room-profiles.json` を更新する（振り返りの有無・検証結果に関係なく）。
 7. `summary.json` に `evolution: { solverChanged, replayVerified, rolledBack }` を追記し、`evolution-report.md` を書く。
+8. **ハーネスへのレビュー**（`AGENT_REVIEW`）: 振り返りと同じ会話（経験を持ったまま）で、ハーネスの使いにくかった点・不具合らしきもの・欲しい機能・対応済みの確認を聞く（`reviewHarness`、上限 `AGENT_REVIEW_TIMEOUT_SEC`）。レビュー中の編集はソルバーも含めて元に戻す。返答は `agent/REVIEW.md`（新しい順、`AGENT_REVIEW_KEEP` 件まで）と `runs/<runId>/harness-review.md` に入る。開発者は開発前に読み、対応したら `[対応済み]` を付ける。
 
 ## 6. リプレイ検証の意味 (`src/evolution/replay-verifier.ts`)
 

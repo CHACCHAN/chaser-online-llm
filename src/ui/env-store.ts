@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { noteUserEdit } from "../evolution/edit-guard";
 import path from "node:path";
-import { SETTINGS, type SettingGroup } from "../settings";
+import { SETTINGS, type SettingGroup, settingSection } from "../settings";
 
 const PROJECT_ROOT = path.resolve(import.meta.dir, "../..");
 const ENV_PATH = path.join(PROJECT_ROOT, ".env");
@@ -11,6 +11,8 @@ export interface EnvEntry {
   value: string;
   group: SettingGroup;
   secret: boolean;
+  /** 設定画面の分類（SETTING_SECTIONS の id） */
+  section: string;
   description: string;
 }
 
@@ -71,6 +73,7 @@ export function loadProjectEnvEntries(): EnvEntry[] {
       key,
       value: val,
       group: meta.group,
+      section: settingSection(key),
       secret: meta.secret,
       description: meta.description,
     });
@@ -82,6 +85,7 @@ export function loadProjectEnvEntries(): EnvEntry[] {
       key,
       value: val,
       group: "other",
+      section: "other",
       secret: /KEY|PASS|SECRET|TOKEN/i.test(key),
       description: "カスタム環境変数",
     });

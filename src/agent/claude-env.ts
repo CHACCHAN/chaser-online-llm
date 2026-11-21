@@ -67,6 +67,8 @@ export function buildClaudeEnv(settings: ClaudeModelSettings): Record<string, st
       ? { ANTHROPIC_DEFAULT_SONNET_MODEL: settings.model, ANTHROPIC_DEFAULT_OPUS_MODEL: settings.model }
       : {}),
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+    // CLAUDE.md は開発者向け。エージェントには agent/AGENTS.md を渡す（claude-session.ts）
+    CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1",
   };
 }
 

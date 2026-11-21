@@ -78,6 +78,8 @@ export class MainAgent {
   private lastEst: number | null = null;
   /** 次のフェーズ用に先に起動しておくプロセス */
   private next: ClaudeSession | null = null;
+  /** 振り返りのセッション（このあとハーネスのレビューを同じ会話で聞くため、すぐには閉じない） */
+  private postSession: ClaudeSession | null = null;
   private mainUsage: UsageTotals = emptyUsage();
   private lastCallInputTokens: number | null = null;
   /** 予算切れで止めた問い合わせの見積もり分（実際の使用量は不明） */
@@ -107,10 +109,11 @@ export class MainAgent {
 
   usage(): AgentUsageReport {
     const sub = this.sub.usage;
-    const total = addUsage(this.mainUsage, sub);
+    const main = this.postSession ? addUsage(this.mainUsage, this.postSession.usage) : this.mainUsage;
+    const total = addUsage(main, sub);
     const limitTokens = numSetting("AGENT_MATCH_TOKEN_LIMIT", { min: 0 });
     return {
-      main: { ...this.mainUsage },
+      main: { ...main },
       sub,
       total,
       totalTokens: totalTokens(total),
@@ -185,7 +188,7 @@ export class MainAgent {
       context: "evolution",
       label: "main",
       // main.md は試合中用（ツールなし・毎フェーズ新規）なので渡さない。役割とルールは下の依頼文に書く
-      appendSystemPrompt: "あなたは CHaserOnline003 攻略プロジェクトのメインエージェント。試合後の振り返りとソルバー改修を行う。ツールを使ってよい。プロジェクトの説明は CLAUDE.md、試合中の役割は agent/prompts/main.md にある。",
+      appendSystemPrompt: "あなたは CHaserOnline003 攻略プロジェクトのメインエージェント。試合後の振り返りとソルバー改修を行う。ツールを使ってよい。試合中の役割は agent/prompts/main.md にある。",
     });
     session.start();
     const subResults = this.formatSubResults();
@@ -215,15 +218,65 @@ export class MainAgent {
       ].join("\n"),
       timeoutMs,
     );
-    await session.stop();
-    this.mainUsage = addUsage(this.mainUsage, session.usage);
+    if (res.status === "ok") {
+      // 振り返りの経験を持ったまま、このあとハーネスのレビューを聞く（reviewHarness）
+      this.postSession = session;
+    } else {
+      session.kill();
+      this.mainUsage = addUsage(this.mainUsage, session.usage);
+    }
     this.publish();
     return res;
+  }
+
+  /**
+   * 振り返りのあと、ハーネス（このプロジェクト）の使い勝手・不具合・欲しい機能を聞く。返答は agent/REVIEW.md に入る（evolve.ts）。
+   * 振り返りのセッションが生きていればその続きで聞く（試合と改修の経験を持っている）。無ければ新しいセッションで聞く。
+   */
+  async reviewHarness(info: { runDir: string; reverted: string[]; verificationOk: boolean; rolledBack: boolean }, timeoutMs: number): Promise<string | null> {
+    let session = this.postSession;
+    this.postSession = null;
+    if (!session?.alive) {
+      session?.kill();
+      session = new ClaudeSession({ ...this.settings, context: "evolution", label: "review", tools: "Read,Glob,Grep", noSessionPersistence: true });
+      session.start();
+    }
+    const fresh = session.usage.calls === 0;
+    const res = await session.ask(
+      [
+        "[HARNESS REVIEW] 振り返りお疲れさま。最後に、あなた（とサブ・試合中の毎フェーズのあなた）が使った**ハーネス（このプロジェクトの仕組み）**をレビューしてほしい。開発者が次の開発の参考にする。",
+        fresh ? `この試合のログ: ${info.runDir}（turns.jsonl の main の判断理由・MEMO.md・ASK_SUB.md・evolution-report.md）。試合中のあなたへの指示は agent/prompts/main.md、サブへの指示は agent/prompts/sub.md。` : "",
+        `改修の結果: リプレイ検証 ${info.verificationOk ? "合格" : "不合格"}${info.rolledBack ? "（ソルバーは元に戻された）" : ""}${info.reverted.length > 0 ? ` / 編集範囲外として元に戻されたファイル: ${info.reverted.join(", ")}` : ""}`,
+        "これまでのレビューは agent/REVIEW.md にある（同じ指摘の繰り返しは避け、`[対応済み]` の項目が本当に直ったかも確かめる）。このレビューではファイルを編集しない（読むだけ。編集しても元に戻される）。",
+        "",
+        "観点（ゲームの作戦ではなく、仕組みについて）:",
+        "- 毎フェーズ渡される情報（盤面・候補・メモ・直近の経過・サブのTODO）に足りないもの・多すぎるもの・分かりにくいもの",
+        "- 返答形式・時間予算・メモの上限・ソルバーとの役割分担で困ったこと",
+        "- サブへの依頼・ツール・CLI・ログ・ドキュメント（AGENTS.md 等）の使いにくさ、不具合らしき挙動",
+        "- あれば強くなれる機能・情報",
+        "",
+        "返答はレビュー本文だけを Markdown で（前置き不要、1500字以内）。次の見出しを使い、各項目は1〜2行で、根拠（ターン番号・ファイル）を添える。無い見出しは省く:",
+        "### 使いにくかった点\n### 不具合らしきもの\n### 欲しい機能・改善案\n### 対応済みの確認",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      timeoutMs,
+    );
+    if (res.status === "ok") await session.stop();
+    else session.kill();
+    this.mainUsage = addUsage(this.mainUsage, session.usage);
+    this.publish();
+    return res.status === "ok" && res.text.trim() ? res.text.trim() : null;
   }
 
   async end(): Promise<void> {
     this.next?.kill();
     this.next = null;
+    if (this.postSession) {
+      this.mainUsage = addUsage(this.mainUsage, this.postSession.usage);
+      this.postSession.kill();
+      this.postSession = null;
+    }
     this.started = false;
     await this.sub.stop();
     this.publish();
@@ -514,7 +567,7 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
   signal?.addEventListener("abort", () => session.kill(), { once: true });
   const policy = activePolicyPrompt();
   const officialLine = official.changed
-    ? `**公式のバージョンが変わった（記録 ${official.knownVersion} → 公式 ${official.version}）。** アイテムID・コマンド・ルールが変わった可能性がある。資料（CLAUDE.md・knowledge/）の内容をうのみにせず、試合中に未知のタイル・通らないコマンド・得点のずれに注意するようメモに書け。`
+    ? `**公式のバージョンが変わった（記録 ${official.knownVersion} → 公式 ${official.version}）。** アイテムID・コマンド・ルールが変わった可能性がある。資料（AGENTS.md・knowledge/）の内容をうのみにせず、試合中に未知のタイル・通らないコマンド・得点のずれに注意するようメモに書け。`
     : official.version
       ? `公式のバージョン: ${official.version}（記録と一致）`
       : `公式のバージョンを確認できなかった（${official.error ?? "不明"}）`;

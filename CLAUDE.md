@@ -1,58 +1,35 @@
-# CLAUDE.md — CHaserOnline003 自律プレイエージェント
+# CLAUDE.md — CHaserOnline003 自律プレイハーネス（開発者向け）
 
-CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/.bin/claude`) を**ハーネスとして**使ってプレイし、最高得点を更新し続ける実験プロジェクト。
-モデルは `LLM_API_URL` のゲートウェイから選ぶ（`GET /api/models`）。通常の Claude Code の使い方（対話開発）はこのハーネスでは行わない。
+このファイルは**このプロジェクトを開発する時**（Claude Code で対話開発する時）の説明書。
+ハーネスが起動するエージェントのセッションには渡さない（`CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`）。エージェント向けの説明は **`agent/AGENTS.md`** に書き、ハーネスが全セッションのシステムプロンプトに入れる。
 
-- **試合中（メイン）**: **メインエージェント（作戦係＋例外係）**が毎フェーズ（前の会話なし・ツールなしの使い捨て `claude -p`。引き継ぎはメモと直近の経過）盤面とソルバー候補を見て、`continue`（作戦のまま）/ `plan`（目標マスを変える）/ `command`（手を直接指定）を返す（手順は `agent/prompts/main.md`）。1手先の計算はソルバーが行う。
-- **試合前（準備）**: WebUI の「準備」で、ルームに入らずにメインが読むだけのツールでルール・このルームの過去の試合・作戦方針を調べ、試合開始時のメモを作る。公式のバージョンも確認する。スタンバイOK になって初めて「開始」で入室できる（`agent/prompts/prep.md`、`AGENT_PREP`）。連続モードの次の試合は入室前に自動で準備し直す。
-- **試合中（サブ）**: メインの `delegate` で依頼された調査・ツール作成は、依頼ごとに新しいセッション（SubWorker、`agent/prompts/sub.md`）が裏で処理する。結果は後のターンでメインに届き、メインは待たない。
-- **臨時ツール**: 試合中に作るツールは `@temporary` 付きで `agent/tools/` に置く。恒久化（ソルバー組込み・正式ツール化・削除）は試合後にメインが決める。
-- **時間切れ**: 思考予算（既定 20 秒）を超えた・応答が不正なフェーズは、ソルバー手が自動送信される。
-- **試合後**: メインエージェント（ツールありの新セッション）が振り返り、`src/solver/active-solver.ts` を改修する。リプレイ検証に失敗したら自動ロールバック。
+## プロジェクト
+CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/.bin/claude`) を**ハーネスとして**使ってプレイし、最高得点を更新し続ける実験プロジェクト。モデルは `LLM_API_URL` のゲートウェイから選ぶ（`GET /api/models`）。
+
+- **準備**: WebUI の「準備」ボタン（押すと準備中→終わると「開始」に変わる）。ルームに入らずにメインが読むだけのツールでルール・過去の試合・作戦方針を調べ、最初のメモを作る。公式のバージョンも確認する（`agent/prompts/prep.md`、`AGENT_PREP`）。連続モードの次の試合は入室前に自動で準備し直す。
+- **試合中（メイン）**: 毎フェーズ使い捨ての `claude -p`（前の会話なし・ツールなし）。引き継ぎはメモ・直近の経過・全体マップ。`continue` / `plan` / `command` を返す（`agent/prompts/main.md`）。直接指定が罠・通行不可ならハーネスが却下。
+- **試合中（サブ）**: メインの `delegate` を依頼ごとに新しいセッションで処理（`agent/prompts/sub.md`）。
+- **試合後**: メイン（ツールあり）が振り返り、`src/solver/active-solver.ts` を改修（リプレイ検証に失敗したら自動ロールバック）。その後、ハーネスの使い勝手をレビューし、`agent/REVIEW.md` に追記される。
 - **起動**: `bun run start`（Web ダッシュボード）／ `bun run play --room N`（WebUI なしで1試合）。
-- **作戦方針**: ユーザーが `agent/policies/<名前>.md`（WebUI の設定からも編集可）に書き、`AGENT_POLICY` で選ぶ。メインはこれを最優先で守る。
-- **設定**: 全て `.env` から読む。項目・既定値・説明は `src/settings.ts` に一本化（コードに直書きしない）。追加したら `bun scripts/gen-env-example.ts`。
-- **セットアップ・自己レビュー**: `agent/SETUP.md` → `agent/SELF_CHECK.md`（実施後は両方を更新する）。
 - 詳細仕様: [docs/README.md](docs/README.md)
+
+## 開発のルール
+- **エージェントの声を参考にする**: 開発を始める前に `agent/REVIEW.md`（試合後にエージェントが書いた使い勝手の指摘・要望）を読み、対応したものは開発者が「対応済み」に印を付ける。
+- **設定**: 全て `.env` から読む。項目・既定値・説明は `src/settings.ts` に一本化（コードに直書きしない）。追加したら `bun scripts/gen-env-example.ts`。
+- **パス**: `src/paths.ts` に集約。
+- **エージェントの範囲**: エージェントが読み書きするのは `agent/`（手順書・ツール）・`knowledge/`・`var/`・ソルバーだけ。試合後の振り返り・試合中のサブがそれ以外を変えると `src/evolution/edit-guard.ts` が元に戻す。エージェントに伝えたいことは `agent/AGENTS.md` か `agent/prompts/` に書く（CLAUDE.md に書いても届かない）。
+- **チェック**: `bun run typecheck && bun test && bun run verify-solver`。テストは一時ディレクトリで動く（`src/test-setup.ts`）。
+- **セットアップ・自己レビュー**: `agent/SETUP.md` → `agent/SELF_CHECK.md`（実施後は両方を更新する）。
+- **本番サーバ**: 実際の試合はユーザーが行う。ログインだけの確認はしない。`.env` の値は表示しない。
 
 ## ディレクトリ
 | パス | 内容 |
 |---|---|
-| `src/` | コードのみ（パスは `src/paths.ts` に集約） |
-| `src/solver/active-solver.ts` | 進化対象のソルバー |
-| `src/agent/` | Claude Code セッション・メインエージェント・サブ・モデル一覧 |
-| `knowledge/` | 永続知識（tiles.json, strategy.md, research/） |
-| `agent/` | エージェント用手順書・プロンプト・`tools/`（エージェントが作るツール） |
-| `assets/` | 公式タイル GIF（`assets/tiles/manifest.json`） |
-| `var/` | 実行時データ（runs/, room-profiles.json, best-solvers/, claude-home/, current/snapshot.json・MEMO.md・ASK_SUB.md）。git 管理外 |
-
-## 1. CLI ツール (`bun src/cli.ts`)
-
-```bash
-bun src/cli.ts scrape-map --room 3                       # Web マップ (MapView.jsp) を HTTP で取得
-bun src/cli.ts reference --tile 15                       # タイル・ルールの知識を検索
-bun src/cli.ts upsert-tile --id 15 --name "special_15" --label "特殊(15)" --score 80 --passable true --hazard false --symbol "S"
-bun src/cli.ts run-script --snapshot var/current/snapshot.json --code "return snapshot.tiles.filter(t => t.value >= 70);"
-bun src/cli.ts verify --run-dir var/runs/<runId>         # 改修したソルバーを過去ログでリプレイ検証
-bun src/cli.ts status --room 3                           # ルームの最高得点・発見タイル
-bun run typecheck && bun test && bun run verify-solver   # 機械チェック一式
-```
-再利用したい処理は `agent/tools/<name>.ts` に書いて `bun agent/tools/<name>.ts` で実行する。
-
-## 2. スコア計算式と絶対ルール
-- **公式スコア式**: `合計得点 = 300 × 取得ターン数 + 動作得点 + アイテム得点 + プット得点 + プットダメージ`
-- **生存最優先**: 毎ターン `+300` の基礎点が入るため、自爆やタイムアウトを防ぐ。
-- **罠と壁の回避**:
-  - `4` (ジオード: -1000), `12` (奈落: -600) は絶対踏まない。
-  - `10` (岩盤: 通行不可 / -10), `1000+` (他プレイヤー: 衝突回避)。
-  - `0` (穴: -20) の再踏破を最小限に抑え、一筆書きで未開拓領域（`2` 土 +10 等）や高得点アイテムへ進む。
-- **CMD1 (`gr` vs `gru/grd/grl/grr`)**:
-  - 隣接マスが安全かつプラス得点（`2`, `3`, `1`, `5-9`, `70-79`）なら `gru/grd/grl/grr` で移動＋観測し、CMD2 の `w*` と合わせて **1ターン2マス回収** する。
-  - **静止 `gr` も穴への再着地扱いで `-20` 入る（実測）**。隣接が穴だけなら、目的地方向へ `gr*` で進む方が得（損失はほぼ同じで1マス前進）。静止 `gr` は進める安全マスが無い時だけ。
-- **CMD2 の疲労コスト**:
-  - 実測コスト: `gr` 動作 -20（＋穴再着地 -20）、`gr*`・`w*` 動作 -10（＋着地マス得点）。`agent/tools/score-model-check.ts` で過去試合と照合済み。
-  - `d*`, `p*2w*`, `p*3s*`, `p*3l*`, `kei*` は1回約 `-250` の高疲労。それを上回るリターン（ジオーメタル `+400` へのショートカットや罠完全包囲からの脱出など）がある時のみ使う。
-
-## 3. 進化対象の主要ファイル
-1. **`src/solver/active-solver.ts`** — `decideTurnAction(worldMap, phase, turn)` のシグネチャを維持して改善。編集後は `bun src/cli.ts verify --run-dir <runDir>` と `bun run typecheck` を必ず通す。試合中は編集しない。
-2. **`knowledge/tiles.json` / `knowledge/strategy.md`** — タイル得点・戦略知識（実測で更新する）。ルーム別の記録は `var/room-profiles.json`。
+| `src/` | ハーネスのコード |
+| `src/solver/active-solver.ts` | 進化対象のソルバー（エージェントが試合後に改修） |
+| `src/agent/` | Claude Code セッション・メインエージェント・サブ・準備・モデル一覧 |
+| `agent/` | エージェント向け: `AGENTS.md`（説明書）・`prompts/`・`policies/`（ユーザーの作戦方針）・`tools/`（エージェントが作るツール）・`REVIEW.md`（エージェントからのレビュー）・`SETUP.md`/`SELF_CHECK.md` |
+| `knowledge/` | 永続知識（tiles.json, strategy.md, research/, server.json） |
+| `assets/` | 公式タイル GIF |
+| `var/` | 実行時データ（runs/, room-profiles.json, best-solvers/, claude-home/, current/）。git 管理外 |
+| `docs/` | 仕様書 |

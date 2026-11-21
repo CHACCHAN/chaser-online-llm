@@ -108,6 +108,13 @@ export const SETTINGS = {
     description: "1試合で使うトークンの上限（メイン・サブの合計。キャッシュ分も含む。0=無制限）。超えたら残りはソルバーのみで続ける",
     defaultValue: "20000000",
   },
+  AGENT_REVIEW: {
+    group: "llm",
+    description: "試合後の振り返りのあと、エージェントにハーネスの使い勝手・不具合・欲しい機能をレビューさせ agent/REVIEW.md に書く（true/false）",
+    defaultValue: "true",
+  },
+  AGENT_REVIEW_TIMEOUT_SEC: { group: "llm", description: "ハーネスのレビューの上限（秒）", defaultValue: "240" },
+  AGENT_REVIEW_KEEP: { group: "llm", description: "agent/REVIEW.md に残すレビューの件数（新しい順）", defaultValue: "30" },
   AGENT_EVOLVE_MIN_TURNS: {
     group: "llm",
     description: "このターン数未満で終わった試合（待機切れ・接続失敗など）は振り返り・最高記録の更新をしない",
@@ -125,6 +132,23 @@ export const SETTINGS = {
 } as const satisfies Record<string, SettingDef>;
 
 export type SettingKey = keyof typeof SETTINGS;
+
+/** WebUI の設定画面の分類（左の一覧）。ここに無い項目・カスタム変数は「その他」 */
+export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }[] = [
+  { id: "server", title: "サーバ接続", keys: ["HOST_URL", "CHASER_USER", "CHASER_PASS", "CHASER_ROOM", "CHASER_HTTP_TIMEOUT_SEC", "CHASER_RETRY_MS"] },
+  { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
+  { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC"] },
+  { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_API_URL", "LLM_API_KEY", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },
+  { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_MATCH_TOKEN_LIMIT"] },
+  { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_PAST_RUNS"] },
+  { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_TASK_TIMEOUT_MIN"] },
+  { id: "post", title: "試合後（進化・レビュー）", keys: ["AGENT_EVOLVE", "AGENT_EVOLVE_MIN_TURNS", "AGENT_POST_MATCH_TIMEOUT_MIN", "AGENT_REVIEW", "AGENT_REVIEW_TIMEOUT_SEC", "AGENT_REVIEW_KEEP"] },
+  { id: "other", title: "その他", keys: ["PORT"] },
+];
+
+export function settingSection(key: string): string {
+  return SETTING_SECTIONS.find((s) => (s.keys as string[]).includes(key))?.id ?? "other";
+}
 
 /** .env の値（空なら既定値）。既定値も空なら undefined */
 export function getSetting(key: SettingKey): string | undefined {

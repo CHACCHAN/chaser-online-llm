@@ -29,3 +29,15 @@ test("送る直前にプロセスが終わっていても例外にせず dead �
   s.proc = { stdin: { write: () => { throw new Error("EPIPE"); }, flush: () => {} } };
   expect((await s.ask("x", 1000)).status).toBe("dead");
 });
+
+test("全セッションに agent/AGENTS.md を渡し、CLAUDE.md は読ませない", async () => {
+  const { agentsGuide } = await import("./claude-session");
+  const { buildClaudeEnv } = await import("./claude-env");
+  const guide = agentsGuide();
+  expect(guide).toContain("AGENTS.md");
+  const sys = new ClaudeSession({ label: "t", systemPrompt: "SYS" }).buildArgs();
+  expect(sys[sys.indexOf("--system-prompt") + 1]).toBe(`SYS\n\n${guide}`);
+  const app = new ClaudeSession({ label: "t", appendSystemPrompt: "APP" }).buildArgs();
+  expect(app[app.indexOf("--append-system-prompt") + 1]).toBe(`APP\n\n${guide}`);
+  expect(buildClaudeEnv({}).CLAUDE_CODE_DISABLE_CLAUDE_MDS).toBe("1");
+});

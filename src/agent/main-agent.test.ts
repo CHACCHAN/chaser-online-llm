@@ -217,3 +217,22 @@ test("安全ガード: 行き先が罠・通行不可の直接指定を見分け
   expect(landingDanger(wm, "gr")).toBeNull();
   expect(landingDanger(wm, "keird")).toBeNull(); // 未観測
 });
+
+test("試合後: 振り返りと同じ会話でハーネスのレビューを聞く（使用量は二重に数えない）", async () => {
+  Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
+  sent.length = 0;
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
+  await agent.postMatch("(diag)", "/tmp/run", 5000);
+  const afterPost = agent.usage().main.calls;
+  const review = await agent.reviewHarness({ runDir: "/tmp/run", reverted: [], verificationOk: true, rolledBack: false }, 5000);
+  expect(review).toBe("READY");
+  const post = sent.find((x) => x.text.startsWith("[POST-MATCH]"))!;
+  const rev = sent.find((x) => x.text.startsWith("[HARNESS REVIEW]"))!;
+  expect(rev.options).toBe(post.options); // 同じセッション（振り返りの経験を持ったまま）
+  expect(rev.text).not.toContain("この試合のログ:"); // 続きなのでログの場所は繰り返さない
+  expect(agent.usage().main.calls).toBe(afterPost + 1);
+  await agent.end();
+  expect(agent.usage().main.calls).toBe(afterPost + 1);
+  delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
+});

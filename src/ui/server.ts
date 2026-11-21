@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { SETTING_SECTIONS } from "../settings";
 import path from "node:path";
 import { ASSETS_DIR, PUBLIC_DIR, RUNS_DIR } from "../paths";
 import { EFFORT_LEVELS, listGatewayModels } from "../agent/models";
@@ -137,7 +138,7 @@ export function startWebUiServer(port: number) {
       }
 
       if (url.pathname === "/api/env" && req.method === "GET") {
-        return Response.json({ ok: true, entries: loadProjectEnvEntries() });
+        return Response.json({ ok: true, entries: loadProjectEnvEntries(), sections: SETTING_SECTIONS.map(({ id, title }) => ({ id, title })) });
       }
 
       if (url.pathname === "/api/env" && req.method === "POST") {

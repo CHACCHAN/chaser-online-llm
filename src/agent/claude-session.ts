@@ -1,9 +1,15 @@
 import type { Subprocess } from "bun";
-import { PROJECT_ROOT } from "../paths";
+import { existsSync, readFileSync } from "node:fs";
+import { AGENTS_GUIDE_PATH, PROJECT_ROOT } from "../paths";
 import { logger } from "../tools/logger";
 import { uiBus } from "../ui/event-bus";
 import { baseClaudeArgs, buildClaudeEnv, type ClaudeModelSettings } from "./claude-env";
 import { addUsage, contextSizeFromRaw, emptyUsage, type UsageTotals, usageFromRaw } from "./usage";
+
+/** agent/AGENTS.md（エージェント向けの説明書）。無ければ空 */
+export function agentsGuide(): string {
+  return existsSync(AGENTS_GUIDE_PATH) ? readFileSync(AGENTS_GUIDE_PATH, "utf-8").trim() : "";
+}
 
 export type ClaudeContext = "in_game" | "evolution" | "system";
 
@@ -90,14 +96,25 @@ export class ClaudeSession {
     return this.proc !== null && this.deadReason === null;
   }
 
-  start(): void {
-    if (this.proc) return;
+  /** 起動引数（テストから確かめられるよう分けている） */
+  buildArgs(): string[] {
     const args = [...baseClaudeArgs(this.options), "--input-format", "stream-json"];
-    if (this.options.systemPrompt !== undefined) args.push("--system-prompt", this.options.systemPrompt);
-    else if (this.options.appendSystemPrompt) args.push("--append-system-prompt", this.options.appendSystemPrompt);
+    // エージェント向けの説明書（agent/AGENTS.md）を全セッションに渡す（CLAUDE.md は開発者向けなので読ませない）
+    const guide = agentsGuide();
+    if (this.options.systemPrompt !== undefined) args.push("--system-prompt", [this.options.systemPrompt, guide].filter(Boolean).join("\n\n"));
+    else {
+      const append = [this.options.appendSystemPrompt, guide].filter(Boolean).join("\n\n");
+      if (append) args.push("--append-system-prompt", append);
+    }
     if (this.options.tools !== undefined) args.push("--tools", this.options.tools);
     if (this.options.noSessionPersistence) args.push("--no-session-persistence");
     if (this.options.agents) args.push("--agents", JSON.stringify(this.options.agents));
+    return args;
+  }
+
+  start(): void {
+    if (this.proc) return;
+    const args = this.buildArgs();
 
     const log = this.options.quietLifecycle ? logger.debug.bind(logger) : logger.info.bind(logger);
     log({ model: this.options.model ?? null, effort: this.options.effort ?? null, label: this.options.label ?? null }, "Starting Claude session");

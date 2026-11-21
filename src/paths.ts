@@ -18,6 +18,10 @@ export const ASSETS_DIR = path.join(PROJECT_ROOT, "assets");
 export const AGENT_DIR = path.join(PROJECT_ROOT, "agent");
 /** ユーザー定義の作戦方針 (agent/policies/<name>.md) */
 export const POLICIES_DIR = path.join(AGENT_DIR, "policies");
+/** エージェント向けの説明書（全セッションのシステムプロンプトに入る） */
+export const AGENTS_GUIDE_PATH = path.join(AGENT_DIR, "AGENTS.md");
+/** 試合後にエージェントが書くハーネスへのレビュー（開発者が読む） */
+export const AGENT_REVIEW_PATH = path.join(AGENT_DIR, "REVIEW.md");
 
 /** 実行時データ（.gitignore 対象） */
 // テスト（bun test）は src/test-setup.ts が一時ディレクトリを指定し、試合中の var/ を書き換えない

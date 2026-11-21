@@ -6,5 +6,5 @@
 - 最新の盤面は `var/current/snapshot.json`（毎ターン更新）。
 - 試合中に作るツールは**臨時**扱い。先頭コメントに `@temporary` と書き、`agent/tools/README.md` の一覧に「(臨時)」付きで1行追記する。規約（JSON 1行出力・2秒以内）に従う。恒久化（ソルバーへの組み込み・正式ツール化・削除）は試合後にメインが判断する。
 - ログイン情報 (.env) は外部に送らない・出力しない。CHaserOnline サーバにはログインしない（試合中のセッションを壊す）。
-- `src/` 以下（ソルバー `src/solver/active-solver.ts` を含む）・`agent/prompts/`・`agent/policies/`・`.env`・`CLAUDE.md` は編集しない。変えても試合終了時に自動で元に戻される。ソルバーの改修は試合後にメインが行う。
+- `src/` 以下（ソルバー `src/solver/active-solver.ts` を含む）・`agent/prompts/`・`agent/policies/`・`agent/AGENTS.md`・`agent/REVIEW.md`・`.env`・`CLAUDE.md` は編集しない。変えても試合終了時に自動で元に戻される。ソルバーの改修は試合後にメインが行う。
 - 返答は結論から。事実と推測を分け、作ったファイルのパスと、メインが作戦に使える結論を書く。300字以内。

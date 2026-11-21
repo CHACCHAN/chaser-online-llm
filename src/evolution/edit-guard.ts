@@ -11,6 +11,8 @@ const PROTECTED_GLOBS = [
   "src/**/*",
   "agent/prompts/**/*",
   "agent/policies/**/*",
+  "agent/AGENTS.md",
+  "agent/REVIEW.md",
   "agent/SETUP.md",
   "agent/SELF_CHECK.md",
   "CLAUDE.md",

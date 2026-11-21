@@ -136,6 +136,11 @@ button { cursor: pointer; }
 .prep-info.ok { color: var(--pos); }
 .prep-info.warn { color: var(--neg); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
+#btnStart { display: inline-flex; align-items: center; gap: 6px; min-width: 76px; justify-content: center; }
+#btnStart .spin { display: none; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+#btnStart.busy { opacity: .8; cursor: progress; }
+#btnStart.busy .spin { display: inline-block; }
+@media (prefers-reduced-motion: reduce) { #btnStart .spin { animation-duration: 2.4s; } }
 .hint { font-size: 11px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #modelHint { flex: 1 1 0; min-width: 0; text-align: right; }
 
@@ -319,17 +324,31 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .agent-line code { font-family: var(--mono); font-size: 12px; background: var(--sunk); padding: 0 4px; }
 
 /* ---------- ダイアログ ---------- */
-dialog { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 4px; padding: 0; width: min(760px, 94vw); max-height: 86vh; }
+dialog { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 4px; padding: 0; width: min(940px, 94vw); height: min(680px, 86vh); }
+dialog[open] { display: flex; flex-direction: column; }
+.dlg-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 190px minmax(0, 1fr); }
+.dlg-nav { border-right: 1px solid var(--line); background: var(--sunk); overflow-y: auto; padding: 6px 0; }
+.dlg-nav .grp { font-size: 11px; color: var(--ink3); padding: 10px 14px 4px; }
+.dlg-nav button { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 6px 14px; font-size: 13px; color: var(--ink2); border-left: 3px solid transparent; }
+.dlg-nav button:hover { background: var(--panel); color: var(--ink); }
+.dlg-nav button[aria-current="true"] { background: var(--panel); color: var(--ink); border-left-color: var(--main); font-weight: 600; }
+.dlg-nav .n { font-size: 11px; color: var(--ink3); font-weight: 400; }
+.dlg-nav .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--solver); }
+.hint-p { margin: 0 0 10px; font-size: 12px; color: var(--ink3); }
+.op-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.op { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+@media (max-width: 640px) { .dlg-main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } .dlg-nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 0; } .dlg-nav .grp { display: none; } .dlg-nav button { width: auto; white-space: nowrap; border-left: 0; border-bottom: 3px solid transparent; } .dlg-nav button[aria-current="true"] { border-bottom-color: var(--main); } }
 dialog::backdrop { background: rgba(0,0,0,.4); }
 .dlg-h { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); gap: 10px; }
 .dlg-h h2 { margin: 0; font-size: 14px; }
-.dlg-b { padding: 12px 16px; overflow-y: auto; max-height: calc(86vh - 120px); }
-.dlg-b h3 { font-size: 12px; margin: 14px 0 6px; color: var(--ink2); font-weight: 600; }
+.dlg-b { padding: 14px 18px; overflow-y: auto; min-height: 0; }
+.dlg-b h3 { font-size: 14px; margin: 0 0 6px; color: var(--ink); font-weight: 600; }
 .dlg-b h3:first-child { margin-top: 0; }
 .pol-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
 .pol-row select, .pol-row input { font: inherit; padding: 4px 6px; border: 1px solid var(--line, #ccc); border-radius: 6px; background: var(--bg, #fff); color: inherit; }
 #polText { width: 100%; box-sizing: border-box; min-height: 180px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px; border: 1px solid var(--line, #ccc); border-radius: 6px; background: var(--bg, #fff); color: inherit; resize: vertical; }
-.envrow { display: grid; grid-template-columns: 200px 1fr auto; gap: 8px; align-items: center; padding: 3px 0; }
+.envrow { display: grid; grid-template-columns: 230px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line2); }
+.envrow.changed .mono { color: var(--solver); }
 .envrow input { background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 3px 7px; height: 26px; width: 100%; font-family: var(--mono); font-size: 12px; }
 .envrow .d { font-size: 11px; color: var(--ink3); grid-column: 1 / -1; margin-top: -2px; }
 .dlg-f { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); align-items: center; }
@@ -355,8 +374,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="ln"><b id="nBest" class="num">-</b><span id="nBestSub">ルーム最高</span></div>
     </div>
     <span class="prep-info" id="prepInfo" role="status"></span>
-    <button class="btn" id="btnPrep" type="button" title="入室前に、メインがルール・このルームの過去の試合・作戦方針を読んで最初のメモを作る（ルームには入らない）">準備</button>
-    <button class="btn primary" id="btnStart" type="button">開始</button>
+    <button class="btn primary" id="btnStart" type="button"><i class="spin" aria-hidden="true"></i><span id="btnStartLabel">開始</span></button>
     <button class="btn" id="btnPause" type="button" hidden>試合後に一時停止</button>
     <button class="btn danger" id="btnStop" type="button" hidden>停止</button>
     <button class="btn ghost" id="btnTheme" type="button" title="ライト/ダーク切替" aria-label="テーマ切替">テーマ</button>
@@ -465,29 +483,39 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 </div>
 
 <dialog id="dlg">
-  <div class="dlg-h"><h2>設定と操作</h2><span class="sep"></span><button class="btn ghost" id="dlgClose" type="button">閉じる</button></div>
-  <div class="dlg-b">
-    <h3>操作</h3>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn" id="btnPreview" type="button">選択ルームのマップを取得</button>
-      <button class="btn" id="btnVerify" type="button">ソルバーを検証</button>
-      <button class="btn" id="btnModels" type="button">モデル一覧を再取得</button>
-      <span class="hint" id="opMsg"></span>
+  <div class="dlg-h"><h2>設定</h2><span class="hint" id="envDirty"></span><span class="sep"></span><button class="btn ghost" id="dlgClose" type="button">閉じる</button></div>
+  <div class="dlg-main">
+    <nav class="dlg-nav" id="dlgNav" aria-label="設定の分類"></nav>
+    <div class="dlg-b">
+      <section class="pane" data-pane="ops" hidden>
+        <h3>操作</h3>
+        <p class="hint-p">試合とは別に、手動で実行できる操作です。結果は思考ログに出ます。</p>
+        <div class="op-list">
+          <div class="op"><button class="btn" id="btnPreview" type="button">選択ルームのマップを取得</button><span class="hint">Webマップ (MapView.jsp) を取得してマップ欄に表示</span></div>
+          <div class="op"><button class="btn" id="btnVerify" type="button">ソルバーを検証</button><span class="hint">今のソルバーを過去の試合でリプレイ検証</span></div>
+          <div class="op"><button class="btn" id="btnModels" type="button">モデル一覧を再取得</button><span class="hint">ゲートウェイの /models を取り直す</span></div>
+        </div>
+        <div class="hint" id="opMsg"></div>
+      </section>
+      <section class="pane" data-pane="policy" hidden>
+        <h3>作戦方針</h3>
+        <p class="hint-p">メインエージェントが最優先で守る方針（agent/policies/&lt;名前&gt;.md）。次の試合から有効です。</p>
+        <div class="pol-row">
+          <select id="polSel" aria-label="方針"></select>
+          <span class="hint" id="polActive"></span>
+          <button class="btn" id="polUse" type="button">この方針を使う</button>
+        </div>
+        <textarea id="polText" spellcheck="false" aria-label="方針の内容"></textarea>
+        <div class="pol-row"><button class="btn primary" id="polSave" type="button">方針を保存</button><span class="hint" id="polMsg"></span></div>
+        <div class="pol-row"><input id="polNew" placeholder="新しい方針名 (英数字)" size="18" aria-label="新しい方針名"><button class="btn" id="polCreate" type="button">複製して作成</button></div>
+      </section>
+      <section class="pane" data-pane="env" hidden>
+        <h3 id="envTitle"></h3>
+        <div id="envBody" class="dim">読み込み中...</div>
+      </section>
     </div>
-    <h3>作戦方針（メインエージェントに最優先で渡す。次の試合から有効）</h3>
-    <div class="pol-row">
-      <select id="polSel" aria-label="方針"></select>
-      <span class="hint" id="polActive"></span>
-      <button class="btn" id="polUse" type="button">この方針を使う</button>
-      <input id="polNew" placeholder="新しい方針名 (英数字)" size="18" aria-label="新しい方針名">
-      <button class="btn" id="polCreate" type="button">複製して作成</button>
-    </div>
-    <textarea id="polText" spellcheck="false" aria-label="方針の内容"></textarea>
-    <div class="pol-row"><button class="btn primary" id="polSave" type="button">方針を保存</button><span class="hint" id="polMsg"></span></div>
-    <h3>.env</h3>
-    <div id="envBody" class="dim">読み込み中...</div>
   </div>
-  <div class="dlg-f"><button class="btn primary" id="envSave" type="button">.env を保存</button><button class="btn" id="envAdd" type="button">変数を追加</button><span class="hint" id="envMsg"></span></div>
+  <div class="dlg-f" id="envFoot" hidden><button class="btn primary" id="envSave" type="button">.env を保存</button><button class="btn" id="envAdd" type="button" hidden>変数を追加</button><span class="hint" id="envMsg"></span></div>
 </dialog>
 
 <script>
@@ -676,12 +704,15 @@ function renderHead() {
   const prep = st.prep || { required: false, state: "none" };
   const preparingNow = prep.state === "preparing";
   const needPrep = prep.required && prep.state !== "ready";
+  // 1つのボタン: 「準備」→（準備中くるくる）→「開始」。準備が要らない設定なら最初から「開始」
   $("#btnStart").hidden = st.running; $("#btnPause").hidden = !st.running; $("#btnStop").hidden = !st.running && !preparingNow;
-  $("#btnPrep").hidden = st.running || !prep.required;
-  $("#btnPrep").disabled = preparingNow;
-  $("#btnPrep").textContent = preparingNow ? "準備中…" : prep.state === "ready" ? "準備し直す" : "準備";
-  $("#btnStart").disabled = preparingNow || needPrep;
-  $("#btnStart").title = needPrep ? "先に「準備」を押してください（スタンバイOK になると入室できます）" : "入室して試合を始める";
+  $("#btnStart").disabled = preparingNow;
+  $("#btnStart").classList.toggle("busy", preparingNow);
+  $("#btnStart").dataset.mode = needPrep ? "prepare" : "start";
+  $("#btnStartLabel").textContent = preparingNow ? "準備中…" : needPrep ? "準備" : "開始";
+  $("#btnStart").title = preparingNow ? "メインがルール・過去の試合・作戦方針を読んで最初のメモを作成中（ルームにはまだ入っていません）"
+    : needPrep ? "入室前に、メインがルール・このルームの過去の試合・作戦方針を読んで最初のメモを作る（ルームには入らない）。終わると「開始」になります"
+    : "入室して試合を始める";
   renderPrepInfo(prep, st.running);
   $("#btnPause").disabled = !!st.pauseRequested; $("#btnPause").textContent = st.pauseRequested ? "一時停止を予約済み" : "試合後に一時停止";
   $("#nTurn").textContent = st.turn || 0;
@@ -742,8 +773,7 @@ $("#selRoom").addEventListener("change", (e) => {
   control({ action: "update_settings", ...settingsPayload() });
 });
 ["inMain", "inSub", "selEffort", "selSubEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
-$("#btnPrep").addEventListener("click", () => control({ action: "prepare", ...settingsPayload() }));
-$("#btnStart").addEventListener("click", () => control({ action: "start", ...settingsPayload() }));
+$("#btnStart").addEventListener("click", () => control({ action: $("#btnStart").dataset.mode === "prepare" ? "prepare" : "start", ...settingsPayload() }));
 $("#btnStop").addEventListener("click", () => control({ action: "stop" }));
 $("#btnPause").addEventListener("click", () => control({ action: "pause" }));
 
@@ -1337,8 +1367,28 @@ $$("[data-lf]").forEach((b) => b.addEventListener("click", () => { S.lf = b.data
 $("#logToggle").addEventListener("click", () => { S.logCollapsed = !S.logCollapsed; save("chaser.logCollapsed", S.logCollapsed ? "1" : "0"); mark("log"); });
 
 /* ============ 設定ダイアログ ============ */
-const dlg = $("#dlg"); let envRows = [];
-$("#btnSettings").addEventListener("click", () => { dlg.showModal(); loadEnv(); loadPolicies(); });
+const dlg = $("#dlg"); let envRows = [], envSaved = new Map(), envSections = [];
+let dlgPane = load("dlgPane") || "ops";
+$("#btnSettings").addEventListener("click", () => { dlg.showModal(); loadEnv(); loadPolicies(); showPane(dlgPane); });
+/* 左の分類 → 右に中身 */
+function renderNav() {
+  const count = (id) => envRows.filter((e) => e.section === id).length;
+  const changed = (id) => envRows.some((e) => e.section === id && isChanged(e));
+  $("#dlgNav").innerHTML = `<div class="grp">操作・方針</div>`
+    + [["ops", "操作"], ["policy", "作戦方針"]].map(([id, t]) => `<button type="button" data-pane="${id}" aria-current="${dlgPane === id}">${t}</button>`).join("")
+    + `<div class="grp">環境設定 (.env)</div>`
+    + envSections.filter((s) => count(s.id) > 0 || s.id === "other").map((s) => `<button type="button" data-pane="env:${s.id}" aria-current="${dlgPane === "env:" + s.id}">${esc(s.title)}${changed(s.id) ? '<i class="dot" title="未保存の変更"></i>' : `<span class="n">${count(s.id)}</span>`}</button>`).join("");
+}
+function showPane(id) {
+  dlgPane = id; save("dlgPane", id);
+  const env = id.startsWith("env:");
+  $$(".pane", dlg).forEach((p) => { p.hidden = p.dataset.pane !== (env ? "env" : id); });
+  $("#envFoot").hidden = !env;
+  $("#envAdd").hidden = id !== "env:other";
+  if (env) renderEnv();
+  renderNav();
+}
+$("#dlgNav").addEventListener("click", (e) => { const b = e.target.closest("button[data-pane]"); if (b) showPane(b.dataset.pane); });
 /* 作戦方針 (agent/policies/<name>.md) */
 let polActive = "default";
 async function loadPolicies(select) {
@@ -1376,32 +1426,51 @@ $("#polCreate").addEventListener("click", async () => {
   try { await polReq(`/api/policies/${encodeURIComponent(name)}`, "PUT", { text: $("#polText").value.replace(/^# 作戦方針: .*/m, `# 作戦方針: ${name}`) }); $("#polNew").value = ""; $("#polMsg").textContent = `${name} を作成しました`; loadPolicies(name); }
   catch (e) { $("#polMsg").textContent = `作成できません: ${e.message}`; }
 });
-$("#dlgClose").addEventListener("click", () => dlg.close());
+$("#dlgClose").addEventListener("click", () => { if (!confirmDiscard()) return; dlg.close(); });
 async function loadEnv() {
-  try { const d = await jget("/api/env"); envRows = d.entries || []; renderEnv(); } catch { $("#envBody").textContent = ".env を取得できません"; }
+  try {
+    const d = await jget("/api/env"); envRows = d.entries || []; envSections = d.sections || [];
+    envSaved = new Map(envRows.map((e) => [e.key, e.value])); renderEnv(); renderNav(); updateDirty();
+  } catch { $("#envBody").textContent = ".env を取得できません"; }
 }
+const isChanged = (e) => !!e && envSaved.get(e.key) !== e.value;
+function dirtyCount() {
+  const keys = new Set(envRows.map((e) => e.key));
+  return envRows.filter(isChanged).length + [...envSaved.keys()].filter((k) => !keys.has(k)).length;
+}
+function updateDirty() {
+  const n = dirtyCount();
+  $("#envDirty").textContent = n ? `未保存の変更 ${n} 件（「.env を保存」で反映）` : "";
+}
+function confirmDiscard() { return dirtyCount() === 0 || confirm("保存していない変更があります。閉じますか？"); }
 function renderEnv() {
-  const groups = [["chaser", "CHaserOnline 接続"], ["llm", "LLM ゲートウェイ"], ["other", "その他"]];
-  $("#envBody").innerHTML = groups.map(([g, title]) => {
-    const rows = envRows.map((e, i) => [e, i]).filter(([e]) => e.group === g); if (!rows.length) return "";
-    return `<h3>${title}</h3>` + rows.map(([e, i]) => `<div class="envrow">${g === "other" ? `<input data-k="${i}" value="${esc(e.key)}" placeholder="KEY" />` : `<span class="mono" style="font-size:12px">${esc(e.key)}</span>`}
-      <input data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" />${g === "other" ? `<button class="btn ghost" data-del="${i}" type="button" aria-label="削除">×</button>` : e.secret ? `<button class="btn ghost" data-sec="${i}" type="button">表示</button>` : "<span></span>"}
-      ${e.description ? `<div class="d">${esc(e.description)}</div>` : ""}</div>`).join("");
-  }).join("");
+  if (!dlgPane.startsWith("env:")) return;
+  const sec = dlgPane.slice(4);
+  $("#envTitle").textContent = envSections.find((s) => s.id === sec)?.title || "その他";
+  const rows = envRows.map((e, i) => [e, i]).filter(([e]) => e.section === sec);
+  const custom = (e) => e.description === "カスタム環境変数";
+  $("#envBody").innerHTML = rows.length === 0 ? `<p class="hint-p">項目はありません。</p>` : rows.map(([e, i]) => `<div class="envrow${isChanged(e) ? " changed" : ""}">${custom(e) ? `<input data-k="${i}" value="${esc(e.key)}" placeholder="KEY" />` : `<span class="mono" style="font-size:12px">${esc(e.key)}</span>`}
+      <input data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" />${custom(e) ? `<button class="btn ghost" data-del="${i}" type="button" aria-label="削除">×</button>` : e.secret ? `<button class="btn ghost" data-sec="${i}" type="button">表示</button>` : "<span></span>"}
+      ${e.description && !custom(e) ? `<div class="d">${esc(e.description)}</div>` : ""}</div>`).join("");
 }
-$("#envBody").addEventListener("input", (e) => { const t = e.target; if (t.dataset.k) envRows[+t.dataset.k].key = t.value; if (t.dataset.v) envRows[+t.dataset.v].value = t.value; });
+$("#envBody").addEventListener("input", (e) => {
+  const t = e.target; const i = +(t.dataset.v ?? t.dataset.k);
+  if (t.dataset.k) envRows[i].key = t.value; if (t.dataset.v) envRows[i].value = t.value;
+  t.closest(".envrow")?.classList.toggle("changed", isChanged(envRows[i])); updateDirty(); renderNav();
+});
 $("#envBody").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.del) { envRows.splice(+b.dataset.del, 1); renderEnv(); }
+  if (b.dataset.del) { envRows.splice(+b.dataset.del, 1); renderEnv(); updateDirty(); renderNav(); }
   if (b.dataset.sec) { const i = $(`[data-v="${b.dataset.sec}"]`); i.type = i.type === "password" ? "text" : "password"; b.textContent = i.type === "password" ? "表示" : "隠す"; }
 });
-$("#envAdd").addEventListener("click", () => { envRows.push({ key: "", value: "", group: "other", secret: false, description: "" }); renderEnv(); });
+$("#envAdd").addEventListener("click", () => { envRows.push({ key: "", value: "", group: "other", section: "other", secret: false, description: "カスタム環境変数" }); renderEnv(); });
+dlg.addEventListener("cancel", (e) => { if (!confirmDiscard()) e.preventDefault(); });
 $("#envSave").addEventListener("click", async () => {
   const entries = envRows.filter((e) => e.key && e.key.trim()).map((e) => ({ key: e.key.trim(), value: e.value ?? "" }));
   try {
     const d = await (await fetch("/api/env", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) })).json();
     $("#envMsg").textContent = d.ok ? "保存しました。実行中のプロセスにも反映済みです" : `保存できません: ${d.error || ""}`;
-    if (d.ok) { envRows = d.entries || envRows; renderEnv(); }
+    if (d.ok) await loadEnv();
   } catch { $("#envMsg").textContent = "保存に失敗しました"; }
 });
 async function op(url, body, label) {

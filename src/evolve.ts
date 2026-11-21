@@ -1,4 +1,4 @@
-import { numSetting } from "./settings";
+import { boolSetting, numSetting } from "./settings";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { verifySolverWithReplay } from "./evolution/replay-verifier";
@@ -9,6 +9,7 @@ import { uiBus } from "./ui/event-bus";
 
 import { SOLVER_PATH } from "./paths";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "./evolution/edit-guard";
+import { appendReview } from "./agent/harness-review";
 
 export interface EvolutionOutcome {
   invoked: boolean;
@@ -119,6 +120,23 @@ export async function runPostMatchEvolution(
       outputText,
     ].join("\n"),
   );
+
+  // ハーネスへのレビュー（使い勝手・不具合・欲しい機能）→ agent/REVIEW.md（開発者が読む）
+  if (boolSetting("AGENT_REVIEW")) {
+    uiBus.patchState({ statusMessage: `Run ${summary.runId}: エージェントがハーネスをレビュー中...` });
+    // レビュー中の編集は認めない（検証済みのソルバーも含めて元に戻す）
+    const guard = snapshotProtectedFiles({ includeSolver: true });
+    const review = await mainAgent.reviewHarness(
+      { runDir: summary.runDir, reverted, verificationOk: verification.ok, rolledBack },
+      numSetting("AGENT_REVIEW_TIMEOUT_SEC", { min: 10 }) * 1000,
+    );
+    restoreProtectedFiles(guard);
+    if (review) {
+      appendReview({ runId: summary.runId, room: summary.room, model: summary.model ?? null, text: review });
+      await Bun.write(path.join(summary.runDir, "harness-review.md"), review);
+      uiBus.pushClaudeEvent({ context: "evolution", kind: "system", title: "ハーネスへのレビュー（agent/REVIEW.md）", content: review });
+    }
+  }
 
   return {
     invoked: true,
