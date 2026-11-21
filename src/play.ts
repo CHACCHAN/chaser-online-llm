@@ -11,7 +11,7 @@ import { parseArgs } from "node:util";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { Client, loginWithRetry } from "./client";
 import { loadAgentConfig } from "./config";
-import { runPostMatchEvolution } from "./evolve";
+import { recoverInterruptedEvolution, runPostMatchEvolution } from "./evolve";
 import { getRoomProfile, knownTotalTurns } from "./memory/knowledge-store";
 import { runAgentMatch } from "./runner";
 import { boolSetting, numSetting } from "./settings";
@@ -25,6 +25,7 @@ const { values } = parseArgs({
 const loginWaitMs =
   (values["login-wait-min"] !== undefined ? Number(values["login-wait-min"]) : numSetting("CHASER_LOGIN_WAIT_MIN", { min: 0 })) * 60_000;
 
+await recoverInterruptedEvolution();
 const mainAgent = config.useMainAgent
   ? new MainAgent({ model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort }, config.turnBudgetSec * 1000)
   : null;

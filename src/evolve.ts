@@ -10,6 +10,7 @@ import { uiBus } from "./ui/event-bus";
 import { SOLVER_PATH } from "./paths";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "./evolution/edit-guard";
 import { appendReview } from "./agent/harness-review";
+import { clearEvolutionPending, markEvolutionPending, recoverPendingEvolution } from "./evolution/pending";
 
 export interface EvolutionOutcome {
   invoked: boolean;
@@ -28,6 +29,16 @@ export async function runPostMatchEvolution(
   summary: RunSummary,
   mainAgent: MainAgent | null,
 ): Promise<EvolutionOutcome> {
+  try {
+    return await evolveOnce(summary, mainAgent);
+  } catch (err) {
+    // 途中の例外でも、検証していないソルバーを次の試合に使わない（印が残っていれば検証し直し、不合格なら戻す）
+    await recoverInterruptedEvolution().catch(() => undefined);
+    throw err;
+  }
+}
+
+async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Promise<EvolutionOutcome> {
   if (!mainAgent || !mainAgent.alive) {
     return { invoked: false, ok: false, replayVerified: true, rolledBack: false, summaryText: "main agent not running" };
   }
@@ -46,6 +57,8 @@ export async function runPostMatchEvolution(
   const backupCode = existsSync(SOLVER_PATH) ? readFileSync(SOLVER_PATH, "utf-8") : null;
   const protectedBefore = snapshotProtectedFiles();
   const tokensBefore = mainAgent.usage().totalTokens;
+  // 振り返りの途中でハーネスが止まっても、次の起動で検証し直せるように印を残す（recoverInterruptedEvolution）
+  markEvolutionPending({ runId: summary.runId, runDir: summary.runDir, startedAt: new Date().toISOString(), stage: "postMatch" }, backupCode);
   const res = await mainAgent.postMatch(
     summary.diagnosis?.markdownReport ?? "(no diagnosis)",
     summary.runDir,
@@ -102,6 +115,11 @@ export async function runPostMatchEvolution(
     // 最高記録のソルバーは試合直後に runner が保存済み（改修前の、実際に試合で使ったもの）
   }
 
+  // ここからはレビュー（ソルバーの編集は認めない）。途切れたら検証済みのソルバーへ戻す
+  markEvolutionPending(
+    { runId: summary.runId, runDir: summary.runDir, startedAt: new Date().toISOString(), stage: "review" },
+    existsSync(SOLVER_PATH) ? readFileSync(SOLVER_PATH, "utf-8") : null,
+  );
   summary.evolution = { solverChanged, replayVerified: verification.ok, rolledBack };
   await Bun.write(path.join(summary.runDir, "summary.json"), JSON.stringify(summary, null, 2));
 
@@ -139,6 +157,7 @@ export async function runPostMatchEvolution(
     }
   }
 
+  clearEvolutionPending();
   return {
     invoked: true,
     ok: res.status === "ok" && verification.ok,
@@ -146,4 +165,35 @@ export async function runPostMatchEvolution(
     rolledBack,
     summaryText: outputText,
   };
+}
+
+/**
+ * 起動時に呼ぶ（index.ts・play.ts）。前回の振り返りが途中で止まっていたら、改修後のソルバーをリプレイ検証し直し、
+ * 不合格なら改修前に戻す。結果は UI の出来事とその試合の summary.json に残す。
+ */
+export async function recoverInterruptedEvolution(): Promise<void> {
+  const r = await recoverPendingEvolution((runDir, baselineCode) => verifySolverWithReplay(runDir, { baselineCode }));
+  if (!r) return;
+  const what = !r.solverChanged
+    ? "ソルバーは改修前のまま（検証不要）"
+    : r.rolledBack
+      ? `改修後のソルバーが検証に通らないので改修前に戻した（${r.errors.slice(0, 3).join("; ") || "理由不明"}）`
+      : "改修後のソルバーは検証に通った（そのまま使う）";
+  logger.warn({ runId: r.pending.runId, stage: r.pending.stage, ...r }, "前回の振り返りが途中で止まっていた");
+  uiBus.pushClaudeEvent({
+    context: "evolution",
+    kind: r.rolledBack ? "error" : "system",
+    title: "前回の振り返りが途中で止まっていた",
+    content: `Run ${r.pending.runId}（${r.pending.stage === "postMatch" ? "改修中" : "レビュー中"}に停止）: ${what}`,
+  });
+  const summaryPath = path.join(r.pending.runDir, "summary.json");
+  try {
+    if (existsSync(summaryPath)) {
+      const s = JSON.parse(readFileSync(summaryPath, "utf-8")) as RunSummary;
+      s.evolution = { solverChanged: r.solverChanged, replayVerified: r.verified ?? true, rolledBack: r.rolledBack, interrupted: true };
+      writeFileSync(summaryPath, JSON.stringify(s, null, 2));
+    }
+  } catch {
+    // summary が読めなくても検証・戻しは済んでいる
+  }
 }

@@ -95,7 +95,7 @@ export interface RunSummary {
     usage?: AgentUsageReport;
   };
   /** 試合後の進化結果（evolve.ts が追記） */
-  evolution?: { solverChanged: boolean; replayVerified: boolean; rolledBack: boolean };
+  evolution?: { solverChanged: boolean; replayVerified: boolean; rolledBack: boolean; interrupted?: boolean };
   unknownTiles: number[];
   diagnosis?: DiagnosticReport;
 }

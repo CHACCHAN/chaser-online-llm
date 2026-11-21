@@ -48,3 +48,6 @@ export const CURRENT_MEMO_PATH = path.join(CURRENT_DIR, "MEMO.md");
 export const CURRENT_ASK_SUB_PATH = path.join(CURRENT_DIR, "ASK_SUB.md");
 /** サブに依頼した時の盤面（依頼ごと。var/current/snapshot.json は毎フェーズ変わるので、依頼時の盤面を残す） */
 export const CURRENT_SUB_SNAPSHOT_DIR = path.join(CURRENT_DIR, "sub-snapshots");
+/** 試合後の振り返り（ソルバー改修）の途中である印と、改修前のソルバー。再起動で途切れたら次の起動で検証し直す（src/evolution/pending.ts） */
+export const EVOLUTION_PENDING_PATH = path.join(VAR_DIR, "evolution-pending.json");
+export const EVOLUTION_BACKUP_PATH = path.join(VAR_DIR, "evolution-backup.ts");

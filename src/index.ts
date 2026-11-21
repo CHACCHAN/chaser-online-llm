@@ -1,6 +1,6 @@
 import { Client, loginWithRetry } from "./client";
 import { loadAgentConfig } from "./config";
-import { runPostMatchEvolution } from "./evolve";
+import { recoverInterruptedEvolution, runPostMatchEvolution } from "./evolve";
 import { waitAwareClientConfig } from "./client/wait-status";
 import { boolSetting, numSetting } from "./settings";
 import { getRoomProfile, knownTotalTurns, loadRoomProfiles } from "./memory/knowledge-store";
@@ -28,6 +28,8 @@ async function main() {
     maxTurns: config.maxTurns,
   });
 
+  // 前回の振り返り（ソルバー改修）が再起動で途切れていたら、検証し直して不合格なら戻す
+  await recoverInterruptedEvolution();
   const initialProfile = getRoomProfile(config.room);
   const allProfiles = loadRoomProfiles().rooms;
 
