@@ -123,7 +123,7 @@ export interface UiDashboardState {
   recentTurns: TurnRecord[];
   diagnosisMarkdown: string;
   roomProfiles: Record<string, RoomProfile>;
-  /** 順に回るルーム（空=今のルームだけ） */
+  /** 複数のルームを指定した時の並び（1試合ごとに次へ。1つだけなら空） */
   roomQueue: number[];
   updatedAt: string;
 }
@@ -146,7 +146,8 @@ export interface PrepUiState {
 export interface UiControlCommand {
   action: "prepare" | "start" | "stop" | "pause" | "resume" | "update_settings";
   room?: number;
-  roomQueue?: number[];
+  /** WebUI のルーム欄の入力（"719"・"555-560"・"555,568"、組み合わせも可） */
+  rooms?: string;
   model?: string;
   subModel?: string;
   effort?: string;
@@ -156,10 +157,40 @@ export interface UiControlCommand {
   autoContinue?: boolean;
 }
 
-/** 順に回るルームの並び（正の整数だけ。続けて同じ番号は1つにまとめる） */
+/** 範囲で指定できるルームの数の上限（打ち間違いで何千ものルームを回らないように） */
+const MAX_ROOM_RANGE = 100;
+
+/**
+ * ルーム欄の入力を、回るルームの並びにする。"719" → [719]、"555-560" → [555..560]、"555,568" → [555,568]（組み合わせ・空白区切りも可）。
+ * 正の整数だけ。重複は最初の1つだけ残す
+ */
 export function parseRoomQueue(v: unknown): number[] {
-  const list = (Array.isArray(v) ? v : String(v ?? "").split(/[\s,、]+/)).map(Number).filter((n) => Number.isInteger(n) && n > 0);
-  return list.filter((n, i) => i === 0 || n !== list[i - 1]);
+  const tokens = Array.isArray(v) ? v.map(String) : String(v ?? "").split(/[\s,、]+/);
+  const out: number[] = [];
+  for (const t of tokens) {
+    const m = /^(\d+)\s*[-~〜]\s*(\d+)$/.exec(t.trim());
+    if (m) {
+      const [a, b] = [Number(m[1]), Number(m[2])];
+      const step = a <= b ? 1 : -1;
+      for (let n = a, k = 0; k < MAX_ROOM_RANGE; n += step, k++) {
+        if (n > 0) out.push(n);
+        if (n === b) break;
+      }
+    } else if (/^\d+$/.test(t.trim()) && Number(t) > 0) out.push(Number(t));
+  }
+  return out.filter((n, i) => out.indexOf(n) === i);
+}
+
+/** 並びを入力の形に戻す（続く番号は範囲にまとめる）。[555,556,557,568] → "555-557,568" */
+export function formatRoomQueue(list: number[]): string {
+  const parts: string[] = [];
+  for (let i = 0; i < list.length; ) {
+    let j = i;
+    while (j + 1 < list.length && list[j + 1] === list[j]! + 1) j++;
+    parts.push(j - i >= 2 ? `${list[i]}-${list[j]}` : list.slice(i, j + 1).join(","));
+    i = j + 1;
+  }
+  return parts.join(",");
 }
 
 /** 順に回るルームで、今のルームの次（今のルームが並びに無ければ先頭）。並びが空なら null */
@@ -241,7 +272,13 @@ class UiEventBus {
       if (typeof cmd.room === "number" && Number.isInteger(cmd.room) && cmd.room > 0) {
         patch.room = cmd.room;
       }
-      if (Array.isArray(cmd.roomQueue)) patch.roomQueue = parseRoomQueue(cmd.roomQueue);
+      if (typeof cmd.rooms === "string") {
+        const list = parseRoomQueue(cmd.rooms);
+        if (list.length > 0) {
+          patch.roomQueue = list.length > 1 ? list : [];
+          if (!list.includes(this.state.room)) patch.room = list[0]!;
+        }
+      }
       if (typeof cmd.model === "string") patch.model = cmd.model.trim();
       if (typeof cmd.subModel === "string") patch.subModel = cmd.subModel.trim();
       if (typeof cmd.effort === "string") patch.effort = cmd.effort.trim();

@@ -125,7 +125,7 @@ button { cursor: pointer; }
 }
 .field input:hover, .field select:hover { border-color: var(--ink3); }
 #inMain, #inSub { width: 122px; }
-#selRoom { width: 160px; }
+#selRoom { width: 170px; }
 #selEffort, #selSubEffort { width: 84px; }
 #inBudget { width: 56px; -moz-appearance: textfield; }
 #inBudget::-webkit-inner-spin-button, #inMax::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -381,8 +381,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <button class="btn ghost" id="btnSettings" type="button" title="環境変数・操作">設定</button>
   </div>
   <div class="top-row">
-    <div class="field"><label for="selRoom">ルーム</label><select id="selRoom"></select></div>
-    <div class="field"><label for="inQueue" title="カンマ区切りでルームを並べると、「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る。空=上のルームだけ">順に回る</label><input id="inQueue" placeholder="例 719,555,3" autocomplete="off" style="width:9em" /></div>
+    <div class="field"><label for="selRoom" title="719 のように1つ、555-560 のように範囲、555,568 のように並べて指定できる。複数なら「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る">ルーム</label><input id="selRoom" list="dlRooms" placeholder="719 / 555-560 / 555,568" autocomplete="off" /><datalist id="dlRooms"></datalist></div>
     <div class="field"><label for="inMain">メイン</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
     <div class="field"><label for="inSub">サブ</label><input id="inSub" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
     <div class="field"><label for="selEffort" title="メインの思考の深さ">メイン effort</label><select id="selEffort"></select></div>
@@ -727,19 +726,24 @@ function renderHead() {
   const hs = st.scores.roomHighScore ?? S.rooms[String(st.room)]?.highScore ?? null;
   $("#nBest").textContent = fmt(hs); $("#nBestSub").textContent = `Room ${st.room} 最高`;
 }
+/** 並びを入力の形に戻す（続く番号は範囲にまとめる）。[555,556,557,568] → "555-557,568" */
+function fmtRooms(list) {
+  const parts = [];
+  for (let i = 0; i < list.length; ) { let j = i; while (j + 1 < list.length && list[j + 1] === list[j] + 1) j++; parts.push(j - i >= 2 ? `${list[i]}-${list[j]}` : list.slice(i, j + 1).join(",")); i = j + 1; }
+  return parts.join(",");
+}
 function syncSettings(force) {
   const st = S.st; if (!st) return;
   const set = (el, v) => { if (document.activeElement !== el || force) el.value = v; };
   // ルーム
   const ids = new Set([3, st.room, ...Object.keys(S.rooms).map(Number), ...Object.keys(st.roomProfiles || {}).map(Number)].filter(Boolean));
+  $("#dlRooms").innerHTML = [...ids].sort((a, b) => a - b).map((id) => {
+    const hs = (S.rooms[String(id)] || st.roomProfiles?.[String(id)])?.highScore;
+    return `<option value="${id}">${hs != null ? `最高 ${fmt(hs)}` : "未プレイ"}</option>`;
+  }).join("");
   const sel = $("#selRoom");
-  if (document.activeElement !== sel) {
-    sel.innerHTML = [...ids].sort((a, b) => a - b).map((id) => {
-      const hs = (S.rooms[String(id)] || st.roomProfiles?.[String(id)])?.highScore;
-      return `<option value="${id}">Room ${id}${hs != null ? `  最高 ${fmt(hs)}` : "  未プレイ"}</option>`;
-    }).join("") + `<option value="__new">番号を指定...</option>`;
-    sel.value = String(st.room);
-  }
+  if (document.activeElement !== sel || force) sel.value = st.roomQueue?.length > 1 ? fmtRooms(st.roomQueue) : String(st.room);
+  sel.title = st.roomQueue?.length > 1 ? `${st.roomQueue.join(",")} を順に（今は Room ${st.room}）` : `Room ${st.room}`;
   const eff = S.efforts || ["low", "medium", "high", "xhigh", "max"];
   const es = $("#selEffort");
   if (document.activeElement !== es) {
@@ -752,30 +756,21 @@ function syncSettings(force) {
     ses.value = st.subEffort || "";
   }
   set($("#inMain"), st.model || ""); set($("#inSub"), st.subModel || "");
-  set($("#inQueue"), (st.roomQueue || []).join(","));
   set($("#inBudget"), st.turnBudgetSec ?? ""); set($("#inMax"), st.maxTurns ?? "");
   $("#chkAuto").checked = !!st.autoContinue;
 }
 function settingsPayload() {
-  const room = Number($("#selRoom").value) || S.st?.room || 3;
+  const rooms = $("#selRoom").value.trim();
   const mx = $("#inMax").value.trim();
   const bud = Number($("#inBudget").value);
-  const roomQueue = $("#inQueue").value.split(/[\s,、]+/).map(Number).filter((n) => Number.isInteger(n) && n > 0);
-  return { room, roomQueue, model: $("#inMain").value.trim(), subModel: $("#inSub").value.trim(), effort: $("#selEffort").value, subEffort: $("#selSubEffort").value,
+  return { ...(rooms ? { rooms } : {}), model: $("#inMain").value.trim(), subModel: $("#inSub").value.trim(), effort: $("#selEffort").value, subEffort: $("#selSubEffort").value,
     ...(bud >= 3 ? { turnBudgetSec: bud } : {}), maxTurns: mx ? Number(mx) : null, autoContinue: $("#chkAuto").checked };
 }
 async function control(body) {
   try { await fetch("/api/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); } catch {}
 }
-$("#selRoom").addEventListener("change", (e) => {
-  if (e.target.value === "__new") {
-    const v = Number(prompt("ルーム番号を入力してください", String(S.st?.room || 3)));
-    if (!Number.isInteger(v) || v <= 0) { syncSettings(true); return; }
-    const o = document.createElement("option"); o.value = String(v); o.textContent = `Room ${v}  未プレイ`; e.target.insertBefore(o, e.target.lastElementChild); e.target.value = String(v);
-  }
-  control({ action: "update_settings", ...settingsPayload() });
-});
-["inQueue", "inMain", "inSub", "selEffort", "selSubEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
+$("#selRoom").addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() }));
+["inMain", "inSub", "selEffort", "selSubEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
 $("#btnStart").addEventListener("click", () => control({ action: $("#btnStart").dataset.mode === "prepare" ? "prepare" : "start", ...settingsPayload() }));
 $("#btnStop").addEventListener("click", () => control({ action: "stop" }));
 $("#btnPause").addEventListener("click", () => control({ action: "pause" }));

@@ -2,7 +2,7 @@ import { Client } from "./client";
 import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
 import { waitAwareClientConfig } from "./client/wait-status";
-import { boolSetting, getSetting, numSetting } from "./settings";
+import { boolSetting, numSetting } from "./settings";
 import { getRoomProfile, knownTotalTurns, loadRoomProfiles } from "./memory/knowledge-store";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { totalTokens } from "./agent/usage";
@@ -15,9 +15,8 @@ import { startWebUiServer } from "./ui/server";
 async function main() {
   const config = loadAgentConfig();
   const server = startWebUiServer(config.port);
-  /** 順に回るルーム（空=今のルームだけ） */
-  let roomQueue = parseRoomQueue(getSetting("CHASER_ROOM_QUEUE") ?? "");
-  if (roomQueue.length > 0 && !roomQueue.includes(config.room)) config.room = roomQueue[0]!;
+  /** ルーム欄で複数のルーム（"555-560"・"555,568"）を指定した時の並び。1試合ごとに次へ進む（1つだけなら空） */
+  let roomQueue: number[] = [];
   const settingsState = () => ({
     room: config.room,
     roomQueue,
@@ -122,10 +121,13 @@ async function main() {
 
   /** WebUI からの設定変更を config と画面状態に反映する（start/update_settings 共通） */
   const applySettings = (cmd: UiControlCommand) => {
-    if (Array.isArray(cmd.roomQueue)) {
-      roomQueue = parseRoomQueue(cmd.roomQueue);
-      // 今のルームが並びに無ければ、並びの先頭から始める（ルームの指定より並びを優先）
-      if (roomQueue.length > 0 && !roomQueue.includes(typeof cmd.room === "number" ? cmd.room : config.room)) cmd = { ...cmd, room: roomQueue[0] };
+    if (typeof cmd.rooms === "string") {
+      const list = parseRoomQueue(cmd.rooms);
+      if (list.length > 0) {
+        roomQueue = list.length > 1 ? list : [];
+        // 今のルームが並びにあればそのまま、無ければ並びの先頭から
+        cmd = { ...cmd, room: list.includes(config.room) ? config.room : list[0] };
+      }
     }
     if (typeof cmd.room === "number" && Number.isInteger(cmd.room) && cmd.room > 0 && cmd.room !== config.room) {
       if (inMatch) {
@@ -308,7 +310,7 @@ async function main() {
 
       uiBus.patchState({
         status: "cooldown",
-        statusMessage: `Match #${matchIndex} 完了。4秒後に Room ${pendingRoom ?? config.room} の次戦を開始します...${roomQueue.length > 1 ? `（順に回る: ${roomQueue.join("→")}）` : ""}`,
+        statusMessage: `Match #${matchIndex} 完了。4秒後に Room ${pendingRoom ?? config.room} の次戦を開始します...${roomQueue.length > 1 ? `（ルーム ${roomQueue.join(",")} を順に）` : ""}`,
       });
       await Bun.sleep(4000);
     };
