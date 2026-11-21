@@ -65,8 +65,11 @@ test("スナップショットの後に開発者がコミットした変更は�
   git("add", "-A");
   git("commit", "-qm", "dev");
   writeFileSync(p.policy, "# 方針\n- サブが勝手に追加\n");
+  writeFileSync(path.join(root, "src/added.ts"), "// 開発者の新規\n// コミット後にサブが追記\n");
+  writeFileSync(p.env, "A=9\n"); // コミットで変えていないファイルはスナップショットの中身に戻る
   const reverted = restoreProtectedFiles(snap);
-  expect(reverted).toEqual(["agent/policies/default.md"]);
+  expect(reverted.sort()).toEqual([".env", "agent/policies/default.md", "src/added.ts"]);
+  expect(readFileSync(p.env, "utf-8")).toBe("A=1\n");
   expect(readFileSync(p.runner, "utf-8")).toBe("// 開発者の修正\n");
   expect(readFileSync(path.join(root, "src/added.ts"), "utf-8")).toBe("// 開発者の新規\n");
   const backups = [...new Bun.Glob("var/edit-guard-backup/*/agent/policies/default.md").scanSync({ cwd: root })];

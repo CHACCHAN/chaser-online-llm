@@ -46,16 +46,30 @@ function git(args: string[]): string | null {
 }
 
 /**
- * 開発者がスナップショットの後にコミットした内容か（エージェントはコミットしない）。
- * HEAD が変わっていて、今のファイルが HEAD の中身と同じなら開発者の変更として残す。
+ * スナップショットの後に開発者がコミットで変えたファイルと、HEAD での中身（null = HEAD では消えている）。
+ * エージェントはコミットしないので、コミットされた変更は開発者のものとして残す。HEAD が同じなら空。
  */
-function committedSince(snap: ProtectedSnapshot, rel: string, current: string | undefined): boolean {
+function committedSince(snap: ProtectedSnapshot): Map<string, string | null> {
+  const changed = new Map<string, string | null>();
   const head0 = snapshotHeads.get(snap);
-  if (!head0) return false;
   const head = git(["rev-parse", "HEAD"])?.trim();
-  if (!head || head === head0) return false;
-  const inHead = git(["show", `HEAD:${rel}`]);
-  return current === undefined ? inHead === null : inHead === current;
+  if (!head0 || !head || head === head0) return changed;
+  // -z の出力は「状態\0パス\0」の繰り返し（D = 削除）。中身を読めなかったファイルは扱わない（誤って消さない）
+  const parts = (git(["diff", "--name-status", "--no-renames", "--relative", "-z", head0, head]) ?? "").split("\0");
+  for (let i = 0; i + 1 < parts.length; i += 2) {
+    const [status, rel] = [parts[i]!, parts[i + 1]!];
+    if (!rel) continue;
+    if (status === "D") changed.set(rel, null);
+    else {
+      const content = git(["show", `${head}:${rel}`]);
+      if (content !== null) changed.set(rel, content);
+    }
+  }
+  return changed;
+}
+
+function isProtected(rel: string, includeSolver: boolean): boolean {
+  return (includeSolver || !ALLOWED.has(rel)) && PROTECTED_GLOBS.some((p) => new Bun.Glob(p).match(rel));
 }
 
 /** 戻す前の中身を var/edit-guard-backup/<日時>/ に残す（間違って戻しても失わない） */
@@ -71,6 +85,8 @@ function backup(stamp: string, rel: string): void {
 const activeSnapshots = new Set<ProtectedSnapshot>();
 /** ソルバーも保護するスナップショット（試合中のサブ用。試合中はソルバーも編集禁止） */
 const includesSolver = new WeakSet<ProtectedSnapshot>();
+/** WebUI でユーザーが保存したファイル（コミットより優先して残す） */
+const userEdited = new WeakMap<ProtectedSnapshot, Set<string>>();
 
 /**
  * ユーザーが WebUI から保護対象（.env・作戦方針）を書き換えた時に呼ぶ。
@@ -83,6 +99,7 @@ export function noteUserEdit(absPath: string): void {
   for (const snap of activeSnapshots) {
     if (content === null) snap.delete(rel);
     else snap.set(rel, content);
+    userEdited.get(snap)?.add(rel);
   }
 }
 
@@ -101,35 +118,38 @@ export function snapshotProtectedFiles(opts: { includeSolver?: boolean } = {}): 
   const snap = scanProtected(opts.includeSolver);
   if (opts.includeSolver) includesSolver.add(snap);
   snapshotHeads.set(snap, git(["rev-parse", "HEAD"])?.trim() ?? null);
+  userEdited.set(snap, new Set());
   activeSnapshots.add(snap);
   return snap;
 }
 
 /**
  * 保護対象の変更・追加・削除を元に戻し、戻したファイルの一覧を返す。
- * スナップショットの後に開発者がコミットした変更は戻さない（試合中の開発で、試合の終わりにコミットが巻き戻されていた）。
- * 戻す前の中身は var/edit-guard-backup/ に残す。
+ * 戻す先はスナップショットの中身。ただしスナップショットの後に開発者がコミットしたファイルは、そのコミットの中身にする
+ * （試合中に開発したコミットが、試合の終わりに巻き戻されていた）。戻す前の中身は var/edit-guard-backup/ に残す。
  */
 export function restoreProtectedFiles(before: ProtectedSnapshot): string[] {
   activeSnapshots.delete(before);
-  const reverted: string[] = [];
-  const after = scanProtected(includesSolver.has(before));
+  const withSolver = includesSolver.has(before);
+  const after = scanProtected(withSolver);
+  const committed = committedSince(before);
+  const edited = userEdited.get(before) ?? new Set<string>();
+  const rels = new Set([...before.keys(), ...after.keys(), ...[...committed.keys()].filter((r) => isProtected(r, withSolver))]);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  for (const [rel, content] of before) {
-    const now = after.get(rel);
-    if (now !== content && !committedSince(before, rel, now)) {
-      backup(stamp, rel);
-      mkdirSync(path.dirname(path.join(guardRoot, rel)), { recursive: true });
-      writeFileSync(path.join(guardRoot, rel), content, "utf-8");
-      reverted.push(rel);
-    }
-  }
-  for (const [rel, content] of after) {
-    if (!before.has(rel) && !committedSince(before, rel, content)) {
-      const abs = path.join(guardRoot, rel);
-      backup(stamp, rel);
+  const reverted: string[] = [];
+  for (const rel of rels) {
+    const target = committed.has(rel) && !edited.has(rel) ? (committed.get(rel) ?? null) : (before.get(rel) ?? null);
+    const now = after.get(rel) ?? null;
+    if (now === target) continue;
+    const abs = path.join(guardRoot, rel);
+    backup(stamp, rel);
+    if (target === null) {
       if (existsSync(abs)) rmSync(abs);
       reverted.push(`${rel} (新規作成を削除)`);
+    } else {
+      mkdirSync(path.dirname(abs), { recursive: true });
+      writeFileSync(abs, target, "utf-8");
+      reverted.push(rel);
     }
   }
   return reverted;

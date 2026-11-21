@@ -39,6 +39,8 @@ export interface TurnRecord {
   /** このターン最後のメイン問い合わせ1回の入力トークン（キャッシュ込み） */
   mainInputTokens?: number | null;
   breakpointReasons: string[];
+  /** 最後に取れた Webマップの `turn=` とその時のハーネスのターン（Webマップのターン表示の意味を確かめるため） */
+  webMapTurn?: { ourTurn: number; webTurn: number | null } | null;
   positionAfter: [number, number];
   globalPositionAfter: [number, number] | null;
   estimatedScoreAfter: number;
@@ -372,6 +374,7 @@ export async function runAgentMatch(
           ? { agentTokens: mainAgent.usage().totalTokens - tokensAtTurnStart, mainInputTokens: mainAgent.usage().lastCallInputTokens }
           : {}),
         breakpointReasons,
+        webMapTurn: webMap.lastTurn,
         positionAfter: worldMap.getPosition(),
         globalPositionAfter: worldMap.getGlobalPosition(),
         estimatedScoreAfter: curStats.estimatedTotalScore,

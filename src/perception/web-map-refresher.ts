@@ -18,6 +18,7 @@ export class WebMapRefresher {
   private lastSourceUrl: string | null = null;
   private lastStageName: string | null = null;
   private consecutiveFailures = 0;
+  private lastSeenTurn: { ourTurn: number; webTurn: number | null } | null = null;
   private attempts = 0;
 
   constructor(
@@ -37,6 +38,11 @@ export class WebMapRefresher {
 
   get stageName(): string | null {
     return this.lastStageName;
+  }
+
+  /** 最後に取れた Webマップの `turn=` の値と、それを取りに行った時のハーネスのターン（意味の確認用に記録する） */
+  get lastTurn(): { ourTurn: number; webTurn: number | null } | null {
+    return this.lastSeenTurn;
   }
 
   /** 試合開始時: 取得を始め、タイムアウト1回分だけ結果を待つ（間に合わなければ裏で続行） */
@@ -88,6 +94,7 @@ export class WebMapRefresher {
         }
         this.worldMap.setGlobalGrid(r.grid, r.playerPos, r.stageName, turn, r.selfTileId, capturePos);
         this.consecutiveFailures = 0;
+        this.lastSeenTurn = { ourTurn: turn, webTurn: r.turn };
         this.lastSourceUrl = r.sourceUrl;
         this.lastStageName = r.stageName;
         if (!this.found) {

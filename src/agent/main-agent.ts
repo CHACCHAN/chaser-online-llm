@@ -681,7 +681,9 @@ export function parseMainReply(
       const delegate = typeof obj.delegate === "string" && obj.delegate.trim() ? obj.delegate.trim() : undefined;
       const note = typeof obj.note === "string" ? obj.note : undefined;
       const memo = typeof obj.memo === "string" ? obj.memo : undefined;
-      const memoAdd = typeof obj.memo_add === "string" && obj.memo_add.trim() ? obj.memo_add : undefined;
+      // 1行のはずだが、配列で返すモデルもあるので行をつなげて受け取る
+      const rawAdd = Array.isArray(obj.memo_add) ? obj.memo_add.filter((v) => typeof v === "string").join("\n") : obj.memo_add;
+      const memoAdd = typeof rawAdd === "string" && rawAdd.trim() ? rawAdd : undefined;
       if (obj.action === "continue") return { action: "continue", note, delegate, memo, memoAdd };
       if (obj.action === "command" && obj.command && legal.includes(obj.command)) {
         return { action: "command", command: obj.command, note, delegate, memo, memoAdd };

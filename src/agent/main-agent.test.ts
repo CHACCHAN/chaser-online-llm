@@ -256,6 +256,7 @@ test("memo_add: 全文を書き直さずにメモの末尾へ1行足せる（上
   const { parseMainReply } = await import("./main-agent");
   const r = parseMainReply('{"turn": 3, "phase": "CMD1", "action": "continue", "memo_add": "東にワープ(23)"}', 3, "CMD1", ["gr"]);
   expect(r?.memoAdd).toBe("東にワープ(23)");
+  expect(parseMainReply('{"action": "continue", "memo_add": ["北は穴", "西に77"]}', 3, "CMD1", ["gr"])?.memoAdd).toBe("北は穴\n西に77");
   const agent = new MainAgent({}, 5000) as unknown as { memo: string; notices: string[]; applyMemo(r: unknown): void };
   Bun.env.AGENT_MEMO_MAX_CHARS = "100";
   agent.memo = "北は回収済み";

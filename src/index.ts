@@ -306,7 +306,7 @@ async function main() {
               stageName: null,
               webMap: profile.webMapAvailable ?? false,
               highScore: profile.highScore ?? 0,
-        totalTurns: knownTotalTurns(config.room),
+              totalTurns: knownTotalTurns(config.room),
             },
             prep ? { memo: prep.memo, usage: prep.usage } : null,
           );
