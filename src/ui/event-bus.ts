@@ -123,6 +123,8 @@ export interface UiDashboardState {
   recentTurns: TurnRecord[];
   diagnosisMarkdown: string;
   roomProfiles: Record<string, RoomProfile>;
+  /** 順に回るルーム（空=今のルームだけ） */
+  roomQueue: number[];
   updatedAt: string;
 }
 
@@ -144,6 +146,7 @@ export interface PrepUiState {
 export interface UiControlCommand {
   action: "prepare" | "start" | "stop" | "pause" | "resume" | "update_settings";
   room?: number;
+  roomQueue?: number[];
   model?: string;
   subModel?: string;
   effort?: string;
@@ -151,6 +154,19 @@ export interface UiControlCommand {
   turnBudgetSec?: number;
   maxTurns?: number | null;
   autoContinue?: boolean;
+}
+
+/** 順に回るルームの並び（正の整数だけ。続けて同じ番号は1つにまとめる） */
+export function parseRoomQueue(v: unknown): number[] {
+  const list = (Array.isArray(v) ? v : String(v ?? "").split(/[\s,、]+/)).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  return list.filter((n, i) => i === 0 || n !== list[i - 1]);
+}
+
+/** 順に回るルームで、今のルームの次（今のルームが並びに無ければ先頭）。並びが空なら null */
+export function nextQueuedRoom(queue: number[], current: number): number | null {
+  if (queue.length === 0) return null;
+  const i = queue.indexOf(current);
+  return queue[(i + 1) % queue.length]!;
 }
 
 type SseListener = (eventName: string, data: unknown) => void;
@@ -200,6 +216,7 @@ class UiEventBus {
     recentTurns: [],
     diagnosisMarkdown: "",
     roomProfiles: {},
+    roomQueue: [],
     updatedAt: new Date().toISOString(),
   };
 
@@ -224,6 +241,7 @@ class UiEventBus {
       if (typeof cmd.room === "number" && Number.isInteger(cmd.room) && cmd.room > 0) {
         patch.room = cmd.room;
       }
+      if (Array.isArray(cmd.roomQueue)) patch.roomQueue = parseRoomQueue(cmd.roomQueue);
       if (typeof cmd.model === "string") patch.model = cmd.model.trim();
       if (typeof cmd.subModel === "string") patch.subModel = cmd.subModel.trim();
       if (typeof cmd.effort === "string") patch.effort = cmd.effort.trim();

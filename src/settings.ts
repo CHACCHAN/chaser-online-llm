@@ -24,6 +24,7 @@ export const SETTINGS = {
   CHASER_USER: { group: "chaser", description: "CHaserOnline ログインユーザ名", defaultValue: "" },
   CHASER_PASS: { group: "chaser", description: "CHaserOnline ログインパスワード", defaultValue: "", secret: true },
   CHASER_ROOM: { group: "chaser", description: "デフォルトのルーム番号", defaultValue: "3" },
+  CHASER_ROOM_QUEUE: { group: "chaser", description: "順に回るルーム（例 719,555,3）。「自動で次へ」なら1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る。空=CHASER_ROOM だけ。WebUI の「順に回る」の初期値", defaultValue: "" },
   CHASER_WEB_MAP_URL: {
     group: "chaser",
     description: "Webマップ明示指定URL（空欄で MapView.jsp を自動探索）",
@@ -148,7 +149,7 @@ export type SettingKey = keyof typeof SETTINGS;
 
 /** WebUI の設定画面の分類（左の一覧）。ここに無い項目・カスタム変数は「その他」 */
 export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }[] = [
-  { id: "server", title: "サーバ接続", keys: ["HOST_URL", "CHASER_USER", "CHASER_PASS", "CHASER_ROOM", "CHASER_HTTP_TIMEOUT_SEC", "CHASER_RETRY_MS"] },
+  { id: "server", title: "サーバ接続", keys: ["HOST_URL", "CHASER_USER", "CHASER_PASS", "CHASER_ROOM", "CHASER_ROOM_QUEUE", "CHASER_HTTP_TIMEOUT_SEC", "CHASER_RETRY_MS"] },
   { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
   { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_API_URL", "LLM_API_KEY", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },

@@ -2,21 +2,25 @@ import { Client } from "./client";
 import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
 import { waitAwareClientConfig } from "./client/wait-status";
-import { boolSetting, numSetting } from "./settings";
+import { boolSetting, getSetting, numSetting } from "./settings";
 import { getRoomProfile, knownTotalTurns, loadRoomProfiles } from "./memory/knowledge-store";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { totalTokens } from "./agent/usage";
 import type { PrepUiState } from "./ui/event-bus";
 import { runAgentMatch } from "./runner";
 import { logger } from "./tools";
-import { type UiControlCommand, uiBus } from "./ui/event-bus";
+import { nextQueuedRoom, parseRoomQueue, type UiControlCommand, uiBus } from "./ui/event-bus";
 import { startWebUiServer } from "./ui/server";
 
 async function main() {
   const config = loadAgentConfig();
   const server = startWebUiServer(config.port);
+  /** 順に回るルーム（空=今のルームだけ） */
+  let roomQueue = parseRoomQueue(getSetting("CHASER_ROOM_QUEUE") ?? "");
+  if (roomQueue.length > 0 && !roomQueue.includes(config.room)) config.room = roomQueue[0]!;
   const settingsState = () => ({
     room: config.room,
+    roomQueue,
     model: config.model ?? "",
     subModel: config.subModel ?? "",
     effort: config.effort ?? "",
@@ -118,6 +122,11 @@ async function main() {
 
   /** WebUI からの設定変更を config と画面状態に反映する（start/update_settings 共通） */
   const applySettings = (cmd: UiControlCommand) => {
+    if (Array.isArray(cmd.roomQueue)) {
+      roomQueue = parseRoomQueue(cmd.roomQueue);
+      // 今のルームが並びに無ければ、並びの先頭から始める（ルームの指定より並びを優先）
+      if (roomQueue.length > 0 && !roomQueue.includes(typeof cmd.room === "number" ? cmd.room : config.room)) cmd = { ...cmd, room: roomQueue[0] };
+    }
     if (typeof cmd.room === "number" && Number.isInteger(cmd.room) && cmd.room > 0 && cmd.room !== config.room) {
       if (inMatch) {
         pendingRoom = cmd.room;
@@ -288,6 +297,10 @@ async function main() {
         );
       }
 
+      // 順に回るルーム: 次の試合は並びの次のルーム（ループの頭で切り替わり、準備もそのルームでやり直す）
+      const nextRoom = nextQueuedRoom(roomQueue, config.room);
+      if (nextRoom !== null && nextRoom !== config.room) pendingRoom = nextRoom;
+
       if (!uiBus.getState().autoContinue || uiBus.getState().pauseRequested || uiBus.getState().stopRequested) {
         uiBus.patchState({ running: false });
         return;
@@ -295,7 +308,7 @@ async function main() {
 
       uiBus.patchState({
         status: "cooldown",
-        statusMessage: `Match #${matchIndex} 完了。4秒後に Room ${config.room} の次戦を開始します...`,
+        statusMessage: `Match #${matchIndex} 完了。4秒後に Room ${pendingRoom ?? config.room} の次戦を開始します...${roomQueue.length > 1 ? `（順に回る: ${roomQueue.join("→")}）` : ""}`,
       });
       await Bun.sleep(4000);
     };

@@ -382,6 +382,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   </div>
   <div class="top-row">
     <div class="field"><label for="selRoom">ルーム</label><select id="selRoom"></select></div>
+    <div class="field"><label for="inQueue" title="カンマ区切りでルームを並べると、「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る。空=上のルームだけ">順に回る</label><input id="inQueue" placeholder="例 719,555,3" autocomplete="off" style="width:9em" /></div>
     <div class="field"><label for="inMain">メイン</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
     <div class="field"><label for="inSub">サブ</label><input id="inSub" list="dlModels" placeholder="モデル名で検索" autocomplete="off" /></div>
     <div class="field"><label for="selEffort" title="メインの思考の深さ">メイン effort</label><select id="selEffort"></select></div>
@@ -751,6 +752,7 @@ function syncSettings(force) {
     ses.value = st.subEffort || "";
   }
   set($("#inMain"), st.model || ""); set($("#inSub"), st.subModel || "");
+  set($("#inQueue"), (st.roomQueue || []).join(","));
   set($("#inBudget"), st.turnBudgetSec ?? ""); set($("#inMax"), st.maxTurns ?? "");
   $("#chkAuto").checked = !!st.autoContinue;
 }
@@ -758,7 +760,8 @@ function settingsPayload() {
   const room = Number($("#selRoom").value) || S.st?.room || 3;
   const mx = $("#inMax").value.trim();
   const bud = Number($("#inBudget").value);
-  return { room, model: $("#inMain").value.trim(), subModel: $("#inSub").value.trim(), effort: $("#selEffort").value, subEffort: $("#selSubEffort").value,
+  const roomQueue = $("#inQueue").value.split(/[\s,、]+/).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  return { room, roomQueue, model: $("#inMain").value.trim(), subModel: $("#inSub").value.trim(), effort: $("#selEffort").value, subEffort: $("#selSubEffort").value,
     ...(bud >= 3 ? { turnBudgetSec: bud } : {}), maxTurns: mx ? Number(mx) : null, autoContinue: $("#chkAuto").checked };
 }
 async function control(body) {
@@ -772,7 +775,7 @@ $("#selRoom").addEventListener("change", (e) => {
   }
   control({ action: "update_settings", ...settingsPayload() });
 });
-["inMain", "inSub", "selEffort", "selSubEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
+["inQueue", "inMain", "inSub", "selEffort", "selSubEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
 $("#btnStart").addEventListener("click", () => control({ action: $("#btnStart").dataset.mode === "prepare" ? "prepare" : "start", ...settingsPayload() }));
 $("#btnStop").addEventListener("click", () => control({ action: "stop" }));
 $("#btnPause").addEventListener("click", () => control({ action: "pause" }));
