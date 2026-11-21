@@ -34,7 +34,7 @@
 
 ### 2.2 `MapView.jsp` HTML から抽出できる情報
 - **ステージ名**: `<H1>対戦マップビュー [Renshuu_x5]</H1>`
-- **現在ターン**: `turn=4 Next=<USER>`
+- **現在ターン**: `turn=4 Next=<USER>`（今のターンだけ。全ターン数・残りターン数は出ない。全ターン数は試合後の公式結果 `vsResultView.jsp` の「取得ターン数＋残ターン数」で分かり、ルームごとに一定（例: room555 は 88+48・62+74 ＝ 136）。ハーネスは `room-profiles.json` の `totalTurns` に記録し、試合中のメインに `[TURN n/全体（残り）]` で渡す）
 - **盤面グリッド**: `<table cellpadding="0" cellspacing="0">` 内の各 `<td>` に `<img src="/CHaserOnline003/img/012.gif">` や `<img src="/CHaserOnline003/img/001000.gif">` の形式で全マスが並ぶ。
   - 注意: JSP の出力仕様上、`<tr></tr><tr><td>...` のように閉じタグと開きタグが連続するため、パーサは `/<\/?tr[^>]*>/i` で行分割してから `/\/img\/0*(\d+)\.(?:gif|png|jpg)/i` で数値化する。
   - 自機タイル（例: `1000`）の座標 `(col, row)` がそのまま絶対座標 `playerPos` になる。

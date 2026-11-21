@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { ROOM_PROFILES_PATH, TILES_PATH } from "../paths";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { ROOM_PROFILES_PATH, RUNS_DIR, TILES_PATH } from "../paths";
 
 export interface StoredTileDefinition {
   name: string;
@@ -37,6 +38,8 @@ export interface RoomProfile {
   bestRunId: string | null;
   bestSolverFile: string | null;
   matchesPlayed: number;
+  /** 1試合の全ターン数（公式結果の 取得ターン数＋残ターン数。Webマップは今のターンしか出さない） */
+  totalTurns?: number | null;
   warpLinks: WarpLinkRecord[];
   discoveredTiles: number[];
   tacticalNotes: string[];
@@ -124,6 +127,27 @@ export function getRoomProfile(room: number): RoomProfile {
     tacticalNotes: [],
     updatedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * ルームの全ターン数。記録が無ければ過去の試合の公式結果（取得＋残ターン数）から求める。分からなければ null。
+ */
+export function knownTotalTurns(room: number, runsDir = RUNS_DIR): number | null {
+  const recorded = getRoomProfile(room).totalTurns;
+  if (typeof recorded === "number" && recorded > 0) return recorded;
+  if (!existsSync(runsDir)) return null;
+  for (const name of readdirSync(runsDir).sort().reverse()) {
+    const file = path.join(runsDir, name, "summary.json");
+    if (!existsSync(file)) continue;
+    try {
+      const o = (JSON.parse(readFileSync(file, "utf-8")) as { officialResult?: { room?: string | number; acquiredTurns?: number; remainingTurns?: number } | null }).officialResult;
+      const total = (o?.acquiredTurns ?? 0) + (o?.remainingTurns ?? 0);
+      if (o && Number(o.room) === room && total > 0) return total;
+    } catch {
+      // 壊れた summary は飛ばす
+    }
+  }
+  return null;
 }
 
 export function saveRoomProfile(profile: RoomProfile): RoomProfile {

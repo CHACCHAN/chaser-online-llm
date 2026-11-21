@@ -199,6 +199,9 @@ export function analyzeMatchRun(
 
   const profile = getRoomProfile(summary.room);
   profile.matchesPlayed += 1;
+  if (official && official.acquiredTurns + official.remainingTurns > 0) {
+    profile.totalTurns = official.acquiredTurns + official.remainingTurns;
+  }
   const achievedScore = official?.totalScore ?? summary.estimatedScore.estimatedTotalScore;
   // 試合になっていない（待機切れ等）回は最高記録として扱わない
   const isRealMatch = summary.turns >= numSetting("AGENT_EVOLVE_MIN_TURNS", { min: 0, integer: true });

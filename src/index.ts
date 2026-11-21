@@ -3,7 +3,7 @@ import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
 import { waitAwareClientConfig } from "./client/wait-status";
 import { boolSetting } from "./settings";
-import { getRoomProfile, loadRoomProfiles } from "./memory/knowledge-store";
+import { getRoomProfile, knownTotalTurns, loadRoomProfiles } from "./memory/knowledge-store";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { totalTokens } from "./agent/usage";
 import type { PrepUiState } from "./ui/event-bus";
@@ -306,6 +306,7 @@ async function main() {
               stageName: null,
               webMap: profile.webMapAvailable ?? false,
               highScore: profile.highScore ?? 0,
+        totalTurns: knownTotalTurns(config.room),
             },
             prep ? { memo: prep.memo, usage: prep.usage } : null,
           );

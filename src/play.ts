@@ -12,7 +12,7 @@ import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { Client } from "./client";
 import { loadAgentConfig } from "./config";
 import { runPostMatchEvolution } from "./evolve";
-import { getRoomProfile } from "./memory/knowledge-store";
+import { getRoomProfile, knownTotalTurns } from "./memory/knowledge-store";
 import { runAgentMatch } from "./runner";
 import { boolSetting, numSetting } from "./settings";
 
@@ -46,6 +46,7 @@ try {
         stageName: null,
         webMap: profile.webMapAvailable ?? false,
         highScore: profile.highScore ?? 0,
+        totalTurns: knownTotalTurns(config.room),
       },
       prep ? { memo: prep.memo, usage: prep.usage } : null,
     );

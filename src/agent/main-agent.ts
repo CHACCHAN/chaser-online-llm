@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CMD1_COMMANDS, CMD1_SPECS, CMD2_COMMANDS, CMD2_SPECS, classifyTileSafety, type WorldMap } from "../memory/world-map";
-import { getRoomProfile } from "../memory/knowledge-store";
+import { getRoomProfile, knownTotalTurns } from "../memory/knowledge-store";
 import { AGENT_DIR, COMMANDS_PATH, OFFICIAL_RULES_PATH, CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH, RUNS_DIR, STRATEGY_PATH, VAR_DIR } from "../paths";
 import { numSetting } from "../settings";
 import type { AgentPlan, SolverDecision } from "../solver/active-solver";
@@ -73,6 +73,8 @@ export class MainAgent {
   private plan: AgentPlan | null = null;
   private notices: string[] = [];
   private matchInfo = "";
+  /** このルームの1試合の全ターン数（過去の公式結果から。不明なら null） */
+  private totalTurns: number | null = null;
   /** 固定のシステムプロンプト（main.md ＋ 作戦方針 ＋ 戦略知識）。試合中は不変なのでキャッシュも効きやすい */
   private systemPrompt = "";
   private memo = "";
@@ -131,7 +133,7 @@ export class MainAgent {
    * 試合開始（入室前）。prepared があれば準備フェーズで作ったメモから始める（準備は「開始」より前に runPrepPhase で済ませておく）。
    */
   async begin(
-    info: { room: number; stageName: string | null; webMap: boolean; highScore: number },
+    info: { room: number; stageName: string | null; webMap: boolean; highScore: number; totalTurns?: number | null },
     prepared?: { memo: string; usage: UsageTotals } | null,
   ): Promise<AskResult> {
     this.started = true;
@@ -141,7 +143,8 @@ export class MainAgent {
     this.recent = [];
     this.lastEst = null;
     this.frameVersion = null;
-    this.matchInfo = `room=${info.room} stage=${info.stageName ?? "unknown"} webMap=${info.webMap} roomHighScore=${info.highScore}`;
+    this.totalTurns = info.totalTurns ?? null;
+    this.matchInfo = `room=${info.room} stage=${info.stageName ?? "unknown"} webMap=${info.webMap} roomHighScore=${info.highScore} totalTurns=${this.totalTurns ?? "不明（このルームの公式結果がまだない）"}`;
     const policy = activePolicyPrompt();
     const strategy = existsSync(STRATEGY_PATH) ? readFileSync(STRATEGY_PATH, "utf-8") : "";
     // 試合中のメインはツールなしでファイルを読めないので、ルールとコマンドの表はここで中身を入れる（AGENTS.md は付けない）
@@ -514,7 +517,7 @@ export class MainAgent {
       ...ev.nearestFrontiers.slice(0, 3).map((t) => `未探索(${t.x},${t.y}) 距離${t.distance}`),
     ];
     const lines = [
-      `[TURN ${ctx.turn} / ${ctx.phase}] budget=${Math.round(this.turnBudgetMs / 1000)}s`,
+      `[TURN ${ctx.turn}${this.totalTurns ? `/${this.totalTurns}（このターンを含め残り${Math.max(0, this.totalTurns - ctx.turn + 1)}）` : ""} / ${ctx.phase}] budget=${Math.round(this.turnBudgetMs / 1000)}s`,
       `## メモ（前のフェーズまでの自分から。${this.memo.length}/${numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true })}字）`,
       this.memo || "(まだない)",
       "## 直近の経過",
@@ -596,7 +599,7 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
   const res = await session.ask(
     [
       "[PREP] 試合開始前の準備フェーズ。資料を読み、試合開始時のメモを作れ。",
-      `ルーム: ${room} / ルームの最高得点: ${profile.highScore ?? "なし"} / Webマップ: ${profile.webMapAvailable ?? "不明"}`,
+      `ルーム: ${room} / ルームの最高得点: ${profile.highScore ?? "なし"} / Webマップ: ${profile.webMapAvailable ?? "不明"} / 1試合の全ターン数: ${knownTotalTurns(room) ?? "不明"}`,
       officialLine,
       "",
       "## ルームの情報（var/room-profiles.json）",
