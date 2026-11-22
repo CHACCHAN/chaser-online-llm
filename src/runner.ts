@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { BEST_SOLVERS_DIR, EVALUATOR_PATH, RUNS_DIR, SOLVER_PATH } from "./paths";
+import { EVALUATOR_PATH, POLICY_PARAMS_PATH, RUNS_DIR } from "./paths";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
 import { isResultForRun } from "./client/result";
 import type { AgentConfig } from "./config";
@@ -18,7 +18,7 @@ import { saveRealMap } from "./sim/mapgen";
 import * as defaultEvaluator from "./solver/evaluator";
 import type { EvaluatorModule } from "./solver/planner";
 import { loadPolicyParams, makePlannerPolicy } from "./solver/policy";
-import { decideTurnAction as defaultDecideTurnAction, type SolverDecision } from "./solver/active-solver";
+import type { AgentPlan, SolverDecision } from "./solver/types";
 import { type UiPredictionState, uiBus } from "./ui/event-bus";
 
 export interface TurnRecord {
@@ -39,9 +39,7 @@ export interface TurnRecord {
   solverFallbackNotes: string[];
   /** メインの返答種別 (例: "CMD1:continue", "CMD2:plan(followed)")。括弧は作戦目標に対して送った手が followed=向かう / no_route=経路なし / other=別の手 */
   mainActions: string[];
-  /** サブへ依頼した仕事 */
-  delegations: string[];
-  /** このターンにエージェント全体（メイン・サブ）が使ったトークン */
+  /** このターンに LLM が使ったトークン */
   agentTokens?: number;
   /** このターン最後のメイン問い合わせ1回の入力トークン（キャッシュ込み） */
   mainInputTokens?: number | null;
@@ -88,9 +86,7 @@ export interface RunSummary {
   agent: {
     enabled: boolean;
     model: string | null;
-    subModel: string | null;
     effort: string | null;
-    subEffort: string | null;
     turnBudgetSec: number;
     mainDecisionRate: number | null;
     avgLatencyMs: number | null;
@@ -100,11 +96,11 @@ export interface RunSummary {
   };
   /** 試合後の進化結果（evolve.ts が追記） */
   evolution?: {
-    solverChanged: boolean;
+    /** 改修した評価関数が試合の記録での確かめに通ったか（改修していなければ true） */
     replayVerified: boolean;
+    /** 改修した評価関数を元に戻したか */
     rolledBack: boolean;
-    interrupted?: boolean;
-    /** 評価関数（src/solver/evaluator.ts）を改修したか・シミュレータの比較で採用したか */
+    /** 評価関数（src/solver/evaluator.ts）を改修したか・確かめて採用したか */
     evaluatorChanged?: boolean;
     evaluatorAccepted?: boolean;
   };
@@ -115,30 +111,6 @@ export interface RunSummary {
 function makeRunId(room: number): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   return `${stamp}_room${room}`;
-}
-
-/** 読み込み済みのソルバー（ファイルの更新時刻が変わった時だけ読み直す。同じものを何度も読み込むとモジュールが溜まり続ける） */
-let solverCache: { mtimeMs: number; fn: typeof defaultDecideTurnAction } | null = null;
-
-async function loadActiveSolver(): Promise<typeof defaultDecideTurnAction> {
-  const solverPath = SOLVER_PATH;
-  try {
-    const mtimeMs = statSync(solverPath).mtimeMs;
-    if (solverCache && solverCache.mtimeMs === mtimeMs) return solverCache.fn;
-    const mod = (await import(`${solverPath}?t=${mtimeMs}`)) as {
-      decideTurnAction?: typeof defaultDecideTurnAction;
-    };
-    if (typeof mod.decideTurnAction === "function") {
-      solverCache = { mtimeMs, fn: mod.decideTurnAction };
-      return mod.decideTurnAction;
-    }
-  } catch (err) {
-    // 改修失敗に気づけるよう握りつぶさない（試合は静的 import 版で継続）
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error({ err: msg }, "active-solver.ts の読み込みに失敗。静的 import 版で継続");
-    uiBus.pushClaudeEvent({ context: "system", kind: "error", title: "Solver Load Failed", content: msg });
-  }
-  return defaultDecideTurnAction;
 }
 
 /** 評価関数（エージェントが試合後に改修する）を試合開始時に読み込む。読めなければ同梱の版 */
@@ -167,7 +139,7 @@ function syncUiPredictionAndMap(
   decision: SolverDecision,
   source: "solver" | "main" | "fallback",
   breakpointReasons: string[],
-  agentInfo: Partial<Pick<UiPredictionState, "mainAction" | "mainNote" | "mainLatencyMs" | "plan" | "delegated">> = {},
+  agentInfo: Partial<Pick<UiPredictionState, "mainAction" | "mainNote" | "mainLatencyMs" | "plan">> = {},
 ): void {
   const evalSummary = worldMap.evaluateCandidates(phase);
   uiBus.updatePrediction({
@@ -202,9 +174,7 @@ export async function runAgentMatch(
   // 試合中に WebUI で設定を変えても、この試合の記録は開始時の設定で残す（変更は次の試合から）
   const agentSettings = {
     model: config.model ?? null,
-    subModel: config.subModel ?? null,
     effort: config.effort ?? null,
-    subEffort: config.subEffort ?? null,
     turnBudgetSec: config.turnBudgetSec,
   };
   const worldMap = new WorldMap();
@@ -250,17 +220,13 @@ export async function runAgentMatch(
   });
   uiBus.updateMap(worldMap.buildUiMapState(null));
 
-  // ソルバーは試合開始時に1回だけ読み込む（試合中にファイルが変わっても、この試合は同じソルバーで通す）
-  // 方策: planner（経路探索・学習したパラメータ）か solver（従来のソルバー）。どちらも試合開始時に1回だけ読み込む
-  const policyKind = getSetting("PLAY_POLICY") === "solver" ? "solver" : "planner";
-  const loadedSolver = await loadActiveSolver();
-  const planner = policyKind === "planner" ? makePlannerPolicy(loadPolicyParams(), await loadEvaluator()) : null;
-  /** ソルバーが例外を投げても試合は止めない（安全な手にして続ける。UI には最初の1回と以後100回ごとに知らせる） */
+  // 方策（経路探索 ＋ 評価関数 ＋ 学習したパラメータ）は試合開始時に1回だけ読み込む（試合中にファイルが変わっても、この試合は同じもので通す）
+  const planner = makePlannerPolicy(loadPolicyParams(), await loadEvaluator());
+  /** 方策が例外を投げても試合は止めない（安全な手にして続ける。UI には最初の1回と以後100回ごとに知らせる） */
   let solverErrors = 0;
-  const decideSolver: typeof loadedSolver = (wm, phase, turn, plan) => {
+  const decideSolver = (wm: WorldMap, phase: "CMD1" | "CMD2", turn: number, plan: AgentPlan | null): SolverDecision => {
     try {
-      if (planner) return planner(wm, phase, turn, { totalTurns, directive: plan ? { target: plan.target, note: plan.note } : null });
-      return loadedSolver(wm, phase, turn, plan);
+      return planner(wm, phase, turn, { totalTurns, directive: plan ? { target: plan.target, note: plan.note } : null });
     } catch (err) {
       solverErrors += 1;
       const msg = err instanceof Error ? err.message : String(err);
@@ -272,11 +238,9 @@ export async function runAgentMatch(
     }
   };
   const turnLogs: TurnRecord[] = [];
-  /** 非同期のメイン: 届いた返答（次に書くターンの記録に入れる） */
+  /** LLM（裏で作戦を考える）: 届いた返答（次に書くターンの記録に入れる） */
   const asyncMainActions: string[] = [];
   const asyncMainLatency: number[] = [];
-  const asyncDelegations: string[] = [];
-  const asyncMain = mainAgent !== null && boolSetting("AGENT_ASYNC");
   const commandCounts: Record<string, number> = {};
   let gameOverReason: string | null = null;
 
@@ -324,7 +288,6 @@ export async function runAgentMatch(
       const mainLatencyMs: number[] = [];
       const solverFallbackNotes: string[] = [];
       const mainActions: string[] = [];
-      const delegations: string[] = [];
       const tokensAtTurnStart = mainAgent?.usage().totalTokens ?? 0;
       const breakpointReasons: string[] = [];
       const warpWaits: { phase: string; ms: number; aligned: boolean }[] = [];
@@ -340,8 +303,8 @@ export async function runAgentMatch(
 
         let decision = solverDecision;
         let source: "main" | "solver" = "solver";
-        if (mainAgent && asyncMain) {
-          // 非同期: 手は待たない。座標系の変化・目標への到達を反映してから今の作戦で手を決め直し、メインが空いていれば裏で聞く
+        if (mainAgent) {
+          // LLM は待たない。座標系の変化・目標への到達を反映してから今の作戦で手を決め直し、LLM が空いていれば裏で聞く
           mainAgent.syncFrame(worldMap);
           decision = decideSolver(worldMap, phase, turn, mainAgent.currentPlan);
           const askedAt = `T${turn} ${phase}`;
@@ -354,7 +317,6 @@ export async function runAgentMatch(
               }
               asyncMainActions.push(`${askedAt}:${res.source === "main" ? res.action : `solver(${res.note})`}${res.planStatus ? `(${res.planStatus})` : ""}`);
               if (res.durationMs !== null) asyncMainLatency.push(res.durationMs);
-              if (res.delegated) asyncDelegations.push(res.delegated);
               reloadTilesKnowledge();
               uiBus.pushClaudeEvent({
                 context: "in_game",
@@ -369,45 +331,7 @@ export async function runAgentMatch(
             mainNote: started ? `${askedAt} の盤面で考え始めた` : "考え中（前の問い合わせ）",
             mainLatencyMs: null,
             plan: mainAgent.currentPlan,
-            delegated: null,
           });
-        } else if (mainAgent) {
-          uiBus.patchState({ status: "claude_in_game", statusMessage: `T${turn} ${phase} メインエージェント判断中` });
-          let res: Awaited<ReturnType<MainAgent["decide"]>>;
-          try {
-            res = await mainAgent.decide({
-              turn,
-              phase,
-              worldMap,
-              events,
-              solve: (plan) => decideSolver(worldMap, phase, turn, plan),
-            });
-          } catch (err) {
-            // メインの処理（盤面の書き出しなど）が落ちても、このフェーズはソルバーの手で続ける
-            const msg = err instanceof Error ? err.message : String(err);
-            logger.error({ turn, phase, err: msg }, "メインエージェントの処理で例外（ソルバーの手で続ける）");
-            res = { decision: solverDecision, source: "solver", note: `main error: ${msg.slice(0, 120)}`, durationMs: null, action: null, delegated: null };
-          }
-          if (res.action) mainActions.push(`${phase}:${res.action}${res.planStatus ? `(${res.planStatus})` : ""}`);
-          if (res.delegated) delegations.push(res.delegated);
-          reloadTilesKnowledge();
-          if (res.durationMs !== null) mainLatencyMs.push(res.durationMs);
-          decision = res.decision;
-          source = res.source;
-          if (source === "solver") solverFallbackNotes.push(`${phase}: ${res.note}`);
-          if (source === "main") {
-            decision = { ...decision, reason: `[main] ${decision.reason} (${res.note})` };
-          } else {
-            decision = { ...decision, reason: `${decision.reason} [solver: ${res.note}]` };
-          }
-          syncUiPredictionAndMap(worldMap, turn, phase, decision, source, events, {
-            mainAction: res.action,
-            mainNote: res.note,
-            mainLatencyMs: res.durationMs,
-            plan: mainAgent.currentPlan,
-            delegated: res.delegated,
-          });
-          uiBus.patchState({ status: "playing", statusMessage: `Room ${config.room} 対戦中` });
         }
 
         const r = phase === "CMD1" ? await client.command1(decision.command) : await client.command2(decision.command);
@@ -536,7 +460,6 @@ export async function runAgentMatch(
         mainLatencyMs: [...mainLatencyMs, ...asyncMainLatency.splice(0)],
         solverFallbackNotes,
         mainActions: [...mainActions, ...asyncMainActions.splice(0)],
-        delegations: [...delegations, ...asyncDelegations.splice(0)],
         ...(mainAgent
           ? { agentTokens: mainAgent.usage().totalTokens - tokensAtTurnStart, mainInputTokens: mainAgent.usage().lastCallInputTokens }
           : {}),
@@ -610,10 +533,8 @@ export async function runAgentMatch(
   const finishedAt = new Date().toISOString();
   const stats = worldMap.getStats();
   await webMap.drain();
-  // 非同期のメインが考え中なら少し待つ（返答のメモ・依頼を記録に残す）
+  // LLM が考え中なら少し待つ（返答のメモを記録に残す）
   await mainAgent?.settleBackground(5000);
-  // サブを先に止めてサブの範囲外の編集を戻す（この後で保存する solver-snapshot・最良ソルバー・振り返りの改修前のコードに混ぜない）
-  await mainAgent?.stopSub();
   // 試合中に届いた公式のアイテム得点から、タイルの本当の得点を測って knowledge/tiles.json に残す（振り返りの前に）
   let tileMeasurement: MeasureResult | undefined;
   try {
@@ -687,17 +608,12 @@ export async function runAgentMatch(
     saveRoomProfile(updatedProfile);
   }
 
-  // この試合で使ったソルバー（試合後の改修前）を残す。最高記録ならルームの最良ソルバーとしても保存
-  const solverPath = SOLVER_PATH;
-  if (existsSync(solverPath)) {
-    copyFileSync(solverPath, path.join(runDir, "solver-snapshot.ts"));
-    if (updatedProfile.bestRunId === runId) {
-      const bestSolverPath = path.join(BEST_SOLVERS_DIR, `room${config.room}.ts`);
-      mkdirSync(BEST_SOLVERS_DIR, { recursive: true });
-      copyFileSync(solverPath, bestSolverPath);
-      updatedProfile.bestSolverFile = bestSolverPath;
-      saveRoomProfile(updatedProfile);
-    }
+  // この試合で使った方策（試合後の改修・学習の前）を残す。verify で改修前と比べる時や、強かった試合の方策を見る時に使う
+  try {
+    if (existsSync(EVALUATOR_PATH)) copyFileSync(EVALUATOR_PATH, path.join(runDir, "evaluator-snapshot.ts"));
+    if (existsSync(POLICY_PARAMS_PATH)) copyFileSync(POLICY_PARAMS_PATH, path.join(runDir, "policy-params.json"));
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, "方策の控えを残せなかった");
   }
 
   return summary;

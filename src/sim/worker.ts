@@ -1,8 +1,7 @@
 /// <reference lib="webworker" />
-import { decideTurnAction } from "../solver/active-solver";
 import * as defaultEvaluator from "../solver/evaluator";
 import type { EvaluatorModule } from "../solver/planner";
-import { makePlannerPolicy, makeSolverPolicy, type PolicyFn } from "../solver/policy";
+import { makePlannerPolicy, type PolicyFn } from "../solver/policy";
 import { runEpisode } from "./episode";
 import { makeScenario } from "./mapgen";
 import type { EpisodeJob } from "./pool";
@@ -17,12 +16,8 @@ const load = <T>(file: string): Promise<T> => {
 };
 
 async function policyFor(job: EpisodeJob): Promise<PolicyFn> {
-  if (job.policy.kind === "planner") {
-    const ev = job.policy.evaluatorPath ? await load<EvaluatorModule>(job.policy.evaluatorPath) : defaultEvaluator;
-    return makePlannerPolicy(job.policy.params, ev);
-  }
-  const decide = job.policy.solverPath ? (await load<{ decideTurnAction: typeof decideTurnAction }>(job.policy.solverPath)).decideTurnAction : decideTurnAction;
-  return makeSolverPolicy(decide);
+  const ev = job.policy.evaluatorPath ? await load<EvaluatorModule>(job.policy.evaluatorPath) : defaultEvaluator;
+  return makePlannerPolicy(job.policy.params, ev);
 }
 
 self.onmessage = async (ev: MessageEvent<EpisodeJob>) => {

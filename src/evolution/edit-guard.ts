@@ -3,8 +3,8 @@ import path from "node:path";
 import { EDIT_GUARD_BACKUP_DIR, PROJECT_ROOT } from "../paths";
 
 /**
- * 試合後の振り返りでメインエージェントが触ってよいのは
- * src/solver/active-solver.ts（とそのテスト）・src/solver/evaluator.ts（経路探索の評価関数）・knowledge/・agent/tools/ だけ。
+ * 試合後の振り返り・学習の LLM が触ってよいのは
+ * src/solver/evaluator.ts（経路探索の評価関数）・knowledge/・agent/tools/ だけ。
  * それ以外の保護対象（ハーネス本体・プロンプト・ユーザーの作戦方針・設定・手順書）が変わっていたら元に戻す。
  */
 const PROTECTED_GLOBS = [
@@ -21,7 +21,7 @@ const PROTECTED_GLOBS = [
   ".env",
   ".env.example",
 ];
-const ALLOWED = new Set(["src/solver/active-solver.ts", "src/solver/active-solver.test.ts", "src/solver/evaluator.ts"]);
+const ALLOWED = new Set(["src/solver/evaluator.ts"]);
 
 export type ProtectedSnapshot = Map<string, string>;
 
@@ -68,8 +68,8 @@ function committedSince(snap: ProtectedSnapshot): Map<string, string | null> {
   return changed;
 }
 
-function isProtected(rel: string, includeSolver: boolean): boolean {
-  return (includeSolver || !ALLOWED.has(rel)) && PROTECTED_GLOBS.some((p) => new Bun.Glob(p).match(rel));
+function isProtected(rel: string, includeEvaluator: boolean): boolean {
+  return (includeEvaluator || !ALLOWED.has(rel)) && PROTECTED_GLOBS.some((p) => new Bun.Glob(p).match(rel));
 }
 
 /** 戻す前の中身を var/edit-guard-backup/<日時>/ に残す（間違って戻しても失わない） */
@@ -84,7 +84,7 @@ function backup(stamp: string, rel: string): void {
 /** 振り返り中に取っているスナップショット（ユーザーの WebUI 編集を「正」として反映するため） */
 const activeSnapshots = new Set<ProtectedSnapshot>();
 /** ソルバーも保護するスナップショット（試合中のサブ用。試合中はソルバーも編集禁止） */
-const includesSolver = new WeakSet<ProtectedSnapshot>();
+const includesEvaluator = new WeakSet<ProtectedSnapshot>();
 /** WebUI でユーザーが保存したファイル（コミットより優先して残す） */
 const userEdited = new WeakMap<ProtectedSnapshot, Set<string>>();
 
@@ -103,20 +103,20 @@ export function noteUserEdit(absPath: string): void {
   }
 }
 
-function scanProtected(includeSolver = false): ProtectedSnapshot {
+function scanProtected(includeEvaluator = false): ProtectedSnapshot {
   const snap: ProtectedSnapshot = new Map();
   for (const pattern of PROTECTED_GLOBS) {
     for (const rel of new Bun.Glob(pattern).scanSync({ cwd: guardRoot, onlyFiles: true, dot: true })) {
-      if (includeSolver || !ALLOWED.has(rel)) snap.set(rel, readFileSync(path.join(guardRoot, rel), "utf-8"));
+      if (includeEvaluator || !ALLOWED.has(rel)) snap.set(rel, readFileSync(path.join(guardRoot, rel), "utf-8"));
     }
   }
   return snap;
 }
 
 /** 振り返りの前に呼ぶ。restoreProtectedFiles まで WebUI からの編集を追跡する */
-export function snapshotProtectedFiles(opts: { includeSolver?: boolean } = {}): ProtectedSnapshot {
-  const snap = scanProtected(opts.includeSolver);
-  if (opts.includeSolver) includesSolver.add(snap);
+export function snapshotProtectedFiles(opts: { includeEvaluator?: boolean } = {}): ProtectedSnapshot {
+  const snap = scanProtected(opts.includeEvaluator);
+  if (opts.includeEvaluator) includesEvaluator.add(snap);
   snapshotHeads.set(snap, git(["rev-parse", "HEAD"])?.trim() ?? null);
   userEdited.set(snap, new Set());
   activeSnapshots.add(snap);
@@ -130,7 +130,7 @@ export function snapshotProtectedFiles(opts: { includeSolver?: boolean } = {}): 
  */
 export function restoreProtectedFiles(before: ProtectedSnapshot): string[] {
   activeSnapshots.delete(before);
-  const withSolver = includesSolver.has(before);
+  const withSolver = includesEvaluator.has(before);
   const after = scanProtected(withSolver);
   const committed = committedSince(before);
   const edited = userEdited.get(before) ?? new Set<string>();

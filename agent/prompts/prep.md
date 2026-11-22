@@ -8,7 +8,7 @@
 1. ゲームのルールと得点: `knowledge/official-rules.md`（スコア・守ること・タイル・公式資料との食い違い）、`knowledge/commands.md`（コマンド全61種）、`knowledge/tiles.json`、`knowledge/strategy.md`（ほかの資料の場所はシステムプロンプトの AGENTS.md「情報の在りか」）
 2. このルームの記録: 下の「ルームの情報」と、過去の試合のフォルダ（新しい順）
    - `summary.json`（得点・ターン数・終了理由・最終メモ `agent.finalMemo`）、`diagnosis.md`（失点の分析）、
-     `MEMO.md`（その試合の最終メモ）、`ASK_SUB.md`（サブへの依頼と結果）、`evolution-report.md`（試合後の改修）、`final-map.txt`（最終盤面）
+     `MEMO.md`（その試合の最終メモ）、`evolution-report.md`（試合後の改修）、`final-map.txt`（最終盤面）
    - `turns.jsonl` は大きいので、必要な箇所だけ Grep で読む
 3. 必要なら `knowledge/research/` の調査メモ
 

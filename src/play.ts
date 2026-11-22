@@ -5,7 +5,7 @@
  *   bun run play --room 3 --solver-only                # ソルバーのみ
  *   bun run play --room 3 --evolve                     # 試合後の振り返り・ソルバー改修まで行う
  *
- * --model / --sub-model / --effort / --sub-effort / --turn-budget は .env より優先（src/config.ts）。
+ * --model / --effort / --turn-budget は .env より優先（src/config.ts）。
  */
 import "./env-files"; // .env.local より .env を優先（最初に読む）
 import { parseArgs } from "node:util";
@@ -28,7 +28,7 @@ const loginWaitMs =
 
 await recoverInterruptedEvolution();
 const mainAgent = config.useMainAgent
-  ? new MainAgent({ model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort }, config.turnBudgetSec * 1000)
+  ? new MainAgent({ model: config.model, effort: config.effort }, config.turnBudgetSec * 1000)
   : null;
 
 try {
@@ -38,7 +38,7 @@ try {
     // 準備フェーズ（ルームに入る前）: ルール・過去の試合・作戦方針を読んで最初のメモを作る
     let prep: PrepResult | null = null;
     if (boolSetting("AGENT_PREP")) {
-      prep = await runPrepPhase({ model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort }, config.room);
+      prep = await runPrepPhase({ model: config.model, effort: config.effort }, config.room);
       console.log(JSON.stringify({ prep: prep.status, sec: Math.round(prep.durationMs / 1000), memoChars: prep.memo.length, official: prep.official }));
       if (prep.status !== "ok" || !prep.memo) prep = null;
     }
@@ -49,7 +49,6 @@ try {
         webMap: profile.webMapAvailable ?? false,
         highScore: profile.highScore ?? 0,
         totalTurns: knownTotalTurns(config.room),
-        async: boolSetting("AGENT_ASYNC"),
       },
       prep ? { memo: prep.memo, usage: prep.usage } : null,
     );

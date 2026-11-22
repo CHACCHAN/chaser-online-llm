@@ -26,9 +26,7 @@ async function main() {
     room: config.room,
     roomQueue,
     model: config.model ?? "",
-    subModel: config.subModel ?? "",
     effort: config.effort ?? "",
-    subEffort: config.subEffort ?? "",
     turnBudgetSec: config.turnBudgetSec,
     maxTurns: config.maxTurns,
   });
@@ -87,7 +85,7 @@ async function main() {
       publishPrep({ state: "preparing", room: config.room, model: config.model ?? null, effort: config.effort ?? null, error: null });
       uiBus.patchState({ status: "preparing", statusMessage: `準備中 — メインが Room ${config.room} のルール・過去の試合・作戦方針を読んで最初のメモを作成中（ルームにはまだ入っていません）` });
       try {
-        const r = await runPrepPhase({ model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort }, config.room, prepAbort.signal);
+        const r = await runPrepPhase({ model: config.model, effort: config.effort }, config.room, prepAbort.signal);
         const aborted = prepAbort.signal.aborted;
         const ok = !aborted && key === prepKey() && r.status === "ok" && r.memo.length > 0;
         prepared = ok ? { key, result: r } : null;
@@ -158,9 +156,7 @@ async function main() {
       }
     }
     if (typeof cmd.model === "string") config.model = cmd.model.trim() || undefined;
-    if (typeof cmd.subModel === "string") config.subModel = cmd.subModel.trim() || undefined;
     if (typeof cmd.effort === "string") config.effort = cmd.effort.trim() || undefined;
-    if (typeof cmd.subEffort === "string") config.subEffort = cmd.subEffort.trim() || undefined;
     if (typeof cmd.turnBudgetSec === "number" && cmd.turnBudgetSec >= 3) config.turnBudgetSec = cmd.turnBudgetSec;
     if (cmd.maxTurns !== undefined) {
       config.maxTurns =
@@ -340,7 +336,7 @@ async function main() {
       // メインエージェントは入室前に起動・準備させる（入室後にサーバを待たせない）
       const mainAgent = config.useMainAgent
         ? new MainAgent(
-            { model: config.model, subModel: config.subModel, effort: config.effort, subEffort: config.subEffort },
+            { model: config.model, effort: config.effort },
             config.turnBudgetSec * 1000,
           )
         : null;
@@ -355,7 +351,6 @@ async function main() {
               webMap: profile.webMapAvailable ?? false,
               highScore: profile.highScore ?? 0,
               totalTurns: knownTotalTurns(config.room),
-              async: boolSetting("AGENT_ASYNC"),
             },
             prep ? { memo: prep.memo, usage: prep.usage } : null,
           );

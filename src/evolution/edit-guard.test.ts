@@ -15,7 +15,7 @@ function fakeProject() {
   const files = {
     policy: f("agent/policies/default.md", "# 方針\n"),
     env: f(".env", "A=1\n"),
-    solver: f("src/solver/active-solver.ts", "export {};\n"),
+    solver: f("src/solver/evaluator.ts", "export {};\n"),
     runner: f("src/runner.ts", "// harness\n"),
   };
   setGuardRootForTest(root);
@@ -27,7 +27,7 @@ test("振り返り中のエージェントの変更は戻し、WebUI からの�
   const snap = snapshotProtectedFiles();
   expect(snap.has("agent/policies/default.md")).toBe(true);
   expect(snap.has(".env")).toBe(true);
-  expect(snap.has("src/solver/active-solver.ts")).toBe(false); // 振り返りはソルバーを編集してよい
+  expect(snap.has("src/solver/evaluator.ts")).toBe(false); // 振り返りは評価関数を編集してよい
   writeFileSync(p.policy, "# 方針\n- エージェントが勝手に追加\n");
   writeFileSync(p.solver, "export const changed = 1;\n");
   writeFileSync(p.env, "A=2\n");
@@ -39,14 +39,14 @@ test("振り返り中のエージェントの変更は戻し、WebUI からの�
   expect(readFileSync(p.solver, "utf-8")).toBe("export const changed = 1;\n");
 });
 
-test("試合中のサブ用ガードはソルバー・ハーネスの変更も戻し、新規ファイルは消す", () => {
+test("レビュー用のガードは評価関数・ハーネスの変更も戻し、新規ファイルは消す", () => {
   const p = fakeProject();
-  const snap = snapshotProtectedFiles({ includeSolver: true });
-  writeFileSync(p.solver, "// sub が勝手に編集\n");
+  const snap = snapshotProtectedFiles({ includeEvaluator: true });
+  writeFileSync(p.solver, "// レビュー中に勝手に編集\n");
   writeFileSync(p.runner, "// 改変\n");
   writeFileSync(path.join(path.dirname(p.runner), "new.ts"), "x\n");
   const reverted = restoreProtectedFiles(snap);
-  expect(reverted).toContain("src/solver/active-solver.ts");
+  expect(reverted).toContain("src/solver/evaluator.ts");
   expect(reverted).toContain("src/runner.ts");
   expect(reverted).toContain("src/new.ts (新規作成を削除)");
   expect(readFileSync(p.solver, "utf-8")).toBe("export {};\n");
@@ -59,7 +59,7 @@ test("スナップショットの後に開発者がコミットした変更は�
   git("init", "-q");
   git("add", "-A");
   git("commit", "-qm", "init");
-  const snap = snapshotProtectedFiles({ includeSolver: true });
+  const snap = snapshotProtectedFiles({ includeEvaluator: true });
   writeFileSync(p.runner, "// 開発者の修正\n");
   writeFileSync(path.join(root, "src/added.ts"), "// 開発者の新規\n");
   git("add", "-A");

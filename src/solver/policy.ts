@@ -2,18 +2,15 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import path from "node:path";
 import type { WorldMap } from "../memory/world-map";
 import { POLICY_PARAMS_PATH } from "../paths";
-import { decideTurnAction, type SolverDecision } from "./active-solver";
+import type { SolverDecision } from "./types";
 import * as evaluatorModule from "./evaluator";
 import { clampParams, defaultParams, type Params } from "./evaluator";
 import { planMove, type Directive, type EvaluatorModule, type PlanInsight } from "./planner";
 
 /**
  * 試合中に手を決める方策の共通の形（シミュレータでも同じものを使う）。
- * - planner: 経路探索（evaluator.ts ＋ 学習したパラメータ）。既定
- * - solver: 従来のソルバー（src/solver/active-solver.ts）
+ * 経路探索（planner.ts）＋ 評価関数（evaluator.ts）＋ 学習したパラメータ（var/policy/params.json）。
  */
-export type PolicyKind = "planner" | "solver";
-export const POLICY_KINDS: readonly PolicyKind[] = ["planner", "solver"];
 
 export interface PolicyInfo {
   /** 1試合の全ターン数（不明なら null） */
@@ -68,6 +65,3 @@ export function makePlannerPolicy(params: Params = loadPolicyParams(), evaluator
     planMove(wm, { phase, turn, remainingTurns: remainingTurns(turn, info.totalTurns), params, evaluator, directive: info.directive ?? null });
 }
 
-export function makeSolverPolicy(decide: typeof decideTurnAction = decideTurnAction): PolicyFn {
-  return (wm, phase, turn, info) => decide(wm, phase, turn, info.directive?.target ? { target: info.directive.target, note: info.directive.note } : null);
-}

@@ -4,7 +4,7 @@ import path from "node:path";
 import { ASSETS_DIR, PUBLIC_DIR, isRunDirName, RUNS_DIR } from "../paths";
 import { EFFORT_LEVELS, listGatewayModels } from "../agent/models";
 import { claudeLogin } from "../agent/claude-login";
-import { verifySolverWithReplay } from "../evolution/replay-verifier";
+import { verifyPolicyWithReplay } from "../evolution/replay-verifier";
 import { loadRoomProfiles } from "../memory/knowledge-store";
 import { WorldMap } from "../memory/world-map";
 import { scrapeRoomWebMap } from "../perception/web-map-scraper";
@@ -291,12 +291,12 @@ export function startWebUiServer(port: number) {
         }
       }
 
-      if (url.pathname === "/api/action/verify-solver" && req.method === "POST") {
-        const res = await verifySolverWithReplay(path.join(RUNS_DIR, "nonexistent"));
+      if (url.pathname === "/api/action/verify-policy" && req.method === "POST") {
+        const res = await verifyPolicyWithReplay(path.join(RUNS_DIR, "nonexistent"));
         uiBus.pushClaudeEvent({
           context: "system",
           kind: res.ok ? "system" : "error",
-          title: "Solver Self-Verify",
+          title: "方策の自己チェック",
           content: JSON.stringify(res, null, 2),
         });
         return Response.json(res);

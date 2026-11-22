@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "cli": "bun src/cli.ts",
-    "verify-solver": "bun src/verify.ts",
+    "verify-policy": "bun src/verify.ts",
     "play": "bun src/play.ts",
     "claude-login": "bun scripts/claude-login.ts"
   },

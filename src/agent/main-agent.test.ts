@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { WorldMap } from "../memory/world-map";
-import { decideTurnAction } from "../solver/active-solver";
+import { makePlannerPolicy } from "../solver/policy";
+import type { AgentPlan } from "../solver/types";
 import { type AskResult, ClaudeSession, type ClaudeSessionOptions } from "./claude-session";
 import { readFileSync } from "node:fs";
-import { CURRENT_ASK_SUB_PATH, CURRENT_MEMO_PATH } from "../paths";
-import { MainAgent } from "./main-agent";
+import { CURRENT_MEMO_PATH } from "../paths";
+import { type MainDecision, MainAgent } from "./main-agent";
 import { emptyUsage, type UsageTotals } from "./usage";
 
 /**
@@ -54,6 +55,22 @@ afterAll(() => {
   for (const [k, d] of saved) if (d) Object.defineProperty(ClaudeSession.prototype, k, d);
 });
 
+const policy = makePlannerPolicy();
+const ctxOf = (wm: WorldMap, turn: number, phase: "CMD1" | "CMD2") => ({
+  turn,
+  phase,
+  worldMap: wm,
+  events: [] as string[],
+  solve: (plan: AgentPlan | null) => policy(wm, phase, turn, { totalTurns: null, directive: plan }),
+});
+
+/** 裏で聞いて、返答が届くまで待つ（テストでは1回ずつ順に） */
+function askOnce(agent: MainAgent, wm: WorldMap, turn: number, phase: "CMD1" | "CMD2"): Promise<MainDecision | null> {
+  return new Promise((resolve) => {
+    if (!agent.startBackground(ctxOf(wm, turn, phase), (r) => resolve(r))) resolve(null);
+  });
+}
+
 async function playPhases(agent: MainAgent, n: number) {
   const wm = new WorldMap();
   wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 2, 2, 2, 2], 1);
@@ -61,8 +78,8 @@ async function playPhases(agent: MainAgent, n: number) {
   for (let i = 0; i < n; i++) {
     const turn = Math.floor(i / 2) + 1;
     const phase = i % 2 === 0 ? "CMD1" : "CMD2";
-    const r = await agent.decide({ turn, phase, worldMap: wm, events: [], solve: (plan) => decideTurnAction(wm, phase, turn, plan) });
-    sources.push(r.source);
+    const r = await askOnce(agent, wm, turn, phase);
+    sources.push(r?.source ?? "none");
   }
   return sources;
 }
@@ -79,7 +96,7 @@ test("毎フェーズ使い捨ての問い合わせで、メモと直近の経�
   const mains = sent.filter((s) => s.label === "main");
   expect(mains.length).toBe(6);
   // 問い合わせごとに別プロセス（＋次の分を先に起動）、ツールなし・保存なし・システムプロンプト置き換え
-  expect(spawned).toBe(7); // メイン6回分 ＋ 次のフェーズ用に先に起動した1（サブは仕事が来た時だけ起動）
+  expect(spawned).toBe(7); // 6回分 ＋ 次の問い合わせ用に先に起動した1
   for (const s of mains) {
     expect(s.options.tools).toBe("");
     expect(s.options.noSessionPersistence).toBe(true);
@@ -96,7 +113,7 @@ test("毎フェーズ使い捨ての問い合わせで、メモと直近の経�
   await agent.end();
 });
 
-test("1試合のトークン上限を超えたらソルバーのみで続ける", async () => {
+test("1試合のトークン上限を超えたら方策だけで続ける", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "2000";
   const agent = new MainAgent({}, 5000);
   await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
@@ -108,30 +125,11 @@ test("1試合のトークン上限を超えたらソルバーのみで続ける"
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
 
-test("サブへの依頼は TODO として次のフェーズ以降のメッセージに必ず載る", async () => {
+test("メモは人が見られるようにファイルにも書き出す", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
-  sent.length = 0;
   const agent = new MainAgent({}, 5000);
   await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
-  // 最初のフェーズで delegate を返させる
-  const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
-  let once = true;
-  proto.ask = async function (this: { options: ClaudeSessionOptions }, text: string): Promise<AskResult> {
-    if (once && this.options.label === "main") {
-      once = false;
-      sent.push({ label: "main", text, options: this.options });
-      return { status: "ok", text: '{"turn": 1, "phase": "CMD1", "action": "continue", "delegate": "タイル15の得点を調べる"}', durationMs: 1 };
-    }
-    return origAsk.call(this, text);
-  };
-  await playPhases(agent, 3);
-  proto.ask = origAsk;
-  const mains = sent.filter((s) => s.label === "main");
-  expect(mains[0]!.text).not.toContain("サブへの依頼（TODO）");
-  expect(mains[1]!.text).toContain("サブへの依頼（TODO）");
-  expect(mains[1]!.text).toMatch(/#1 \[(待機|作業中|完了)[^\]]*\] T1 CMD1に依頼: タイル15の得点を調べる/);
-  // 人が見られるようにファイルにも書き出す
-  expect(readFileSync(CURRENT_ASK_SUB_PATH, "utf-8")).toContain("タイル15の得点を調べる");
+  await playPhases(agent, 2);
   expect(readFileSync(CURRENT_MEMO_PATH, "utf-8")).toContain("まで: 北へ");
   await agent.end();
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
@@ -140,7 +138,7 @@ test("サブへの依頼は TODO として次のフェーズ以降のメッセ�
 test("memo に { } が入っていても返答を読める", async () => {
   const { parseMainReply } = await import("./main-agent");
   const text = '北へ向かう\n{"turn": 3, "phase": "CMD1", "action": "plan", "target": [2, -1], "memo": "敵は {東} に逃げた"}';
-  expect(parseMainReply(text, 3, "CMD1", ["gr"])).toEqual({ action: "plan", target: [2, -1], note: undefined, delegate: undefined, memo: "敵は {東} に逃げた" });
+  expect(parseMainReply(text, 3, "CMD1", ["gr"])).toEqual({ action: "plan", target: [2, -1], note: undefined, memo: "敵は {東} に逃げた" });
   // コードブロックで囲まれていても読む
   expect(parseMainReply('```json\n{"turn": 3, "phase": "CMD1", "action": "continue"}\n```', 3, "CMD1", ["gr"])?.action).toBe("continue");
 });
@@ -158,8 +156,7 @@ test("ワープで座標系が変わったら作戦目標を解除し、メッ�
     const m = text.match(/\[TURN (\d+) \/ (CMD[12])\]/)!;
     return { status: "ok", text: `{"turn": ${m[1]}, "phase": "${m[2]}", "action": "${m[2] === "CMD1" ? "plan" : "continue"}", "target": [1, 1]}`, durationMs: 1 };
   };
-  const step = (turn: number, phase: "CMD1" | "CMD2") =>
-    agent.decide({ turn, phase, worldMap: wm, events: [], solve: (plan) => decideTurnAction(wm, phase, turn, plan) });
+  const step = (turn: number, phase: "CMD1" | "CMD2") => askOnce(agent, wm, turn, phase);
   await step(1, "CMD1");
   expect(agent.currentPlan?.target).toEqual([1, 1]);
   (wm as unknown as { frameVersionCount: number }).frameVersionCount += 1; // ワープ
@@ -205,19 +202,6 @@ test("準備フェーズ（開始より前）: 読むだけのツールで調べ
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
 
-test("安全ガード: 行き先が罠・通行不可の直接指定を見分ける（未観測・静止は危険としない）", async () => {
-  const { landingDanger } = await import("./main-agent");
-  const wm = new WorldMap();
-  // 上=ジオード(4) 左=奈落(12) 右=岩盤(10) 下=土(2)
-  wm.applyObservation("CMD1", "gr", [2, 4, 2, 12, 1000, 10, 2, 2, 2], 1);
-  expect(landingDanger(wm, "gru")).toContain("罠(4)");
-  expect(landingDanger(wm, "wl")).toContain("罠(12)");
-  expect(landingDanger(wm, "wr")).toContain("通行不可(10)");
-  expect(landingDanger(wm, "wd")).toBeNull();
-  expect(landingDanger(wm, "gr")).toBeNull();
-  expect(landingDanger(wm, "keird")).toBeNull(); // 未観測
-});
-
 test("試合後: 振り返りと同じ会話でハーネスのレビューを聞く（使用量は二重に数えない）", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
   sent.length = 0;
@@ -225,7 +209,7 @@ test("試合後: 振り返りと同じ会話でハーネスのレビューを聞
   await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
   await agent.postMatch("(diag)", "/tmp/run", 5000);
   const afterPost = agent.usage().main.calls;
-  const review = await agent.reviewHarness({ runDir: "/tmp/run", reverted: [], verificationOk: true, rolledBack: false }, 5000);
+  const review = await agent.reviewHarness({ runDir: "/tmp/run", reverted: [], evaluatorChanged: false, rolledBack: false }, 5000);
   expect(review).toBe("READY");
   const post = sent.find((x) => x.text.startsWith("[POST-MATCH]"))!;
   const rev = sent.find((x) => x.text.startsWith("[HARNESS REVIEW]"))!;
@@ -302,7 +286,7 @@ test("既知のワープ・マスのメモを、今の座標（[ ] に絶対座�
   expect(agent.knownCellLines(noWeb)).toEqual(["この試合で入ったワープ（今の区画）: (2,0) 31番→別の区画"]);
 });
 
-test("通知・サブ結果は、メインが正常に返答したフェーズで届けたことにする（時間切れのフェーズに載ったものは次に再掲）", async () => {
+test("通知は、LLM が正常に返答した問い合わせで届けたことにする（時間切れの問い合わせに載ったものは次に再掲）", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
   Bun.env.AGENT_HEDGE_SEC = "0";
   sent.length = 0;
@@ -355,23 +339,11 @@ test("AGENT_HEDGE_SEC たっても返らなければ、もう1つのプロセス
   delete Bun.env.AGENT_HEDGE_SEC;
 });
 
-test("合法手ごとの行き先のマスを、観測元つきで見せる", async () => {
-  const { landingLines } = await import("./main-agent");
-  const wm = new WorldMap();
-  wm.applyObservation("CMD1", "gr", [2, 4, 2, 2, 1000, 10, 2, 2, 2], 3);
-  const s = landingLines(wm, ["gr", "gru", "grr", "grd", "grl"], 5);
-  expect(s).toContain("gru→4罠(自2T前)");
-  expect(s).toContain("grr→10不可(自2T前)");
-  expect(s).not.toContain("gr→");
-  const s2 = landingLines(wm, ["wu", "keiru"], 3);
-  expect(s2).toContain("keiru→?");
-});
-
-test("非同期モード: 手を待たずに裏で聞き、考え中は重ねて聞かない。返答の作戦は届いた時から使う", async () => {
+test("手を待たずに裏で聞き、考え中は重ねて聞かない。返答の作戦は届いた時から使う", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
   sent.length = 0;
   const agent = new MainAgent({}, 5000);
-  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0, async: true });
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
   const wm = new WorldMap();
   wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 2, 2, 2, 2], 1);
   const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
@@ -384,7 +356,7 @@ test("非同期モード: 手を待たずに裏で聞き、考え中は重ねて
     return { status: "ok", text: `{"turn": ${m[1]}, "phase": "${m[2]}", "action": "plan", "target": [1, 1], "memo": "裏で考えた"}`, durationMs: 1 };
   };
   const done: string[] = [];
-  const ctx = (turn: number, phase: "CMD1" | "CMD2") => ({ turn, phase, worldMap: wm, events: [], solve: (plan: Parameters<typeof decideTurnAction>[3]) => decideTurnAction(wm, phase, turn, plan) });
+  const ctx = (turn: number, phase: "CMD1" | "CMD2") => ctxOf(wm, turn, phase);
   expect(agent.startBackground(ctx(1, "CMD1"), (r) => done.push(r?.action ?? "error"))).toBe(true);
   // 考え中: 次のフェーズでは聞かない（手は待たない）
   expect(agent.startBackground(ctx(1, "CMD2"), () => done.push("x"))).toBe(false);
@@ -396,17 +368,17 @@ test("非同期モード: 手を待たずに裏で聞き、考え中は重ねて
   expect(agent.currentPlan?.target).toEqual([1, 1]);
   expect(agent.currentMemo).toBe("裏で考えた");
   expect(agent.thinking).toBe(false);
-  // 非同期モードの説明がシステムプロンプトに入る
-  expect(sent[0]!.options.systemPrompt).toContain("非同期モード");
+  // 作戦係としての説明がシステムプロンプトに入る
+  expect(sent[0]!.options.systemPrompt).toContain("作戦係");
   proto.ask = origAsk;
   await agent.end();
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
 
-test("非同期モード: 考えている間にワープしたら、返答の作戦目標（古い座標）は使わない", async () => {
+test("考えている間にワープしたら、返答の作戦目標（古い座標）は使わない", async () => {
   Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
   const agent = new MainAgent({}, 5000);
-  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0, async: true });
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 });
   const wm = new WorldMap();
   wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 2, 2, 2, 2], 1);
   const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
@@ -415,7 +387,7 @@ test("非同期モード: 考えている間にワープしたら、返答の作
     const m = text.match(/\[TURN (\d+) \/ (CMD[12])\]/)!;
     return { status: "ok", text: `{"turn": ${m[1]}, "phase": "${m[2]}", "action": "plan", "target": [1, 1]}`, durationMs: 1 };
   };
-  agent.startBackground({ turn: 1, phase: "CMD1", worldMap: wm, events: [], solve: (plan) => decideTurnAction(wm, "CMD1", 1, plan) }, () => {});
+  agent.startBackground(ctxOf(wm, 1, "CMD1"), () => {});
   await agent.settleBackground(1000);
   expect(agent.currentPlan).toBeNull();
   proto.ask = origAsk;

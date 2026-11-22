@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, write
 import path from "node:path";
 import { AGENT_WORK_TOOLS, type AskResult, ClaudeSession } from "../agent/claude-session";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "../evolution/edit-guard";
-import { AGENT_DIR, EVALUATOR_PATH, LAB_COACH_DIR, LAB_COACH_LOG_PATH, POLICY_TRAIN_LOG_PATH, PROJECT_ROOT, SIM_MAPS_DIR, SIM_PROFILES_PATH, SOLVER_PATH, TRAIN_CONFIG_PATH } from "../paths";
+import { AGENT_DIR, EVALUATOR_PATH, LAB_COACH_DIR, LAB_COACH_LOG_PATH, POLICY_TRAIN_LOG_PATH, PROJECT_ROOT, SIM_MAPS_DIR, SIM_PROFILES_PATH, TRAIN_CONFIG_PATH } from "../paths";
 import { getSetting, numSetting } from "../settings";
 import { logger } from "../tools/logger";
 import type { EpisodeResult } from "./episode";
@@ -22,7 +22,7 @@ import { loadTrainConfig, type TrainResult } from "./train";
  *    - 地図の作り方: 読めて地図が作れること。本物の地図があるルームでは、作った地図のタイルの割合が本物から遠ざかったら戻す
  *      （方策の得点では比べない。地図を易しくすれば得点は上がってしまうので）。
  *    - 学習のやり方: 読めて範囲の中であること（外なら戻す）。
- *    それ以外（ハーネス・ソルバー）を変えていたら元に戻す。
+ *    それ以外（ハーネス）を変えていたら元に戻す。
  */
 
 export interface CoachChange {
@@ -60,7 +60,7 @@ export interface CoachDeps {
   /** 止める（試合が始まった等）。true になったら LLM を止め、改修は全部戻す */
   shouldStop?: () => boolean;
   gateEvaluator?: (baselineCode: string, room: number | null) => Promise<GateResult>;
-  paths?: { evaluator?: string; profiles?: string; trainConfig?: string; solver?: string; dir?: string; log?: string };
+  paths?: { evaluator?: string; profiles?: string; trainConfig?: string; dir?: string; log?: string };
   /** 守る範囲（src/ など）の変更を戻すか（テストでは戻さない） */
   guard?: boolean;
 }
@@ -230,11 +230,10 @@ export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Prom
     evaluator: deps.paths?.evaluator ?? EVALUATOR_PATH,
     profiles: deps.paths?.profiles ?? SIM_PROFILES_PATH,
     trainConfig: deps.paths?.trainConfig ?? TRAIN_CONFIG_PATH,
-    solver: deps.paths?.solver ?? SOLVER_PATH,
   };
   const dir = deps.paths?.dir ?? path.join(LAB_COACH_DIR, startedAt.replace(/[:.]/g, "-"));
   const report = writeCoachReport(input, dir);
-  const before = { evaluator: read(files.evaluator), profiles: read(files.profiles), trainConfig: read(files.trainConfig), solver: read(files.solver) };
+  const before = { evaluator: read(files.evaluator), profiles: read(files.profiles), trainConfig: read(files.trainConfig) };
   const stop = deps.shouldStop ?? (() => false);
   const guard = deps.guard === false ? null : snapshotProtectedFiles();
   const rel = (f: string) => path.relative(PROJECT_ROOT, f);
@@ -249,7 +248,7 @@ export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Prom
     `- 評価関数 \`${rel(files.evaluator)}\`（方策が何を狙い、どれだけ遠回りするか。新しい特徴は PARAM_SPACE に重みを足す）。比べ方: \`bun src/cli.ts bench --room <n> --evaluator <改修前の写し>\``,
     `- 地図の作り方 \`${rel(files.profiles)}\`（本物の地図・実測に似せる。易しくするための変更はしない）`,
     `- 学習のやり方 \`${rel(files.trainConfig)}\`（候補・地図・確かめの数、探す幅）`,
-    "ほか（src/ のハーネス・ソルバー）を変えても元に戻される。ハーネスの不具合に気づいたら、直さずに報告に書く。",
+    "ほか（src/ のハーネス）を変えても元に戻される。ハーネスの不具合に気づいたら、直さずに報告に書く。",
     "",
     "## 最後に",
     "何を見て、何を直したか（直さなかったならその理由）を5行以内で報告する。",
@@ -263,11 +262,6 @@ export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Prom
     res = { status: "dead", error: err instanceof Error ? err.message : String(err) };
   }
   const reverted = guard ? restoreProtectedFiles(guard) : [];
-  // ソルバーは学習の LLM の範囲の外
-  if (before.solver !== null && read(files.solver) !== before.solver) {
-    writeFileSync(files.solver, before.solver);
-    reverted.push(rel(files.solver));
-  }
   const restore = (file: string, content: string | null) => {
     if (content !== null) writeFileSync(file, content);
   };

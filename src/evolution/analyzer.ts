@@ -52,7 +52,7 @@ export function analyzeMatchRun(
       description: `Stepped on visited hole (0) tiles ${summary.holeRevisits} times (-20 pts each + action cost).`,
       affectedTurns: [],
       recommendation:
-        "In src/solver/active-solver.ts, increase penalty for revisiting tile 0 or look further ahead in findPathTargets to prefer one-way sweeps through unexplored frontiers.",
+        "In src/solver/evaluator.ts, raise the cost of stepping on visited holes (tile 0) so the planner prefers one-way sweeps through unexplored frontiers.",
     });
   }
 
@@ -193,7 +193,7 @@ export function analyzeMatchRun(
       description: `Fallback safety move was triggered on ${summary.fallbackTurns} turns.`,
       affectedTurns: turns.filter((t) => t.usedFallback).map((t) => t.turn),
       recommendation:
-        "Ensure solver and breakpoint interventions return valid commands promptly.",
+        "Ensure the policy (planner + evaluator.ts) returns valid commands promptly.",
     });
   }
 

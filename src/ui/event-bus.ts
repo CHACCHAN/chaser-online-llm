@@ -52,22 +52,12 @@ export interface UiPredictionState {
   candidates: CandidateEvaluation[];
   /** メインの返答種別 (continue / plan / command)。solver 単独なら null */
   /** thinking = 非同期モードでメインが裏で考えている（手は方策が決めた） */
-  mainAction?: "continue" | "plan" | "command" | "thinking" | null;
+  mainAction?: "continue" | "plan" | "thinking" | null;
   /** main なら「作戦どおり」等、solver なら代行理由（時間切れ・多忙など） */
   mainNote?: string | null;
   mainLatencyMs?: number | null;
   /** 現在の作戦目標（ローカル座標） */
   plan?: { target: [number, number]; note?: string } | null;
-  /** このフェーズでサブに依頼した仕事 */
-  delegated?: string | null;
-}
-
-export interface UiSubTask {
-  id: number;
-  request: string;
-  status: "queued" | "running" | "done" | "failed";
-  result: string | null;
-  durationMs: number | null;
 }
 
 export interface UiClaudeEvent {
@@ -95,9 +85,7 @@ export interface UiDashboardState {
   statusMessage: string;
   room: number;
   model: string;
-  subModel: string;
   effort: string;
-  subEffort: string;
   turnBudgetSec: number;
   maxTurns: number | null;
   matchIndex: number;
@@ -114,7 +102,6 @@ export interface UiDashboardState {
   scores: UiScoresState;
   claudeStream: UiClaudeEvent[];
   /** サブエージェントの仕事一覧（今の試合） */
-  subTasks: UiSubTask[];
   /** 今の試合のエージェント使用量（トークン） */
   agentUsage: AgentUsageReport | null;
   /** メインが次のフェーズへ引き継ぐメモ */
@@ -150,9 +137,7 @@ export interface UiControlCommand {
   /** WebUI のルーム欄の入力（"719"・"555-560"・"555,568"、組み合わせも可） */
   rooms?: string;
   model?: string;
-  subModel?: string;
   effort?: string;
-  subEffort?: string;
   turnBudgetSec?: number;
   maxTurns?: number | null;
   autoContinue?: boolean;
@@ -214,9 +199,7 @@ class UiEventBus {
     statusMessage: "ダッシュボード待機中 — ルームを選択して「開始」を押してください",
     room: 3,
     model: "",
-    subModel: "",
     effort: "",
-    subEffort: "",
     turnBudgetSec: 20,
     maxTurns: null,
     matchIndex: 0,
@@ -241,7 +224,6 @@ class UiEventBus {
       hazardHits: 0,
     },
     claudeStream: [],
-    subTasks: [],
     agentUsage: null,
     agentMemo: "",
     prep: { required: true, state: "none", room: null, model: null, effort: null, at: null, durationMs: null, tokens: null, error: null, officialVersion: null, knownVersion: null, versionChanged: false },
@@ -281,9 +263,7 @@ class UiEventBus {
         }
       }
       if (typeof cmd.model === "string") patch.model = cmd.model.trim();
-      if (typeof cmd.subModel === "string") patch.subModel = cmd.subModel.trim();
       if (typeof cmd.effort === "string") patch.effort = cmd.effort.trim();
-      if (typeof cmd.subEffort === "string") patch.subEffort = cmd.subEffort.trim();
       if (typeof cmd.turnBudgetSec === "number" && cmd.turnBudgetSec >= 3) patch.turnBudgetSec = cmd.turnBudgetSec;
       if (cmd.maxTurns !== undefined) {
         patch.maxTurns =

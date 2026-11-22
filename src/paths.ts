@@ -3,7 +3,6 @@ import path from "node:path";
 /** プロジェクト内のパスはすべてここで定義する（各ファイルで import.meta.dir から組み立てない）。 */
 export const PROJECT_ROOT = path.resolve(import.meta.dir, "..");
 
-export const SOLVER_PATH = path.join(PROJECT_ROOT, "src/solver/active-solver.ts");
 export const PUBLIC_DIR = path.join(PROJECT_ROOT, "src/ui/public");
 
 /** 人間と Claude が読み書きする永続知識（git 管理） */
@@ -54,7 +53,6 @@ export const POLICY_PARAMS_PATH = path.join(POLICY_DIR, "params.json");
 export const POLICY_TRAIN_LOG_PATH = path.join(POLICY_DIR, "train-log.jsonl");
 /** 経路探索の評価関数（エージェントが試合後に改修してよい。シミュレータの成績で採否を決める） */
 export const EVALUATOR_PATH = path.join(PROJECT_ROOT, "src/solver/evaluator.ts");
-export const BEST_SOLVERS_DIR = path.join(VAR_DIR, "best-solvers");
 export const CLAUDE_HOME_DIR = path.join(VAR_DIR, "claude-home");
 /** 試合中の現在の状態（毎フェーズ更新。試合後に var/runs/<runId>/ へコピー） */
 export const CURRENT_DIR = path.join(VAR_DIR, "current");
@@ -62,10 +60,3 @@ export const CURRENT_DIR = path.join(VAR_DIR, "current");
 export const CURRENT_SNAPSHOT_PATH = path.join(CURRENT_DIR, "snapshot.json");
 /** メインが次のフェーズへ引き継ぐメモ */
 export const CURRENT_MEMO_PATH = path.join(CURRENT_DIR, "MEMO.md");
-/** サブへの依頼一覧と結果 */
-export const CURRENT_ASK_SUB_PATH = path.join(CURRENT_DIR, "ASK_SUB.md");
-/** サブに依頼した時の盤面（依頼ごと。var/current/snapshot.json は毎フェーズ変わるので、依頼時の盤面を残す） */
-export const CURRENT_SUB_SNAPSHOT_DIR = path.join(CURRENT_DIR, "sub-snapshots");
-/** 試合後の振り返り（ソルバー改修）の途中である印と、改修前のソルバー。再起動で途切れたら次の起動で検証し直す（src/evolution/pending.ts） */
-export const EVOLUTION_PENDING_PATH = path.join(VAR_DIR, "evolution-pending.json");
-export const EVOLUTION_BACKUP_PATH = path.join(VAR_DIR, "evolution-backup.ts");

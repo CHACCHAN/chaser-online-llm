@@ -33,7 +33,6 @@ describe("偽サーバで1試合", () => {
         CHASER_WEB_MAP_REFRESH: "every_turn",
         AGENT_USE_MAIN: "false",
         AGENT_PREP: "false",
-        PLAY_POLICY: "planner",
       },
       stdout: "pipe",
       stderr: "pipe",

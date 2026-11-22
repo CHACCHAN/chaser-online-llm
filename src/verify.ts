@@ -1,9 +1,9 @@
 import path from "node:path";
 import { RUNS_DIR } from "./paths";
-import { verifySolverWithReplay } from "./evolution/replay-verifier";
+import { verifyPolicyWithReplay } from "./evolution/replay-verifier";
 import { WorldMap } from "./memory/world-map";
 import { parseGridFromHtml } from "./perception/web-map-scraper";
-import { decideTurnAction } from "./solver/active-solver";
+import { makePlannerPolicy } from "./solver/policy";
 
 async function runSelfTest() {
   const wm = new WorldMap();
@@ -27,11 +27,12 @@ async function runSelfTest() {
     throw new Error("Global map localization failed on unique 3x3 observation");
   }
 
-  const d1 = decideTurnAction(wm, "CMD1", 1);
-  const d2 = decideTurnAction(wm, "CMD2", 1);
+  const policy = makePlannerPolicy();
+  const d1 = policy(wm, "CMD1", 1, { totalTurns: null });
+  const d2 = policy(wm, "CMD2", 1, { totalTurns: null });
 
 
-  const replayRes = await verifySolverWithReplay(path.join(RUNS_DIR, "nonexistent"));
+  const replayRes = await verifyPolicyWithReplay(path.join(RUNS_DIR, "nonexistent"));
   if (!replayRes.ok) {
     throw new Error(`Replay verifier failed: ${replayRes.errors.join(", ")}`);
   }

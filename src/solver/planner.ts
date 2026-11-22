@@ -8,7 +8,7 @@ import {
   type WorldMap,
 } from "../memory/world-map";
 import type * as Evaluator from "./evaluator";
-import type { SolverDecision } from "./active-solver";
+import type { SolverDecision } from "./types";
 
 /**
  * 経路探索の方策（試合中は毎フェーズ数ms で手を決める。LLM は待たない）。

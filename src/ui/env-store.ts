@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { noteUserEdit } from "../evolution/edit-guard";
 import path from "node:path";
-import { SETTINGS, type SettingGroup, settingSection } from "../settings";
+import { OBSOLETE_SETTINGS, SETTINGS, type SettingGroup, settingSection } from "../settings";
 
 const PROJECT_ROOT = path.resolve(import.meta.dir, "../..");
 const ENV_PATH = path.join(PROJECT_ROOT, ".env");
@@ -20,10 +20,14 @@ export interface EnvEntry {
   defaultValue?: string;
   /** 選べる値（あれば WebUI で選択肢にする） */
   options?: readonly string[];
+  /** めったに変えない項目（設定画面で「詳しい設定も出す」の時だけ出す） */
+  advanced?: boolean;
+  /** 使われなくなった設定（消してよい） */
+  obsolete?: boolean;
 }
 
 /** 既知の設定は src/settings.ts から生成する（説明・既定値の二重管理をしない） */
-const KNOWN_ENV_META: Record<string, { label: string; group: SettingGroup; secret: boolean; description: string; defaultValue: string; options?: readonly string[] }> =
+const KNOWN_ENV_META: Record<string, { label: string; group: SettingGroup; secret: boolean; description: string; defaultValue: string; options?: readonly string[]; advanced?: boolean }> =
   Object.fromEntries(
     Object.entries(SETTINGS).map(([k, d]) => [
       k,
@@ -34,6 +38,7 @@ const KNOWN_ENV_META: Record<string, { label: string; group: SettingGroup; secre
         description: d.description,
         defaultValue: d.defaultValue,
         ...("options" in d && d.options ? { options: d.options } : {}),
+        ...("advanced" in d && d.advanced ? { advanced: true } : {}),
       },
     ]),
   );
@@ -95,11 +100,17 @@ export function loadProjectEnvEntries(): EnvEntry[] {
       label: meta.label,
       defaultValue: meta.defaultValue,
       ...(meta.options ? { options: meta.options } : {}),
+      ...(meta.advanced ? { advanced: true } : {}),
     });
   }
 
   for (const [key, val] of fileMap.entries()) {
     if (seen.has(key)) continue;
+    const why = OBSOLETE_SETTINGS[key];
+    if (why) {
+      entries.push({ key, value: val, group: "other", section: "obsolete", secret: /KEY|PASS|SECRET|TOKEN/i.test(key), description: `使われなくなった設定（${why}）。消してかまわない`, obsolete: true });
+      continue;
+    }
     entries.push({
       key,
       value: val,

@@ -10,9 +10,7 @@ export interface EpisodeJob {
   maxTurns: number | null;
   /** 再生用の記録を返す */
   trace?: boolean;
-  policy:
-    | { kind: "planner"; params: Params; /** 別の評価関数のファイル（エージェントの改修前後を比べる時） */ evaluatorPath?: string }
-    | { kind: "solver"; solverPath?: string };
+  policy: { kind: "planner"; params: Params; /** 別の評価関数のファイル（エージェントの改修前後を比べる時） */ evaluatorPath?: string };
 }
 
 type Pending = { resolve: (r: EpisodeResult) => void; reject: (e: Error) => void };

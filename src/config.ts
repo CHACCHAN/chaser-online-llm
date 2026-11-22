@@ -6,11 +6,9 @@ export interface AgentConfig {
   /** メインエージェントのモデル */
   model: string | undefined;
   /** サブエージェントのモデル（未指定ならメインと同じ） */
-  subModel: string | undefined;
   /** Claude Code の effort (low/medium/high/xhigh/max) */
   effort: string | undefined;
   /** サブエージェントの effort（未指定ならメインと同じ） */
-  subEffort: string | undefined;
   /** メインエージェントの1フェーズあたりの思考時間予算（秒）。超えたらソルバー手を送る */
   turnBudgetSec: number;
   /** false ならメインエージェントを使わずソルバーのみでプレイ */
@@ -35,9 +33,7 @@ export function loadAgentConfig(argv: string[] = Bun.argv.slice(2)): AgentConfig
       "max-matches": { type: "string" },
       "retry-ms": { type: "string" },
       model: { type: "string" },
-      "sub-model": { type: "string" },
       effort: { type: "string" },
-      "sub-effort": { type: "string" },
       "turn-budget": { type: "string" },
       "solver-only": { type: "boolean" },
       "web-map-url": { type: "string" },
@@ -68,9 +64,7 @@ export function loadAgentConfig(argv: string[] = Bun.argv.slice(2)): AgentConfig
   return {
     room: required(num("room", "CHASER_ROOM", { min: 1, integer: true }), "CHASER_ROOM"),
     model: cli("model") ?? getSetting("LLM_MODEL_NAME") ?? Bun.env.LLM_MODEL,
-    subModel: str("sub-model", "LLM_SUB_MODEL_NAME"),
     effort: str("effort", "LLM_MODEL_EFFORT"),
-    subEffort: str("sub-effort", "LLM_SUB_MODEL_EFFORT"),
     turnBudgetSec: required(num("turn-budget", "AGENT_TURN_BUDGET_SEC", { min: 3 }), "AGENT_TURN_BUDGET_SEC"),
     useMainAgent: values["solver-only"] === true ? false : boolSetting("AGENT_USE_MAIN"),
     retryMs: required(num("retry-ms", "CHASER_RETRY_MS", { min: 50 }), "CHASER_RETRY_MS"),

@@ -210,8 +210,8 @@ input[type="checkbox"] { accent-color: var(--ink); width: 15px; height: 15px; ma
 .grp > label, .grp > .lb { color: var(--ink2); font-size: var(--t-s); white-space: nowrap; }
 .grp + .grp { padding-left: var(--s4); border-left: 1px solid var(--line2); }
 #selRoom { width: 170px; font-family: var(--mono); font-size: var(--t-s); }
-#inMain, #inSub { width: 150px; }
-#selEffort, #selSubEffort { width: 98px; }
+#inMain { width: 150px; }
+#selEffort { width: 98px; }
 #inBudget { width: 52px; text-align: right; }
 #inMax { width: 72px; text-align: right; }
 .chk { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; font-size: var(--t-s); color: var(--ink2); white-space: nowrap; }
@@ -374,7 +374,7 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .mapinfo .sw i.dash { border-top-style: dashed; }
 .maptip { position: absolute; pointer-events: none; background: var(--ink); color: var(--panel); font-size: var(--t-s); padding: 3px 7px; border-radius: var(--r); white-space: nowrap; z-index: 4; }
 
-/* エージェント（思考ログ・サブ・メモ）: タブで切替 */
+/* エージェント（思考ログ・メモ）: タブで切替 */
 .agent { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 280px; }
 .agent .tabs { padding: 0 8px; }
 .ag-pane { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
@@ -393,21 +393,6 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .lg-ev .ctx { font-size: var(--t-xs); color: var(--evo); }
 .lg-ev pre { margin: 0; padding: 4px 14px 10px 120px; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--t-s)/1.6 var(--font); }
 .lg-ev.tool pre { font-family: var(--mono); font-size: var(--t-xs); }
-.sub-n { display: inline-flex; gap: 10px; font-size: var(--t-s); color: var(--ink2); flex-wrap: wrap; }
-.st-t { border-bottom: 1px solid var(--line2); }
-.st-t summary { list-style: none; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 6px 14px; }
-.st-t summary::-webkit-details-marker { display: none; }
-.st-t summary:hover { background: var(--hover); }
-.st-t .rq { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.st-t[open] .rq { white-space: normal; overflow: visible; }
-.st-t .du { font-size: var(--t-xs); color: var(--ink3); white-space: nowrap; }
-.st-t pre { margin: 0; padding: 2px 14px 10px 38px; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--t-s)/1.6 var(--font); }
-.st-t.failed pre { color: var(--neg); }
-.st-ic { width: 12px; height: 12px; border-radius: 50%; display: inline-block; align-self: center; border: 2px solid var(--ink3); }
-.st-ic.queued { border-style: dotted; }
-.st-ic.running { border-color: var(--plan-bg); border-top-color: var(--plan); animation: spin .9s linear infinite; }
-.st-ic.done { border-color: var(--pos); background: var(--pos); }
-.st-ic.failed { border-color: var(--neg); background: var(--neg); }
 .memo-body { margin: 0; padding: 12px 14px 16px; white-space: pre-wrap; word-break: break-word; font: var(--t-s)/1.7 var(--mono); color: var(--ink); }
 
 /* ---------- ダイアログ ---------- */
@@ -442,6 +427,8 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 .envrow .eval { display: grid; gap: 6px; min-width: 0; }
 .envrow .ctl { display: flex; gap: 8px; align-items: center; }
 .envrow input, .envrow select { width: 100%; max-width: 440px; font-family: var(--mono); font-size: var(--t-s); background: var(--sunk); }
+.env-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.env-h h3 { margin-right: auto; }
 .envrow.custom .ek { padding-top: 0; }
 .cauth { border: 1px solid var(--line); background: var(--sunk); padding: 12px 14px; margin: 0 0 14px; font-size: var(--t-s); line-height: 1.7; }
 .cauth .cauth-h { font-weight: 600; margin-bottom: 4px; }
@@ -507,7 +494,7 @@ body.view-lab #labFlow { display: flex; }
 @media (max-width: 1360px) {
   .ro { padding: 0 9px; min-width: 56px; }
   .ro b { font-size: 17px; } .ro.lead b { font-size: 20px; }
-  #inMain, #inSub { width: 128px; }
+  #inMain { width: 128px; }
 }
 @media (max-width: 1279px) {
   .work { grid-template-columns: minmax(0, 1fr) 340px; }
@@ -515,7 +502,7 @@ body.view-lab #labFlow { display: flex; }
   .flow li { padding: 0 12px 0 19px; }
   .grp + .grp { padding-left: 0; border-left: 0; }
   .setup { gap: var(--s2) var(--s3); }
-  #selRoom { width: 130px; } #inMain, #inSub { width: 124px; }
+  #selRoom { width: 130px; } #inMain { width: 124px; }
   .ro { padding: 0 8px; min-width: 0; }
   .ro b { font-size: 16px; } .ro.lead b { font-size: 19px; }
 }
@@ -540,7 +527,7 @@ body.view-lab #labFlow { display: flex; }
   .top.setup-open .setup .actions { grid-column: 1 / -1; }
   .top.setup-open .setup .grp { flex-wrap: wrap; }
   .top.setup-open .grp.wide { grid-column: 1 / -1; }
-  #selRoom, #inMain, #inSub { width: auto; flex: 1 1 120px; }
+  #selRoom, #inMain { width: auto; flex: 1 1 120px; }
   .readout { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; gap: 8px 0; margin-left: 0; padding-top: 10px; border-top: 1px solid var(--line2); }
   .ro { align-items: flex-start; border-left: 0; padding: 0; }
   .work { display: flex; flex-direction: column; }
@@ -626,8 +613,7 @@ body.view-lab #labFlow { display: flex; }
   <div class="setup" id="setup" role="group" aria-label="試合の設定">
     <div class="grp wide"><label for="selRoom" title="719 のように1つ、555-560 のように範囲、555,568 のように並べて指定できる。複数なら「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る">ルーム</label><input id="selRoom" list="dlRooms" placeholder="719 / 555-560 / 555,568" autocomplete="off" spellcheck="false" /><datalist id="dlRooms"></datalist></div>
     <div class="grp wide"><label for="inMain">LLM</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selEffort" class="adv" aria-label="LLM の effort（思考の深さ）" title="LLM の思考の深さ"></select></div>
-    <div class="grp wide adv"><label for="inSub">サブ</label><input id="inSub" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selSubEffort" aria-label="サブの effort（思考の深さ）" title="サブの思考の深さ。「同上」はLLM と同じ"></select></div>
-    <div class="grp adv"><label for="inBudget" title="LLM が1手に使える思考時間。超えるとソルバーが代わりに打つ">思考予算</label><input id="inBudget" type="number" min="3" step="1" inputmode="numeric" /><span class="lb">秒</span></div>
+    <div class="grp adv"><label for="inBudget" title="LLM の1回の返答を待つ上限。手は待たずに方策が打ち、上限を超えた返答は捨てて聞き直す">返答の上限</label><input id="inBudget" type="number" min="3" step="1" inputmode="numeric" /><span class="lb">秒</span></div>
     <div class="grp adv"><label for="inMax">最大ターン</label><input id="inMax" type="number" min="1" step="1" placeholder="無制限" inputmode="numeric" /></div>
     <div class="grp"><label class="chk" title="試合が終わったら自動で次の試合を始める"><input type="checkbox" id="chkAuto" />自動で次へ</label></div>
     <span class="hint" id="modelHint"></span>
@@ -701,7 +687,6 @@ body.view-lab #labFlow { display: flex; }
     <section class="agent" aria-label="エージェント">
       <div class="tabs" role="tablist" aria-label="エージェント">
         <button type="button" role="tab" id="agLog" data-ag="log" aria-controls="paneLog" aria-selected="true" title="Claude Code の思考・ツール呼び出しログ">思考ログ <span class="cnt" id="logCount"></span></button>
-        <button type="button" role="tab" id="agSub" data-ag="sub" aria-controls="paneSub" aria-selected="false" tabindex="-1" title="LLM が依頼した裏の仕事（調査・ツール作成・ログ分析）">サブの仕事 <span class="cnt" id="subBadge"></span></button>
         <button type="button" role="tab" id="agMemo" data-ag="memo" aria-controls="paneMemo" aria-selected="false" tabindex="-1" title="LLM は毎フェーズ前の会話なしで呼ばれる。次のフェーズへ引き継ぐのはこのメモと直近の経過・現在の状況だけ">メモ <span class="cnt" id="memoLen"></span></button>
       </div>
       <div class="ag-pane" id="paneLog" role="tabpanel" aria-labelledby="agLog">
@@ -714,10 +699,6 @@ body.view-lab #labFlow { display: flex; }
           <span class="hint end">行を押すと全文</span>
         </div>
         <div class="scroll" id="log"></div>
-      </div>
-      <div class="ag-pane" id="paneSub" role="tabpanel" aria-labelledby="agSub" hidden>
-        <div class="pane-tools"><span class="sub-n" id="subCount"></span><span class="hint end">調査・ツール作成・ログ分析</span></div>
-        <div class="scroll" id="subBody"></div>
       </div>
       <div class="ag-pane" id="paneMemo" role="tabpanel" aria-labelledby="agMemo" hidden>
         <div class="pane-tools"><span class="hint">次のフェーズへ引き継ぐメモ。LLM は毎回前の会話なしで呼ばれる</span></div>
@@ -763,7 +744,7 @@ body.view-lab #labFlow { display: flex; }
         <p class="hint-p">試合とは別に手動で実行する操作です。結果は思考ログに出ます。</p>
         <div class="op-list">
           <div class="op"><button class="btn" id="btnPreview" type="button">マップを取得</button><span class="hint">選んだルームの Webマップ（MapView.jsp）を取得してマップ欄に表示する</span></div>
-          <div class="op"><button class="btn" id="btnVerify" type="button">ソルバーを検証</button><span class="hint">今のソルバーを過去の試合でリプレイ検証する</span></div>
+          <div class="op"><button class="btn" id="btnVerify" type="button">方策を確かめる</button><span class="hint">今の方策（経路探索＋評価関数＋学習したパラメータ）が例外を出さず合法手を返すかを確かめる</span></div>
           <div class="op"><button class="btn" id="btnModels" type="button">モデル一覧を再取得</button><span class="hint">LLM のモデルの候補を取り直す</span></div>
         </div>
         <div class="hint" id="opMsg" role="status"></div>
@@ -781,7 +762,8 @@ body.view-lab #labFlow { display: flex; }
         <div class="pol-row"><input id="polNew" placeholder="新しい方針名（英数字）" size="20" aria-label="新しい方針名" spellcheck="false"><button class="btn" id="polCreate" type="button">複製して作成</button></div>
       </section>
       <section class="pane" data-pane="env" hidden>
-        <h3 id="envTitle"></h3>
+        <div class="env-h"><h3 id="envTitle"></h3><label class="chk" title="めったに変えない項目（通信の待ち時間・送り直しの間隔・LLM に見せる量など）も出す"><input type="checkbox" id="envAdv" />詳しい設定も出す</label></div>
+        <p class="hint-p" id="envHidden" hidden></p>
         <div id="claudeAuth" class="cauth" hidden aria-live="polite"></div>
         <div id="envBody" class="dim">読み込み中…</div>
       </section>
@@ -819,10 +801,10 @@ const S = {
   chartMode: "turns", tab: "turns", tf: "all", lf: "all", roomAll: false,
   hiTurn: null, expanded: new Set(), models: [],
   imgs: new Map(), tileFiles: null, mapHit: null,
-  subClosed: new Set(), subSeen: {}, planKeep: undefined, planOff: null,
+  planKeep: undefined, planOff: null,
   agTab: "log", disconnected: false,
 };
-{ if (load("chaser.roomAll") === "1") S.roomAll = true; const a = load("chaser.agentTab"); if (a === "log" || a === "sub" || a === "memo") S.agTab = a; }
+{ if (load("chaser.roomAll") === "1") S.roomAll = true; const a = load("chaser.agentTab"); if (a === "log" || a === "memo") S.agTab = a; }
 
 /* ============ 再描画スケジューラ ============ */
 const dirty = new Set(); let raf = 0;
@@ -830,8 +812,8 @@ function mark(...ks) { ks.forEach((k) => dirty.add(k)); if (!raf) raf = requestA
 function flush() {
   raf = 0; const d = [...dirty]; dirty.clear();
   const R = { head: renderHead, settings: syncSettings, rail: renderRail, chart: renderChart, runhead: renderRunHead, table: renderMain,
-    decide: renderDecide, map: renderMap, log: renderLog, sub: renderSub };
-  for (const k of ["head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "sub", "log"]) if (d.includes(k)) { try { R[k](); } catch (e) { console.error(k, e); } }
+    decide: renderDecide, map: renderMap, log: renderLog };
+  for (const k of ["head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log"]) if (d.includes(k)) { try { R[k](); } catch (e) { console.error(k, e); } }
 }
 
 /* ============ ターン記録の正規化 ============ */
@@ -902,7 +884,8 @@ const hasEvo = (id) => !!(S.evo[id] && S.evo[id].length > 0);
 /* 進化したか: summary の evolution があればそれを優先、無い古い試合だけ進化レポートの有無で判定 */
 function evolved(id) {
   const r = S.runs.find((x) => x.id === id);
-  if (r?.evolution && typeof r.evolution.solverChanged === "boolean") return r.evolution.solverChanged;
+  // 今は評価関数の改修（evaluatorChanged）、古い試合の記録はソルバーの改修（solverChanged）
+  if (r?.evolution) return !!(r.evolution.evaluatorChanged || r.evolution.solverChanged);
   return hasEvo(id);
 }
 /* main 判断率と平均応答: summary の agent があれば優先、無ければ turns から計算 */
@@ -966,7 +949,7 @@ async function loadModels() {
     // ログインしていない時の案内は「設定 › モデル・ゲートウェイ」だけに出す（ここには出さない）
     if (d.loginRequired) hint.textContent = "";
     hint.classList.toggle("err", !!hint.textContent && !!d.error);
-    ["#inMain", "#inSub"].forEach((q) => { $(q).placeholder = S.models.length ? `${S.models.length}件から検索` : "モデル名"; });
+    ["#inMain"].forEach((q) => { $(q).placeholder = S.models.length ? `${S.models.length}件から検索` : "モデル名"; });
   } catch { hint.textContent = "モデル一覧を取得できません"; hint.classList.add("err"); }
 }
 
@@ -1080,12 +1063,7 @@ function syncSettings(force) {
     es.innerHTML = `<option value="">既定</option>` + eff.map((e) => `<option>${esc(e)}</option>`).join("");
     es.value = st.effort || "";
   }
-  const ses = $("#selSubEffort");
-  if (document.activeElement !== ses) {
-    ses.innerHTML = `<option value="">同上</option>` + eff.map((e) => `<option>${esc(e)}</option>`).join("");
-    ses.value = st.subEffort || "";
-  }
-  set($("#inMain"), st.model || ""); set($("#inSub"), st.subModel || "");
+  set($("#inMain"), st.model || "");
   set($("#inBudget"), st.turnBudgetSec ?? ""); set($("#inMax"), st.maxTurns ?? "");
   $("#chkAuto").checked = !!st.autoContinue;
 }
@@ -1093,14 +1071,14 @@ function settingsPayload() {
   const rooms = $("#selRoom").value.trim();
   const mx = $("#inMax").value.trim();
   const bud = Number($("#inBudget").value);
-  return { ...(rooms ? { rooms } : {}), model: $("#inMain").value.trim(), subModel: $("#inSub").value.trim(), effort: $("#selEffort").value, subEffort: $("#selSubEffort").value,
+  return { ...(rooms ? { rooms } : {}), model: $("#inMain").value.trim(), effort: $("#selEffort").value,
     ...(bud >= 3 ? { turnBudgetSec: bud } : {}), maxTurns: mx ? Number(mx) : null, autoContinue: $("#chkAuto").checked };
 }
 async function control(body) {
   try { await fetch("/api/control", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); } catch {}
 }
 $("#selRoom").addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() }));
-["inMain", "inSub", "selEffort", "selSubEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
+["inMain", "selEffort", "inBudget", "inMax", "chkAuto"].forEach((id) => $("#" + id).addEventListener("change", () => control({ action: "update_settings", ...settingsPayload() })));
 $("#btnStart").addEventListener("click", () => control({ action: $("#btnStart").dataset.mode === "prepare" ? "prepare" : "start", ...settingsPayload() }));
 $("#btnStop").addEventListener("click", () => control({ action: "stop" }));
 $("#btnPause").addEventListener("click", () => control({ action: "pause" }));
@@ -1159,7 +1137,7 @@ function renderRail() {
     const best = bestId(r.room) === r.id, sel = S.focus === r.id;
     rows.push(`<div class="run${sel ? " is-sel" : ""}"><span class="ck"><input type="checkbox" data-ov="${esc(r.id)}" ${S.compare.includes(r.id) ? "checked" : ""} title="グラフに重ねる" aria-label="${esc(runLabel(r))} の試合をグラフに重ねる" /></span>
       <button type="button" class="run-open" data-open="${esc(r.id)}" aria-current="${sel}">
-        <span><span class="run-t"><b>${esc(runLabel(r))}</b><span class="faint">Room ${r.room ?? "?"}</span>${best ? `<span class="tag best">最高</span>` : ""}${evolved(r.id) ? `<span class="tag evo" title="${r.evolution?.rolledBack ? "ソルバーを改修したが検証に失敗し巻き戻した" : "この試合の後にソルバー改修（進化）が行われた"}">進化${r.evolution?.rolledBack ? "（戻し）" : ""}</span>` : ""}</span>
+        <span><span class="run-t"><b>${esc(runLabel(r))}</b><span class="faint">Room ${r.room ?? "?"}</span>${best ? `<span class="tag best">最高</span>` : ""}${evolved(r.id) ? `<span class="tag evo" title="${r.evolution?.rolledBack ? "この試合の後に改修したが、確かめに落ちて元に戻した" : "この試合の後に振り返りで方策を改修した"}">進化${r.evolution?.rolledBack ? "（戻し）" : ""}</span>` : ""}</span>
         <span class="run-m"><span>${r.turns}T</span><span title="LLM が手を決めた割合"><span class="mbar"><i style="width:${(s.mainRate || 0) * 100}%"></i></span> ${s.ready ? pct(s.mainRate ?? null) : "…"}</span><span title="main の平均応答時間">${s.ready ? sec(s.avgLat) : ""}</span></span></span>
         <span class="run-s"><b>${fmt(r.score)}</b><small>${r.isOfficial ? "公式" : "推定"}${d !== null ? ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${fmt(d)}</span>` : ""}</small></span></button></div>`);
   }
@@ -1306,7 +1284,7 @@ function chartRuns(el) {
   runs.forEach((r, i) => {
     const sel = S.focus === r.id;
     g += `<circle data-id="${esc(r.id)}" cx="${X(i)}" cy="${Y(r.score)}" r="${sel ? 6 : 4.5}" fill="${r.isOfficial ? "var(--ink)" : "var(--panel)"}" stroke="${sel ? "var(--main)" : "var(--ink)"}" stroke-width="${sel ? 3 : 1.6}" style="cursor:pointer"><title>${esc(runLabel(r))} Room ${r.room}: ${fmt(r.score)} ${r.isOfficial ? "(公式)" : "(推定)"}</title></circle>`;
-    if (evolved(r.id)) g += `<path d="M${X(i)},${f.y1 - 2}l-5,-9h10z" fill="var(--evo)"><title>この試合の後に進化（ソルバー改修）</title></path>`;
+    if (evolved(r.id)) g += `<path d="M${X(i)},${f.y1 - 2}l-5,-9h10z" fill="var(--evo)"><title>この試合の後に振り返りで方策を改修</title></path>`;
   });
   const rb = f.rTop + CH.ribbonH;
   g += `<text x="${f.x0 - 6}" y="${f.rTop + 10}" text-anchor="end">main率</text><line x1="${f.x0}" x2="${f.x1}" y1="${rb}" y2="${rb}" stroke="var(--line)"/>`;
@@ -1343,14 +1321,17 @@ function renderRunHead() {
 }
 function agentLine(r) {
   let a;
-  if (r) a = r.agent; else if (S.st) a = { model: S.st.model, subModel: S.st.subModel, effort: S.st.effort, subEffort: S.st.subEffort, turnBudgetSec: S.st.turnBudgetSec };
+  if (r) a = r.agent; else if (S.st) a = { model: S.st.model, effort: S.st.effort, turnBudgetSec: S.st.turnBudgetSec };
   if (!a) return `<span class="agent-line faint">この試合にはモデルの記録がありません</span>`;
   const m = (v) => (v ? `<code>${esc(v)}</code>` : `<span class="faint">既定</span>`);
   const ef = (v) => (v ? esc(v) : "既定");
   const sep = ` <span class="faint">/</span> `;
-  const ev = r?.evolution ? `${sep}進化後: ${r.evolution.solverChanged ? "ソルバー変更あり" : "変更なし"}${r.evolution.solverChanged ? (r.evolution.replayVerified ? "・リプレイ検証OK" : "・検証NG") : ""}${r.evolution.rolledBack ? "・巻き戻し" : ""}` : "";
+  const evo = r?.evolution;
+  // 古い試合の記録はソルバーの改修（solverChanged）、今は評価関数の改修（evaluatorChanged）
+  const changed = evo && (evo.evaluatorChanged || evo.solverChanged);
+  const ev = evo ? `${sep}振り返り: ${changed ? (evo.evaluatorChanged ? "評価関数を改修" : "ソルバーを改修") : "改修なし"}${changed ? (evo.rolledBack ? "→元に戻した" : "→採用") : ""}` : "";
   const mx = a.maxLatencyMs != null ? ` / 最大 ${sec(a.maxLatencyMs)}` : "";
-  return `<span class="agent-line dim">LLM ${m(a.model)} effort ${ef(a.effort)}${sep}サブ ${a.subModel ? m(a.subModel) : '<span class="faint">LLM と同じ</span>'} effort ${a.subEffort ? esc(a.subEffort) : "LLM と同じ"}${sep}思考予算 ${a.turnBudgetSec ?? "-"}秒${a.avgLatencyMs != null ? `${sep}平均応答 ${sec(a.avgLatencyMs)}${mx}` : ""}${ev}</span>`;
+  return `<span class="agent-line dim">LLM ${m(a.model)} effort ${ef(a.effort)}${sep}返答の上限 ${a.turnBudgetSec ?? "-"}秒${a.avgLatencyMs != null ? `${sep}平均応答 ${sec(a.avgLatencyMs)}${mx}` : ""}${ev}</span>`;
 }
 
 /* ============ ターン履歴 / レポート ============ */
@@ -1442,7 +1423,7 @@ function renderReport(wrap) {
   else { const d = S.diag[S.focus]; if (!d) { wrap.innerHTML = `<div class="empty">読み込み中…</div>`; return; } diag = d.diagnosis; evo = d.evolution; }
   wrap.innerHTML = `<div class="report">
     <div class="part"><div class="ph">診断（この試合で何が起きたか）</div>${diag ? md(diag) : `<p class="faint">診断はまだありません。試合が終わると作られます。</p>`}</div>
-    <div class="part evo"><div class="ph">進化レポート（この後のソルバー改修）</div>${evo ? md(evo) : `<p class="faint">この試合の後に進化は行われていません。</p>`}</div></div>`;
+    <div class="part evo"><div class="ph">振り返りのレポート（この後の方策の改修・学習）</div>${evo ? md(evo) : `<p class="faint">この試合の後に進化は行われていません。</p>`}</div></div>`;
 }
 
 /* ============ いまの判断 ============ */
@@ -1487,14 +1468,13 @@ function renderDecide() {
   const planLine = plan
     ? `<div class="planline"><b>作戦目標 (${esc(plan.target[0])}, ${esc(plan.target[1])})</b>${plan.note ? ` ${esc(plan.note)}` : ""}</div>`
     : hasMain ? `<div class="planline none">作戦なし（方策の経路探索のまま）</div>` : "";
-  const deleg = p.delegated ? `<div class="dline"><span class="k">サブ依頼</span>${esc(p.delegated)}</div>` : "";
   const ratio = Math.min(1, lat / budget);
   const cands = (p.topTargets || []).slice(0, 3).map((t) => `<li><span>${esc(t.tileLabel)} (${t.x},${t.y}) 距離${t.distance}</span><span class="mono">${esc(t.recommendedCmd2)}</span></li>`).join("");
   const fr = (p.nearestFrontiers || []).slice(0, 3).map((t) => `<li><span>未探索 (${t.x},${t.y}) 距離${t.distance}</span><span class="mono">${esc(t.recommendedCmd2)}</span></li>`).join("");
   const chip = (t, n) => `<span class="cmd ${srcOf(t, n) || "none"}">${esc(t["cmd" + n] || "-")}</span>`;
   el.innerHTML = `
     <div class="now"><div class="big ${src}">${esc(p.command)}</div><div><span class="badge ${badge.cls}">${esc(badge.text)}</span><div class="faint adv" style="font-size:var(--t-s);margin-top:4px">確信度 ${Math.round((p.confidence ?? 0) * 100)}%</div></div></div>
-    <p class="why">${esc(p.reason || "")}</p>${why}${planLine}${deleg}
+    <p class="why">${esc(p.reason || "")}</p>${why}${planLine}
     <div style="margin-top:12px;font-size:var(--t-s)" class="dim adv">LLM 応答（${hasLat ? "このフェーズ" : "直前ターン"}） <b style="color:var(--ink)" class="mono">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
     <div class="meter ${lat >= budget ? "over" : ""}" role="meter" aria-label="思考予算の使用" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(ratio * 100)}"><i style="width:${ratio * 100}%"></i></div>
     ${last ? `<div class="prev"><span>直前 T${last.turn}</span>${chip(last, 1)}${chip(last, 2)}<span class="mono">${fmt(last.estimatedScoreAfter)}点</span></div>` : ""}
@@ -1520,16 +1500,16 @@ function fmtTok(n) { return n == null ? "-" : n >= 1e6 ? `${(n / 1e6).toFixed(n 
 function sumTok(u) { return u ? u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens : 0; }
 function renderUsage(u) {
   const b = $("#nTok"), sub = $("#nTokSub"), box = $("#lnTok");
-  if (!u) { b.textContent = "-"; sub.textContent = "トークン"; b.style.color = ""; box.title = "この試合でエージェント（LLM・サブ）が使ったトークン"; return; }
+  if (!u) { b.textContent = "-"; sub.textContent = "トークン"; b.style.color = ""; box.title = "この試合で LLM が使ったトークン"; return; }
   b.innerHTML = esc(fmtTok(u.totalTokens)) + (u.limitTokens ? `<small> /${esc(fmtTok(u.limitTokens))}</small>` : "");
   const ratio = u.limitTokens ? u.totalTokens / u.limitTokens : 0;
   b.style.color = u.limitReached ? "var(--neg)" : ratio > 0.8 ? "var(--warn)" : "";
   sub.textContent = u.limitReached ? "トークン上限到達" : "トークン";
   box.title = [
     `合計 ${(u.totalTokens || 0).toLocaleString()} トークン（上限 ${u.limitTokens ? u.limitTokens.toLocaleString() : "なし"}）`,
-    `LLM ${fmtTok(sumTok(u.main))}（${u.main?.calls ?? 0}回） / サブ ${fmtTok(sumTok(u.sub))}`,
+    `LLM ${fmtTok(sumTok(u.main))}（${u.main?.calls ?? 0}回）`,
     `LLM の直近1回の入力 ${u.lastCallInputTokens == null ? "-" : u.lastCallInputTokens.toLocaleString()} トークン（毎回前の会話なしで聞くので一定）`,
-    u.estimatedTimeoutTokens ? `うち予算切れで止めた分の見積もり ${u.estimatedTimeoutTokens.toLocaleString()}` : "",
+    u.estimatedTimeoutTokens ? `うち時間切れで止めた分の見積もり ${u.estimatedTimeoutTokens.toLocaleString()}` : "",
     u.total?.costUsd ? `推定コスト ${u.total.costUsd.toFixed(2)}` : "",
   ].filter(Boolean).join("\n");
 }
@@ -1537,44 +1517,12 @@ function renderUsage(u) {
 /* ============ エージェントのタブ ============ */
 function showAgTab(k) {
   S.agTab = k; save("chaser.agentTab", k);
-  setTabs([[$("#agLog"), k === "log"], [$("#agSub"), k === "sub"], [$("#agMemo"), k === "memo"]]);
-  $("#paneLog").hidden = k !== "log"; $("#paneSub").hidden = k !== "sub"; $("#paneMemo").hidden = k !== "memo";
+  setTabs([[$("#agLog"), k === "log"], [$("#agMemo"), k === "memo"]]);
+  $("#paneLog").hidden = k !== "log"; $("#paneMemo").hidden = k !== "memo";
   if (k === "log") { logSig = ""; mark("log"); }
 }
 $$("[data-ag]").forEach((b) => b.addEventListener("click", () => showAgTab(b.dataset.ag)));
 
-/* ============ サブの仕事 ============ */
-let subSig = "";
-function fmtElapsed(ms) { const s = Math.max(0, Math.round(ms / 1000)); return s >= 60 ? `${Math.floor(s / 60)}分${s % 60}秒` : `${s}秒`; }
-const SUB_LABEL = { queued: "待機", running: "実行中", done: "完了", failed: "失敗" };
-function renderSub() {
-  const tasks = S.st?.subTasks || [];
-  const n = (k) => tasks.filter((t) => t.status === k).length;
-  const badge = $("#subBadge");
-  badge.textContent = n("running") ? `実行中 ${n("running")}` : tasks.length ? String(tasks.length) : "";
-  badge.classList.toggle("hot", n("running") > 0);
-  $("#subCount").innerHTML = tasks.length ? [n("running") ? `<span style="color:var(--plan)">実行中 ${n("running")}</span>` : "", n("queued") ? `<span>待機 ${n("queued")}</span>` : "", `<span>完了 ${n("done")}</span>`, n("failed") ? `<span class="down">失敗 ${n("failed")}</span>` : ""].filter(Boolean).join("") : `<span class="faint">依頼なし</span>`;
-  const now = Date.now();
-  for (const t of tasks) if (t.status === "running" && !S.subSeen[t.id]) S.subSeen[t.id] = now;
-  const sig = JSON.stringify([tasks, [...S.subClosed]]);
-  if (sig === subSig) return; subSig = sig;
-  const box = $("#subBody");
-  if (!tasks.length) { box.innerHTML = `<div class="empty">まだ依頼はありません。LLM が調査・ツール作成・ログ分析を頼むと、ここに並びます。</div>`; return; }
-  box.innerHTML = [...tasks].reverse().map((t) => {
-    const fin = t.status === "done" || t.status === "failed";
-    const du = fin ? (t.durationMs != null ? sec(t.durationMs) : "") : t.status === "running" ? `<span data-since="${t.id}">${fmtElapsed(now - (S.subSeen[t.id] || now))}</span>` : "";
-    const open = fin && !S.subClosed.has(t.id) && t.result;
-    return `<details class="st-t ${t.status}" data-id="${t.id}" ${open ? "open" : ""}><summary><span class="st-ic ${t.status}" title="${SUB_LABEL[t.status] || t.status}" aria-label="${SUB_LABEL[t.status] || t.status}"></span><span class="rq" title="${esc(t.request)}"><span class="faint">#${t.id}</span> ${esc(t.request)}</span><span class="du">${SUB_LABEL[t.status] || ""} ${du}</span></summary>${t.result ? `<pre>${esc(t.result)}</pre>` : ""}</details>`;
-  }).join("");
-}
-$("#subBody").addEventListener("toggle", (e) => {
-  const d = e.target; if (!d.dataset || !d.dataset.id) return;
-  const id = Number(d.dataset.id); if (d.open) S.subClosed.delete(id); else S.subClosed.add(id);
-}, true);
-setInterval(() => {
-  const now = Date.now();
-  $$("[data-since]").forEach((el) => { const t0 = S.subSeen[el.dataset.since]; if (t0) el.textContent = fmtElapsed(now - t0); });
-}, 1000);
 
 /* ============ マップ ============ */
 const TILE_NAMES = { 0: "穴 -20", 1: "ターゲット +50", 2: "土 +10", 3: "アイテム +30", 4: "ジオード -1000", 5: "化石1 +125", 6: "化石2 +150", 7: "化石3 +175", 8: "化石4 +200", 9: "アンモナイト +100", 10: "岩盤(通行不可)", 12: "奈落 -600" };
@@ -1764,6 +1712,13 @@ function showPane(id) {
   renderNav();
 }
 $("#dlgNav").addEventListener("click", (e) => { const b = e.target.closest("button[data-pane]"); if (b) showPane(b.dataset.pane); });
+$("#envAdv").addEventListener("change", (e) => {
+  envAdv = e.target.checked; save("envAdv", envAdv ? "1" : "0");
+  // 今の分類に出す項目が無くなったら、最初の分類へ
+  const sec = dlgPane.slice(4);
+  if (dlgPane.startsWith("env:") && sec !== "other" && !envRows.some((r) => r.section === sec && envVisible(r))) showPane(`env:${envSections[0]?.id || "other"}`);
+  else { renderEnv(); renderNav(); }
+});
 /* 作戦方針 (agent/policies/<name>.md) */
 let polActive = "default";
 async function loadPolicies(select) {
@@ -1821,7 +1776,10 @@ function updateDirty() {
 function confirmDiscard() { return dirtyCount() === 0 || confirm("保存していない変更があります。閉じますか？"); }
 /** つなぎ方（api / subscription）で使わない項目は隠す（説明が "api:" / "subscription:" で始まるもの。値は残す） */
 const envModeOf = (e) => (/^(api|subscription)\s*:/.exec(e.description || "") || [])[1] || null;
-const envVisible = (e) => { const m = envModeOf(e); return !m || m === authModeNow(); };
+let envAdv = load("envAdv") === "1";
+/** LLM のつなぎ方で使わない項目は隠す。めったに変えない項目は「詳しい設定も出す」の時だけ */
+const envUsed = (e) => { const m = envModeOf(e); return !m || m === authModeNow(); };
+const envVisible = (e) => envUsed(e) && (envAdv || !e.advanced);
 const envDesc = (e) => (e.description || "").replace(/^(api|subscription)\s*:\s*/, "");
 const BOOL_LABEL = { true: "はい", false: "いいえ", subscription: "Claude のサブスクリプション", api: "API（ゲートウェイ・API キー）" };
 function envControl(e, i) {
@@ -1839,10 +1797,14 @@ function renderEnv() {
   const sec = dlgPane.slice(4);
   $("#envTitle").textContent = envSections.find((s) => s.id === sec)?.title || "その他";
   const rows = envRows.map((e, i) => [e, i]).filter(([e]) => e.section === sec && envVisible(e));
-  const custom = (e) => e.description === "カスタム環境変数";
+  const hidden = envRows.filter((e) => e.section === sec && envUsed(e) && !envVisible(e)).length;
+  $("#envAdv").checked = envAdv;
+  $("#envHidden").hidden = !hidden;
+  $("#envHidden").textContent = hidden ? `ほかに詳しい設定が ${hidden} 項目あります（「詳しい設定も出す」で表示）` : "";
+  const custom = (e) => e.description === "カスタム環境変数" || e.obsolete;
   $("#envBody").innerHTML = rows.length === 0 ? `<p class="hint-p">項目はありません。</p>` : rows.map(([e, i]) => custom(e)
-    ? `<div class="envrow custom${isChanged(e) ? " changed" : ""}"><div class="ek"><input data-k="${i}" value="${esc(e.key)}" placeholder="KEY" aria-label="変数名" spellcheck="false" /></div>
-        <div class="eval"><div class="ctl"><input id="envv${i}" data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" aria-label="値" spellcheck="false" autocomplete="off" /><button class="btn quiet" data-del="${i}" type="button" aria-label="この変数を削除">×</button></div></div></div>`
+    ? `<div class="envrow custom${isChanged(e) ? " changed" : ""}"><div class="ek">${e.obsolete ? `<label for="envv${i}">${esc(e.key)}</label>` : `<input data-k="${i}" value="${esc(e.key)}" placeholder="KEY" aria-label="変数名" spellcheck="false" />`}</div>
+        <div class="eval"><div class="ctl"><input id="envv${i}" data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" aria-label="値" spellcheck="false" autocomplete="off" /><button class="btn quiet" data-del="${i}" type="button" aria-label="この変数を削除">×</button></div>${e.obsolete ? `<div class="d">${esc(e.description)}</div>` : ""}</div></div>`
     : `<div class="envrow${isChanged(e) ? " changed" : ""}"><div class="ek"><label for="envv${i}">${esc(e.label || e.key)}</label><code>${esc(e.key)}</code></div>
         <div class="eval"><div class="ctl">${envControl(e, i)}${e.secret ? `<button class="btn quiet" data-sec="${i}" type="button" aria-label="${esc(e.label || e.key)} を表示">表示</button>` : ""}</div>${envDesc(e) ? `<div class="d">${esc(envDesc(e))}</div>` : ""}</div></div>`).join("");
   syncClaudeAuthBox();
@@ -1936,7 +1898,7 @@ async function op(url, body, label) {
   try { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }); const d = await r.json(); $("#opMsg").textContent = `${label}: ${d.ok === false ? "失敗" : "完了"}（詳細は思考ログ）`; } catch { $("#opMsg").textContent = `${label}: 通信エラー`; }
 }
 $("#btnPreview").addEventListener("click", () => op("/api/action/preview-map", { room: Number($("#selRoom").value) || S.st?.room }, "マップ取得"));
-$("#btnVerify").addEventListener("click", () => op("/api/action/verify-solver", {}, "ソルバー検証"));
+$("#btnVerify").addEventListener("click", () => op("/api/action/verify-policy", {}, "方策の確かめ"));
 $("#btnModels").addEventListener("click", loadModels);
 
 /* ============ ライブ状態 ============ */
@@ -1945,7 +1907,7 @@ function applyState(st) {
   S.st = st;
   if (st.roomProfiles && Object.keys(st.roomProfiles).length) S.rooms = { ...S.rooms, ...st.roomProfiles };
   if (st.runId !== prevRun) {
-    S.planKeep = undefined; S.planOff = null; S.subSeen = {}; S.subClosed = new Set(); subSig = "";
+    S.planKeep = undefined; S.planOff = null;
     S.liveRunId = st.runId; S.liveTurns = [...(st.recentTurns || [])];
     if (st.runId && st.running) { S.focus = "live"; S.hiTurn = null; }
     if (st.runId) fetch(`/api/runs/${encodeURIComponent(st.runId)}/turns`).then((r) => r.json()).then((d) => {
@@ -1958,7 +1920,7 @@ function applyState(st) {
   if (prevStatus !== undefined && (prevStatus !== st.status && (st.status === "idle" || st.status === "cooldown" || st.status === "evolving") || prevRunning && !st.running)) fetchRuns();
   if (!S.compareInit && S.runs.length) initCompare();
   trackPrediction(st.prediction);
-  mark("head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "sub", "log");
+  mark("head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log");
 }
 function initCompare() {
   S.compareInit = true;

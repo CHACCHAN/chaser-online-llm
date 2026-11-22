@@ -7,14 +7,10 @@ import { applyLlmAuthEnv, resolveLlmAuth } from "./llm-auth";
 export const CLAUDE_BINARY = path.join(PROJECT_ROOT, "node_modules/.bin/claude");
 
 export interface ClaudeModelSettings {
-  /** メインエージェントのモデル (LLM_API_URL の /models から選択) */
+  /** モデル (api は LLM_API_URL の /models から、subscription は opus / sonnet / haiku など) */
   model?: string;
-  /** サブエージェントのモデル。未指定ならメインと同じ */
-  subModel?: string;
   /** low | medium | high | xhigh | max */
   effort?: string;
-  /** サブエージェントの effort。未指定ならメインと同じ */
-  subEffort?: string;
 }
 
 /** "32768" / "128k" / "1m" をトークン数にする。読めなければ null */
@@ -77,7 +73,6 @@ export function buildClaudeEnv(settings: ClaudeModelSettings): Record<string, st
     if (!existsSync(f)) writeFileSync(f, onboarding, "utf-8");
   }
 
-  const sub = settings.subModel || settings.model;
   // 認証は LLM_AUTH_MODE（src/agent/llm-auth.ts）。開発者のシェルの ANTHROPIC_*・CLAUDE_CODE_OAUTH_TOKEN は引き継がない
   const auth = resolveLlmAuth();
   const subscription = auth.mode === "subscription";
@@ -95,10 +90,11 @@ export function buildClaudeEnv(settings: ClaudeModelSettings): Record<string, st
     XDG_CACHE_HOME: path.join(home, ".cache"),
     CLAUDE_CONFIG_DIR: configDir,
     ...(settings.model ? { ANTHROPIC_MODEL: settings.model } : {}),
-    ...(sub ? { CLAUDE_CODE_SUBAGENT_MODEL: sub } : {}),
+    // Claude Code の中のサブエージェント（Agent ツール）も同じモデルにする
+    ...(settings.model ? { CLAUDE_CODE_SUBAGENT_MODEL: settings.model } : {}),
     // ゲートウェイに存在しない既定モデル (haiku 等) を裏で呼ばせないよう、エイリアスを全て差し替える
     // （サブスクリプションでは全モデルがあり、opus 等の別名を選ぶので差し替えない）
-    ...(sub && !subscription ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: sub, ANTHROPIC_SMALL_FAST_MODEL: sub } : {}),
+    ...(settings.model && !subscription ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: settings.model, ANTHROPIC_SMALL_FAST_MODEL: settings.model } : {}),
     ...(settings.model && !subscription
       ? { ANTHROPIC_DEFAULT_SONNET_MODEL: settings.model, ANTHROPIC_DEFAULT_OPUS_MODEL: settings.model }
       : {}),

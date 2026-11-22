@@ -1,5 +1,5 @@
 import type { WorldMap } from "../memory/world-map";
-import type { SolverDecision } from "../solver/active-solver";
+import type { SolverDecision } from "../solver/types";
 
 export interface BreakpointAssessment {
   shouldBreak: boolean;

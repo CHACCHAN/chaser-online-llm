@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { SOLVER_PATH } from "../paths";
+import { EVALUATOR_PATH } from "../paths";
 import {
   CMD1_COMMANDS,
   CMD1_SPECS,
@@ -10,7 +10,9 @@ import {
   WorldMap,
 } from "../memory/world-map";
 import type { TurnRecord } from "../runner";
-import type { SolverDecision } from "../solver/active-solver";
+import type { EvaluatorModule } from "../solver/planner";
+import { loadPolicyParams, makePlannerPolicy } from "../solver/policy";
+import type { SolverDecision } from "../solver/types";
 
 export interface ReplayVerificationResult {
   ok: boolean;
@@ -18,11 +20,11 @@ export interface ReplayVerificationResult {
   changedCmd1Count: number;
   changedCmd2Count: number;
   errors: string[];
-  /** 新しいソルバーが、その時点の地図で罠と分かっているマスへ動く手を選んだ回数 */
+  /** 今の方策が、その時点の地図で罠と分かっているマスへ動く手を選んだ回数 */
   hazardLandings?: number;
-  /** 比べる元のソルバー（改修前・その試合で使ったもの）の同じ回数。新しい方が多ければ不合格 */
+  /** 比べる元の評価関数（改修前・その試合で使ったもの）での同じ回数。今の方が多ければ不合格 */
   baselineHazardLandings?: number;
-  /** 罠へ動く手を選んだフェーズ（新しいソルバーだけのもの、最大10件） */
+  /** 罠へ動く手を選んだフェーズ（今の方策だけのもの、最大10件） */
   hazardExamples?: string[];
 }
 
@@ -37,13 +39,24 @@ function landsOnHazard(wm: WorldMap, command: string): boolean {
   return !!t && classifyTileSafety(t.value) === "HAZARD";
 }
 
-/** 比べる元のソルバーのコードを、相対 import が効くよう src/solver/ に一時ファイルとして置いて読み込む */
+/** 評価関数のモジュールから、試合と同じ方策（planner ＋ 学習したパラメータ）を作る。作戦目標・全ターン数は復元しない */
+function policyOf(ev: EvaluatorModule): DecideFn {
+  const policy = makePlannerPolicy(loadPolicyParams(), ev);
+  return (wm, phase, turn) => policy(wm, phase, turn, { totalTurns: null });
+}
+
+async function importEvaluator(file: string): Promise<EvaluatorModule | null> {
+  const mod = (await import(`${file}?t=${Date.now()}`)) as EvaluatorModule;
+  return typeof mod.stepCost === "function" && typeof mod.targetValue === "function" ? mod : null;
+}
+
+/** 比べる元の評価関数のコードを、相対 import が効くよう src/solver/ に一時ファイルとして置いて読み込む */
 async function loadBaseline(code: string): Promise<DecideFn | null> {
-  const tmp = path.join(path.dirname(SOLVER_PATH), `.baseline-${process.pid}-${Date.now()}.ts`);
+  const tmp = path.join(path.dirname(EVALUATOR_PATH), `.baseline-${process.pid}-${Date.now()}.ts`);
   try {
     writeFileSync(tmp, code);
-    const mod = (await import(tmp)) as { decideTurnAction?: DecideFn };
-    return typeof mod.decideTurnAction === "function" ? mod.decideTurnAction : null;
+    const ev = await importEvaluator(tmp);
+    return ev ? policyOf(ev) : null;
   } catch {
     return null;
   } finally {
@@ -52,42 +65,27 @@ async function loadBaseline(code: string): Promise<DecideFn | null> {
 }
 
 /**
- * 試合の記録（turns.jsonl）の観測を順に流し、ソルバーが例外を出さず合法手を返すかを確かめる。
- * baselineCode（改修前のソルバー）があれば、同じ地図で両方に手を選ばせ、罠と分かっているマスへ動く手の回数を比べる（増えたら不合格）。
+ * 試合の記録（turns.jsonl）の観測を順に流し、方策（経路探索 ＋ 今の評価関数 ＋ 学習したパラメータ）が例外を出さず合法手を返すかを確かめる。
+ * baselineEvaluatorCode（改修前の評価関数）があれば、同じ地図で両方に手を選ばせ、罠と分かっているマスへ動く手の回数を比べる（増えたら不合格）。
  * 当時の Webマップ・作戦目標は復元しない（両方とも同じ条件）。
  */
-export async function verifySolverWithReplay(
+export async function verifyPolicyWithReplay(
   runDir: string,
-  opts: { baselineCode?: string | null } = {},
+  opts: { baselineEvaluatorCode?: string | null; evaluatorPath?: string } = {},
 ): Promise<ReplayVerificationResult> {
-  const solverPath = SOLVER_PATH;
   const turnsPath = path.join(runDir, "turns.jsonl");
+  const evaluatorFile = opts.evaluatorPath ?? EVALUATOR_PATH;
 
   const errors: string[] = [];
-  let decideFn: ((wm: WorldMap, phase: "CMD1" | "CMD2", turn: number) => SolverDecision) | null = null;
-
+  let decideFn: DecideFn;
   try {
-    const mod = (await import(`${solverPath}?t=${Date.now()}`)) as {
-      decideTurnAction?: (wm: WorldMap, phase: "CMD1" | "CMD2", turn: number) => SolverDecision;
-    };
-    if (typeof mod.decideTurnAction !== "function") {
-      return {
-        ok: false,
-        turnsTested: 0,
-        changedCmd1Count: 0,
-        changedCmd2Count: 0,
-        errors: ["active-solver.ts does not export a function named decideTurnAction"],
-      };
+    const ev = await importEvaluator(evaluatorFile);
+    if (!ev) {
+      return { ok: false, turnsTested: 0, changedCmd1Count: 0, changedCmd2Count: 0, errors: ["evaluator.ts が stepCost / targetValue を export していない"] };
     }
-    decideFn = mod.decideTurnAction;
+    decideFn = policyOf(ev);
   } catch (err) {
-    return {
-      ok: false,
-      turnsTested: 0,
-      changedCmd1Count: 0,
-      changedCmd2Count: 0,
-      errors: [`Failed to import active-solver.ts: ${err instanceof Error ? err.message : String(err)}`],
-    };
+    return { ok: false, turnsTested: 0, changedCmd1Count: 0, changedCmd2Count: 0, errors: [`evaluator.ts を読み込めない: ${err instanceof Error ? err.message : String(err)}`] };
   }
 
   if (!existsSync(turnsPath)) {
@@ -137,8 +135,8 @@ export async function verifySolverWithReplay(
   const worldMap = new WorldMap();
   let changedCmd1Count = 0;
   let changedCmd2Count = 0;
-  const baseline = opts.baselineCode ? await loadBaseline(opts.baselineCode) : null;
-  if (opts.baselineCode && !baseline) errors.push("比べる元のソルバーを読み込めなかった（罠の比較はしない）");
+  const baseline = opts.baselineEvaluatorCode ? await loadBaseline(opts.baselineEvaluatorCode) : null;
+  if (opts.baselineEvaluatorCode && !baseline) errors.push("比べる元の評価関数を読み込めなかった（罠の比較はしない）");
   let hazardLandings = 0;
   let baselineHazardLandings = 0;
   const hazardExamples: string[] = [];
@@ -158,7 +156,7 @@ export async function verifySolverWithReplay(
     try {
       if (landsOnHazard(worldMap, baseline(worldMap, phase, turn).command)) baselineHazardLandings += 1;
     } catch {
-      // 元のソルバーの例外は比較に数えない
+      // 元の評価関数の例外は比較に数えない
     }
   };
 
@@ -202,9 +200,9 @@ export async function verifySolverWithReplay(
   if (baseline && hazardLandings > baselineHazardLandings) {
     errors.push(`罠と分かっているマスへ動く手が増えた（改修前 ${baselineHazardLandings} 回 → ${hazardLandings} 回。例: ${hazardExamples.join(", ")}）`);
   }
-  const loadFailed = !!opts.baselineCode && !baseline;
+  const loadFailed = !!opts.baselineEvaluatorCode && !baseline;
   return {
-    ok: errors.filter((e) => !(loadFailed && e.startsWith("比べる元のソルバーを読み込めなかった"))).length === 0,
+    ok: errors.filter((e) => !(loadFailed && e.startsWith("比べる元の評価関数を読み込めなかった"))).length === 0,
     turnsTested: records.length,
     changedCmd1Count,
     changedCmd2Count,

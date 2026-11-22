@@ -25,11 +25,10 @@ afterAll(() => {
 /** 本物のファイルを触らないよう、写しの場所で動かす */
 function sandbox() {
   const dir = mkdtempSync(path.join(tmpdir(), "coach-"));
-  const p = { evaluator: path.join(dir, "evaluator.ts"), profiles: path.join(dir, "sim-profiles.json"), trainConfig: path.join(dir, "train-config.json"), solver: path.join(dir, "solver.ts"), dir: path.join(dir, "out"), log: path.join(dir, "log.jsonl") };
+  const p = { evaluator: path.join(dir, "evaluator.ts"), profiles: path.join(dir, "sim-profiles.json"), trainConfig: path.join(dir, "train-config.json"), dir: path.join(dir, "out"), log: path.join(dir, "log.jsonl") };
   copyFileSync(EVALUATOR_PATH, p.evaluator);
   copyFileSync(SIM_PROFILES_PATH, p.profiles);
   copyFileSync(TRAIN_CONFIG_PATH, p.trainConfig);
-  writeFileSync(p.solver, "// solver\n");
   return p;
 }
 
@@ -51,7 +50,7 @@ test("足踏み（最後に2マスを行き来）を数え、タイルの割合�
   expect(histogramDistance(a, tileHistogram([[[2, 2], [2, 2]]]))).toBe(2);
 });
 
-test("学習のやり方の改修: 範囲の中なら採用、外なら戻す。評価関数は比べて弱ければ戻す。ソルバーの改修は戻す", async () => {
+test("学習のやり方の改修: 範囲の中なら採用、外なら戻す。評価関数は比べて弱ければ戻す", async () => {
   const p = sandbox();
   const cfgBefore = readFileSync(p.trainConfig, "utf-8");
   let prompt = "";
@@ -65,7 +64,6 @@ test("学習のやり方の改修: 範囲の中なら採用、外なら戻す。
         const cfg = JSON.parse(readFileSync(p.trainConfig, "utf-8"));
         writeFileSync(p.trainConfig, JSON.stringify({ ...cfg, batch: 20 }));
         writeFileSync(p.evaluator, readFileSync(p.evaluator, "utf-8") + "\n// 改修\n");
-        writeFileSync(p.solver, "// 勝手に変えた\n");
         return { status: "ok", text: "batch を増やした", durationMs: 1 };
       },
       gateEvaluator: async () => ({ ok: false, comparison: { a: 300, b: 280, diff: -20, se: 3, wins: 2, n: 24, hazardsA: 0, hazardsB: 1 }, error: null }),
@@ -78,7 +76,6 @@ test("学習のやり方の改修: 範囲の中なら採用、外なら戻す。
   expect(JSON.parse(readFileSync(p.trainConfig, "utf-8")).batch).toBe(20);
   expect(r.changes.find((c) => c.what === "evaluator")).toMatchObject({ accepted: false });
   expect(readFileSync(p.evaluator, "utf-8")).not.toContain("// 改修");
-  expect(readFileSync(p.solver, "utf-8")).toBe("// solver\n");
   expect(readCoachLog(5, p.log)[0]!.summary).toBe("batch を増やした");
 
   const bad = await runLabCoach(
