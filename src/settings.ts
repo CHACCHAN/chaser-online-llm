@@ -231,6 +231,17 @@ export const SETTINGS = {
     description: "試合をしていない間の学習の1回分の時間（分）。1回ごとに確かめ、はっきり良くなった時だけ保存する",
     defaultValue: "10",
   },
+  LAB_COACH: {
+    label: "学習のたびに学習の LLM が環境を直す",
+    group: "other",
+    description:
+      "学習（「学習」画面・試合後・空き時間）が終わるたびに、学習の LLM（試合中の LLM とは別のセッション）が地図ごとの成績・足踏み・罠を読み、評価関数（src/solver/evaluator.ts）・地図の作り方（knowledge/sim-profiles.json）・学習のやり方（knowledge/train-config.json）を直す。評価関数は改修前と同じ地図で比べて弱ければ戻し、地図の作り方は本物の地図から遠ざかれば戻す。1回ごとにトークンを使う",
+    defaultValue: "true",
+    options: ["true", "false"],
+  },
+  LAB_COACH_MODEL: { label: "学習の LLM のモデル", group: "llm", description: "空なら LLM（LLM_MODEL_NAME）と同じ", defaultValue: "" },
+  LAB_COACH_EFFORT: { label: "学習の LLM の思考の深さ（effort）", group: "llm", description: "空なら LLM（LLM_MODEL_EFFORT）と同じ", defaultValue: "" },
+  LAB_COACH_TIMEOUT_MIN: { label: "学習の LLM の上限（分）", group: "other", description: "学習の LLM が1回に使える時間（分）。過ぎたら止め、それまでの改修を確かめる", defaultValue: "10" },
   SIM_MAX_TURNS: {
     label: "シミュレータの1試合のターン数",
     group: "other",
@@ -264,6 +275,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
   { id: "model", title: "LLM のつなぎ方・モデル", keys: ["LLM_AUTH_MODE", "LLM_API_URL", "LLM_API_KEY", "LLM_API_HEADERS", "LLM_OAUTH_TOKEN", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_CONTEXT_WINDOW", "LLM_AUTO_COMPACT", "LLM_AUTO_COMPACT_PCT", "LLM_MAX_OUTPUT_TOKENS", "LLM_MODELS_TIMEOUT_SEC"] },
   { id: "learn", title: "方策・学習", keys: ["PLAY_POLICY", "TRAIN_AFTER_MATCH_MIN", "TRAIN_IDLE", "TRAIN_IDLE_CHUNK_MIN", "SIM_MAX_TURNS", "SIM_WORKERS"] },
+  { id: "coach", title: "学習の LLM", keys: ["LAB_COACH", "LAB_COACH_MODEL", "LAB_COACH_EFFORT", "LAB_COACH_TIMEOUT_MIN"] },
   { id: "main", title: "LLM（試合中）", keys: ["AGENT_USE_MAIN", "AGENT_ASYNC", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
   { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_CONCURRENCY", "AGENT_SUB_TASK_TIMEOUT_MIN"] },

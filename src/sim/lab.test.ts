@@ -7,7 +7,7 @@ import { LearningLab, type LabState } from "./lab";
 /** 「学習」画面の流れ（地図を作る → 並べた地図で学習 → 学習前・後の記録）。worker 2つ・20ターンの短い試合で確かめる */
 const saved: Record<string, string | undefined> = {};
 beforeAll(() => {
-  for (const [k, v] of Object.entries({ SIM_WORKERS: "2", SIM_MAX_TURNS: "20", TRAIN_IDLE: "false" })) {
+  for (const [k, v] of Object.entries({ SIM_WORKERS: "2", SIM_MAX_TURNS: "20", TRAIN_IDLE: "false", LAB_COACH: "false" })) {
     saved[k] = Bun.env[k];
     Bun.env[k] = v;
   }

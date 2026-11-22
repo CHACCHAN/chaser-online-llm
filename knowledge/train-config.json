@@ -1,0 +1,8 @@
+{
+  "_doc": "方策のパラメータの学習のやり方（src/sim/train.ts）。popSize = 1世代で試す候補の数（偶数）、batch = 1世代で候補を打たせる地図の数、validation = 学習の後に確かめる地図の数（保存するかをこれで決める）、sigmaStart / sigmaEnd = 探す幅（0〜1 に直した値の上での標準偏差。始めは広く、終わりは細かく）。範囲の外の値は範囲に収める。学習の LLM が学習の結果を見て直してよい",
+  "popSize": 16,
+  "batch": 12,
+  "validation": 24,
+  "sigmaStart": 0.15,
+  "sigmaEnd": 0.04
+}

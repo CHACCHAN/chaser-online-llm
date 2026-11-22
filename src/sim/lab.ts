@@ -9,6 +9,7 @@ import { loadRoomProfiles } from "../memory/knowledge-store";
 import { loadProfile, loadRealMaps, makeScenario } from "./mapgen";
 import { SimPool } from "./pool";
 import { makeRng } from "./rng";
+import { type CoachDeps, type CoachResult, readCoachLog, runLabCoach } from "./lab-coach";
 import { trainPolicy, type Comparison, type EvalSet, type GenerationStat, type TrainResult } from "./train";
 
 /**
@@ -38,6 +39,8 @@ export interface LabJob {
   message: string;
   stopped: boolean;
   error: string | null;
+  /** 学習の後の、学習の LLM（学習環境を直す） */
+  coach: { state: "running" | "done"; startedAt: string; result: CoachResult | null } | null;
 }
 
 /** 地図の組（画面に並べる地図） */
@@ -92,6 +95,10 @@ export interface LabState {
   set: MapSetInfo | null;
   idle: { enabled: boolean; chunkMin: number; reason: string | null };
   matchActive: boolean;
+  /** 学習のたびに学習の LLM が学習環境を直すか（LAB_COACH） */
+  coachEnabled: boolean;
+  /** 最後の学習の LLM の結果 */
+  lastCoach: CoachResult | null;
 }
 
 const workerCount = () => {
@@ -119,6 +126,9 @@ export class LearningLab {
   private listeners = new Set<(s: LabState) => void>();
   private lastEmit = 0;
   private emitTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastCoach: CoachResult | null = readCoachLog(1)[0] ?? null;
+  /** 学習の LLM の差し替え（テスト用） */
+  coachDeps: CoachDeps | null = null;
   /** 試合をしていない間の学習で使うルーム（今の設定のルーム） */
   roomForIdle: () => number | null = () => null;
 
@@ -134,6 +144,8 @@ export class LearningLab {
       set: this.set,
       idle: { enabled: this.idleOn(), chunkMin: numSetting("TRAIN_IDLE_CHUNK_MIN", { min: 1 }), reason: this.idleReason() },
       matchActive: this.matchActive,
+      coachEnabled: boolSetting("LAB_COACH"),
+      lastCoach: this.lastCoach,
     };
   }
 
@@ -181,7 +193,7 @@ export class LearningLab {
   }
 
   private begin(partial: Pick<LabJob, "kind" | "trigger" | "room"> & Partial<LabJob>): LabJob {
-    const job: LabJob = { id: this.nextId++, startedAt: new Date().toISOString(), finishedAt: null, minutes: null, generations: [], message: "", stopped: false, error: null, ...partial };
+    const job: LabJob = { id: this.nextId++, startedAt: new Date().toISOString(), finishedAt: null, minutes: null, generations: [], message: "", stopped: false, error: null, coach: null, ...partial };
     this.job = job;
     this.stopFlag = false;
     this.pool = new SimPool(workerCount());
@@ -283,6 +295,22 @@ export class LearningLab {
         this.set!.validation = r.comparison;
         this.set!.accepted = r.accepted && !opts.dryRun;
       }
+      // 学習の LLM: 結果を読んで学習環境（評価関数・地図の作り方・学習のやり方）を直す。
+      // 試合中は動かさない（試合後の学習は、次の試合の前なので動かす）。試すだけ・止めた時も動かさない
+      const inMatch = () => this.matchActive && opts.trigger !== "post-match";
+      if (boolSetting("LAB_COACH") && r.generations > 0 && !opts.dryRun && !this.stopFlag && !inMatch()) {
+        job.message = "学習の LLM が結果を読んで、学習環境を直しています";
+        job.coach = { state: "running", startedAt: new Date().toISOString(), result: null };
+        this.emit(true);
+        // 地図ごとの成績: 並べた地図があればそれ、無ければ今の方策でこのルームの地図を打たせる
+        const runs = useSet ? this.runsAfter! : await this.pool!.runAll(Array.from({ length: 12 }, (_, i) => ({ seed: 6_000_000 + Math.floor(Math.random() * 1e6) + i, room, maxTurns: maxTurns(), trace: true, policy: { kind: "planner" as const, params: loadPolicyParams() } })));
+        const result = await runLabCoach(
+          { trigger: opts.trigger, room, train: r, runs, runsBefore: useSet ? this.runsBefore : null },
+          { ...(this.coachDeps ?? {}), shouldStop: () => this.stopFlag || inMatch() },
+        );
+        job.coach = { ...job.coach, state: "done", result };
+        this.lastCoach = result;
+      }
       return r;
     })();
     this.running = work;
@@ -308,7 +336,7 @@ export class LearningLab {
   stop(): void {
     if (!this.job) return;
     this.stopFlag = true;
-    this.job.message = this.job.kind === "train" ? "止めています（そこまでの結果を確かめています）" : "止めています";
+    this.job.message = this.job.coach?.state === "running" ? "学習の LLM を止めています（確かめていない改修は戻します）" : this.job.kind === "train" ? "止めています（そこまでの結果を確かめています）" : "止めています";
     if (this.job.kind === "maps") this.pool?.close();
     this.emit(true);
   }

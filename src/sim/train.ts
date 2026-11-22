@@ -1,6 +1,6 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { POLICY_TRAIN_LOG_PATH } from "../paths";
+import { POLICY_TRAIN_LOG_PATH, TRAIN_CONFIG_PATH } from "../paths";
 import { clampParams, PARAM_SPACE, type ParamName, type Params, type ParamSpec } from "../solver/evaluator";
 import { loadPolicyParams, loadPolicyParamsFile, savePolicyParams } from "../solver/policy";
 import type { EpisodeResult } from "./episode";
@@ -138,17 +138,66 @@ export interface TrainResult {
   ms: number;
 }
 
+/** 学習のやり方（knowledge/train-config.json）。読めない・範囲外の値は既定・範囲に収める */
+export interface TrainConfig {
+  popSize: number;
+  batch: number;
+  validation: number;
+  sigmaStart: number;
+  sigmaEnd: number;
+}
+export const TRAIN_CONFIG_DEFAULT: TrainConfig = { popSize: 16, batch: 12, validation: 24, sigmaStart: 0.15, sigmaEnd: 0.04 };
+export const TRAIN_CONFIG_BOUNDS: Record<keyof TrainConfig, [number, number]> = {
+  popSize: [4, 64],
+  batch: [2, 48],
+  validation: [8, 96],
+  sigmaStart: [0.01, 0.5],
+  sigmaEnd: [0.005, 0.5],
+};
+
+/** 学習のやり方を読む。problems に範囲外・読めなかった項目を返す（学習の LLM の改修の確かめに使う） */
+export function loadTrainConfig(file = TRAIN_CONFIG_PATH): { config: TrainConfig; problems: string[] } {
+  const problems: string[] = [];
+  let raw: Record<string, unknown> = {};
+  try {
+    if (existsSync(file)) raw = JSON.parse(readFileSync(file, "utf-8")) as Record<string, unknown>;
+  } catch (err) {
+    problems.push(`読めない: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const config = { ...TRAIN_CONFIG_DEFAULT };
+  for (const k of Object.keys(TRAIN_CONFIG_DEFAULT) as (keyof TrainConfig)[]) {
+    const v = raw[k];
+    if (v === undefined) continue;
+    const [lo, hi] = TRAIN_CONFIG_BOUNDS[k];
+    if (typeof v !== "number" || !Number.isFinite(v)) {
+      problems.push(`${k} が数でない`);
+      continue;
+    }
+    if (v < lo || v > hi) problems.push(`${k}=${v} は範囲 ${lo}〜${hi} の外`);
+    config[k] = Math.min(hi, Math.max(lo, v));
+  }
+  config.popSize = Math.max(4, Math.round(config.popSize / 2) * 2);
+  config.batch = Math.round(config.batch);
+  config.validation = Math.round(config.validation);
+  if (config.sigmaEnd > config.sigmaStart) {
+    problems.push("sigmaEnd が sigmaStart より大きい");
+    config.sigmaEnd = config.sigmaStart;
+  }
+  return { config, problems };
+}
+
 export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
   const t0 = Date.now();
   const log = opts.log ?? (() => {});
-  const popSize = Math.max(4, opts.popSize ?? 16);
-  const batch = Math.max(2, opts.batch ?? 12);
-  const valN = Math.max(4, opts.validation ?? 24);
+  const cfg = loadTrainConfig().config;
+  const popSize = Math.max(4, opts.popSize ?? cfg.popSize);
+  const batch = Math.max(2, opts.batch ?? cfg.batch);
+  const valN = Math.max(4, opts.validation ?? cfg.validation);
   const maxTurns = opts.maxTurns === undefined ? 200 : opts.maxTurns;
   const rng = makeRng(opts.seed ?? Date.now());
   const before = loadPolicyParams();
   let m = toUnit(before);
-  let sigma = 0.15;
+  let sigma = cfg.sigmaStart;
   const d = m.length;
   const mu = Math.floor(popSize / 2);
   const w = Array.from({ length: mu }, (_, i) => Math.log(mu + 0.5) - Math.log(i + 1));
@@ -179,7 +228,7 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
     const next = m.map((v, j) => v + sigma * order.slice(0, mu).reduce((s, [, i], r) => s + (w[r]! / wsum) * eps[i]![j]!, 0));
     m = next.map((v) => Math.min(1, Math.max(0, v)));
     // 探す幅は時間とともに狭める（最初は広く、最後は細かく）
-    sigma = 0.15 - 0.11 * Math.min(1, (Date.now() - t0) / Math.max(1, opts.budgetMs));
+    sigma = cfg.sigmaStart - (cfg.sigmaStart - cfg.sigmaEnd) * Math.min(1, (Date.now() - t0) / Math.max(1, opts.budgetMs));
     genMs = Date.now() - g0;
     gen += 1;
     opts.onGeneration?.({ gen, best: Math.round(order[0]![0] * 10) / 10, mean: Math.round(mean(fit) * 10) / 10, sigma, ms: genMs, episodes });

@@ -42,6 +42,11 @@ export const ROOM_PROFILES_PATH = path.join(VAR_DIR, "room-profiles.json");
 export const SIM_PROFILES_PATH = path.join(KNOWLEDGE_DIR, "sim-profiles.json");
 /** 本物の地図（試合中の Webマップの最初の1枚、var/maps/room<N>/<runId>.json）。シミュレータで使う */
 export const SIM_MAPS_DIR = path.join(VAR_DIR, "maps");
+/** 方策の学習のやり方（1世代の候補・地図の数、確かめ用の地図の数、探す幅）。学習の LLM が直してよい */
+export const TRAIN_CONFIG_PATH = path.join(KNOWLEDGE_DIR, "train-config.json");
+/** 学習の LLM の作業場所（統計・再生の記録を書き出す）と記録 */
+export const LAB_COACH_DIR = path.join(VAR_DIR, "lab-coach");
+export const LAB_COACH_LOG_PATH = path.join(VAR_DIR, "lab-coach", "log.jsonl");
 /** 学習した方策のパラメータ（src/solver/evaluator.ts の PARAM_SPACE の値）と、その成績 */
 export const POLICY_DIR = path.join(VAR_DIR, "policy");
 export const POLICY_PARAMS_PATH = path.join(POLICY_DIR, "params.json");
