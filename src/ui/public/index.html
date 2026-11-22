@@ -448,72 +448,46 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 .dlg-f { display: flex; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
 
 /* ---------- 幅に合わせる ---------- */
-/* ---------- 画面の切り替え・学習 ---------- */
+/* ---------- 画面の切り替え ---------- */
 .views { flex: none; }
 .views button { padding: 4px 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 .vdot { width: 7px; height: 7px; border-radius: 50%; background: var(--pos); animation: pulse 1.6s infinite; }
-.lab { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr) 460px; min-height: 0; }
-.lab .col { overflow-y: auto; }
-.lab-l { border-right: 1px solid var(--line); background: var(--panel); }
-.lab-r { border-left: 1px solid var(--line); background: var(--panel); }
-.lab .block.grow { flex: 1 0 auto; border-bottom: 0; }
-.lpad { padding: 0 14px 14px; font-size: var(--t-s); }
-.lform { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
-.lform .grp + .grp { padding-left: 0; border-left: 0; }
-.lform input[type="number"] { width: 84px; }
-.lform #ltMin { width: 64px; }
-.chk.idle { margin-top: 12px; }
-.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
-.kv dt { color: var(--ink2); white-space: nowrap; }
-.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.ptab { width: 100%; border-collapse: collapse; }
-.ptab td { padding: 4px 0; border-bottom: 1px solid var(--line2); vertical-align: middle; }
-.ptab td.n { font-family: var(--mono); font-size: var(--t-xs); color: var(--ink2); padding-right: 8px; white-space: nowrap; }
-.ptab td.v { font-family: var(--mono); text-align: right; padding-left: 8px; white-space: nowrap; }
-.pbar { position: relative; height: 8px; background: var(--sunk); border: 1px solid var(--line2); border-radius: 2px; min-width: 60px; }
-.pbar i { position: absolute; top: -1px; bottom: -1px; width: 3px; margin-left: -1.5px; background: var(--main); border-radius: 1px; }
-.pbar b { position: absolute; top: 50%; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; background: var(--ink3); transform: rotate(45deg); }
-.ljob { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; background: var(--sunk); display: grid; gap: 6px; }
-.ljob:empty { display: none; }
-.ljob .hd { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.ljob .msg { color: var(--ink2); overflow-wrap: anywhere; }
-.progress { height: 6px; background: var(--panel); border-radius: 3px; overflow: hidden; border: 1px solid var(--line2); }
-.progress i { display: block; height: 100%; background: var(--pos); transition: width .4s; }
-.cmpline { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
-.cmpline b { font-size: var(--t-l); }
-.curve-wrap { margin-top: 12px; }
-#ljCurve { width: 100%; height: 190px; display: block; }
-#ljCurve text { fill: var(--ink3); font-size: 11px; font-family: var(--mono); }
-.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: var(--t-xs); color: var(--ink2); }
-.legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
-.lhist { padding: 0 14px 14px; overflow-x: auto; }
-.lhist table { width: 100%; border-collapse: collapse; font-size: var(--t-s); }
-.lhist th { text-align: left; font-weight: 400; color: var(--ink3); font-size: var(--t-xs); padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.lhist td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line2); white-space: nowrap; }
-.lhist td.num { font-family: var(--mono); text-align: right; }
-.simbox { position: relative; margin-top: 12px; display: flex; justify-content: center; background: var(--sunk); border: 1px solid var(--line2); border-radius: var(--r); padding: 8px; min-height: 120px; align-items: center; }
-.simbox canvas { image-rendering: pixelated; max-width: 100%; }
-.simctl { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
-.simctl input[type="range"] { flex: 1; min-width: 0; accent-color: var(--ink); }
-.siminfo { margin-top: 10px; display: grid; gap: 6px; }
-.siminfo .reason { color: var(--ink2); font-family: var(--mono); font-size: var(--t-xs); overflow-wrap: anywhere; min-height: 2.6em; }
-.maps-list { display: grid; gap: 4px; }
-.maps-list div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line2); padding: 3px 0; }
+/* 画面に出さない入力（値は 設定 › .env で変える。JS は値を読むので要素は残す） */
+.adv { display: none !important; }
+/* 試合: 中央にマップ、右にいまの判断とエージェント */
+.work { grid-template-columns: minmax(0, 1fr) 400px; }
+.col.rail, .chart-wrap, .run-head, .center > .tabs, #tblWrap { display: none !important; }
+.col.center { overflow-y: auto; background: var(--panel); }
+.decide .meter, .decide .prev, .decide .cand { display: none !important; }
+/* 学習の画面では試合の項目を出さない */
+#labFlow { display: none; }
+body.view-lab #flow, body.view-lab .actions, body.view-lab .strip, body.view-lab .setup, body.view-lab #btnSetup { display: none !important; }
+body.view-lab #labFlow { display: flex; }
 
-/* ---------- かんたん表示（既定）。「詳細」で全部出す ---------- */
-body:not(.simple) .simple-only { display: none !important; }
-body.simple .adv, body.simple .flow, body.simple #btnTheme, body.simple #modelHint { display: none !important; }
-body.simple .work { grid-template-columns: minmax(0, 1fr) 380px; }
-body.simple .col.rail, body.simple .chart-wrap, body.simple .run-head, body.simple .center > .tabs, body.simple #tblWrap, body.simple .agent { display: none !important; }
-body.simple .col.center { overflow-y: auto; background: var(--panel); }
-body.simple .decide .meter, body.simple .decide .prev, body.simple .decide .cand { display: none !important; }
-body.simple .lab { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-body.simple .lab .block { border-bottom: 0; }
-body.simple .lab-c { background: var(--panel); border-right: 1px solid var(--line); }
-/* 「学習」画面では試合の設定・スコアを出さない（かんたん表示） */
-body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab #btnSetup { display: none !important; }
-.lsum { margin: 0 0 12px; font-size: var(--t-m); }
-#btnMode[aria-pressed="true"] { color: var(--ink); font-weight: 700; }
+/* ---------- 学習: 地図を並べて同時に再生 ---------- */
+.lab { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+.lab-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px var(--s4); border-bottom: 1px solid var(--line); }
+.lab-bar .grp + .grp { padding-left: 0; border-left: 0; }
+.lab-bar input[type="number"] { width: 72px; }
+.lab-bar .sep { width: 1px; align-self: stretch; background: var(--line2); }
+.lab-bar .chk { margin-left: auto; }
+.lab-status { padding: 10px var(--s4); border-bottom: 1px solid var(--line2); display: grid; gap: 6px; font-size: var(--t-s); }
+.lab-status:empty { display: none; }
+.lab-status .msg { color: var(--ink2); overflow-wrap: anywhere; }
+.lab-status .stats { display: flex; gap: 8px 20px; flex-wrap: wrap; align-items: baseline; }
+.lab-status .stats b { font-size: var(--t-l); font-family: var(--mono); }
+.progress { height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; border: 1px solid var(--line2); max-width: 480px; }
+.progress i { display: block; height: 100%; background: var(--pos); transition: width .4s; }
+.lab-play { display: flex; align-items: center; gap: 12px; padding: 8px var(--s4); border-bottom: 1px solid var(--line2); }
+.lab-play input[type="range"] { flex: 1; min-width: 0; accent-color: var(--ink); }
+.lab-play .turnlbl { font-family: var(--mono); font-size: var(--t-s); min-width: 76px; text-align: right; }
+.lab-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; padding: 14px var(--s4); align-content: start; }
+.lab-empty { grid-column: 1 / -1; color: var(--ink3); padding: 40px 0; text-align: center; }
+.mcard { border: 1px solid var(--line); border-radius: var(--r); background: var(--sunk); padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mcard canvas { width: 100%; height: auto; image-rendering: pixelated; display: block; border-radius: 2px; }
+.mcard .cap { display: flex; gap: 8px; align-items: baseline; font-size: var(--t-xs); color: var(--ink2); flex-wrap: wrap; }
+.mcard .cap b { color: var(--ink); font-family: var(--mono); font-size: var(--t-s); }
+.mcard .cap .r { margin-left: auto; font-family: var(--mono); }
 
 @media (max-width: 1360px) {
   .ro { padding: 0 9px; min-width: 56px; }
@@ -521,8 +495,7 @@ body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab
   #inMain, #inSub { width: 128px; }
 }
 @media (max-width: 1279px) {
-  .work { grid-template-columns: 224px minmax(0, 1fr) 340px; }
-  .lab { grid-template-columns: 260px minmax(0, 1fr) 380px; }
+  .work { grid-template-columns: minmax(0, 1fr) 340px; }
   .bar { gap: var(--s3); }
   .flow li { padding: 0 12px 0 19px; }
   .grp + .grp { padding-left: 0; border-left: 0; }
@@ -555,16 +528,13 @@ body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab
   .readout { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; gap: 8px 0; margin-left: 0; padding-top: 10px; border-top: 1px solid var(--line2); }
   .ro { align-items: flex-start; border-left: 0; padding: 0; }
   .work { display: flex; flex-direction: column; }
-  .lab { display: flex; flex-direction: column; }
-  body.simple .work { display: flex; flex-direction: column; }
-  body.simple .col.center { order: 1; }
-  .lab .col { overflow: visible; }
-  .lab-l { border-right: 0; border-bottom: 1px solid var(--line); }
-  .lab-r { border-left: 0; border-top: 1px solid var(--line); order: 1; }
-  .lab-c { order: 2; }
-  .lab-l { order: 3; }
-  .col.live { order: 1; border-left: 0; border-bottom: 1px solid var(--line); overflow: visible; }
-  .col.center { order: 2; overflow: visible; }
+  .lab-grid { overflow: visible; }
+  .lab-bar .chk { margin-left: 0; }
+  .lab-bar .sep { display: none; }
+  .lab-play { flex-wrap: wrap; }
+  .lab-play input[type="range"] { order: 5; flex-basis: 100%; }
+  .col.center { order: 1; overflow: visible; }
+  .col.live { order: 2; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
   .col.rail { order: 3; border-right: 0; border-top: 1px solid var(--line); }
   .runs { max-height: 60vh; }
   .tbl-wrap { flex: none; max-height: 70vh; }
@@ -575,7 +545,6 @@ body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab
   .bar, .strip { padding-left: var(--s4); padding-right: var(--s4); }
   .actions { order: 7; flex-basis: 100%; }
   .views { order: 1; }
-  .lform input[type="number"] { width: 72px; }
   .actions .btn { flex: 1; }
   .util { margin-left: auto; border-left: 0; padding-left: 0; }
   .top.setup-open .setup { grid-template-columns: 1fr; }
@@ -599,7 +568,7 @@ body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab
 }
 </style>
 </head>
-<body class="simple">
+<body>
 
 <header class="top" id="top">
   <div class="bar">
@@ -614,6 +583,11 @@ body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab
       <li data-step="play"><span class="pip" aria-hidden="true"></span><span class="fl">対戦</span></li>
       <li data-step="evo"><span class="pip" aria-hidden="true"></span><span class="fl">振り返り</span></li>
     </ol>
+    <ol class="flow" id="labFlow" aria-label="学習の流れ">
+      <li data-step="maps"><span class="pip" aria-hidden="true"></span><span class="fl">地図</span></li>
+      <li data-step="train"><span class="pip" aria-hidden="true"></span><span class="fl">学習</span></li>
+      <li data-step="stats"><span class="pip" aria-hidden="true"></span><span class="fl">統計</span></li>
+    </ol>
     <div class="actions">
       <button class="btn primary" id="btnStart" type="button"><i class="spin" aria-hidden="true"></i><span id="btnStartLabel">開始</span></button>
       <button class="btn" id="btnPause" type="button" hidden>試合後に一時停止</button>
@@ -622,7 +596,6 @@ body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab
     <div class="util">
       <button class="btn quiet" id="btnSetup" type="button" aria-expanded="false" aria-controls="setup">試合の設定</button>
       <button class="btn quiet" id="btnTheme" type="button">自動</button>
-      <button class="btn quiet" id="btnMode" type="button" aria-pressed="false" title="細かい情報（試合の一覧・ターン表・思考ログ・パラメータなど）も出す">詳細</button>
       <button class="btn quiet" id="btnSettings" type="button" title="操作・作戦方針・.env">設定</button>
     </div>
   </div>
@@ -670,6 +643,10 @@ body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab
 
   <!-- 中央: 推移と履歴 -->
   <main class="col center" id="center">
+    <section class="block" id="secMap" aria-labelledby="hMap">
+      <div class="sec-h"><h2 id="hMap">マップ</h2><div class="end faint" id="mapSrc"></div></div>
+      <div class="mapbox" id="mapbox"><canvas id="map" width="10" height="10" role="img" aria-label="盤面"></canvas><div class="maptip" id="maptip" hidden></div><div class="mapinfo" id="mapinfo"></div></div>
+    </section>
     <section class="chart-wrap" aria-labelledby="chartTitle">
       <div class="sec-h">
         <h2 id="chartTitle">スコア推移</h2>
@@ -705,10 +682,6 @@ body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab
       <div class="sec-h"><h2 id="hDecide">いまの判断</h2><div class="end faint" id="decWhen"></div></div>
       <div class="decide" id="decide"></div>
     </section>
-    <section class="block" id="secMap" aria-labelledby="hMap">
-      <div class="sec-h"><h2 id="hMap">マップ</h2><div class="end faint" id="mapSrc"></div></div>
-      <div class="mapbox" id="mapbox"><canvas id="map" width="10" height="10" role="img" aria-label="盤面"></canvas><div class="maptip" id="maptip" hidden></div><div class="mapinfo" id="mapinfo"></div></div>
-    </section>
     <section class="agent" aria-label="エージェント">
       <div class="tabs" role="tablist" aria-label="エージェント">
         <button type="button" role="tab" id="agLog" data-ag="log" aria-controls="paneLog" aria-selected="true" title="Claude Code の思考・ツール呼び出しログ">思考ログ <span class="cnt" id="logCount"></span></button>
@@ -738,78 +711,30 @@ body.simple.view-lab .setup, body.simple.view-lab .readout, body.simple.view-lab
   </aside>
 </div>
 
-<!-- 学習: 方策・シミュレータ・学習の記録（CHaser サーバには触れない） -->
+<!-- 学習: 地図を作る → 並べた地図で学習 → 統計。地図は全部同時に再生する（シミュレータだけ。CHaser サーバには触れない） -->
 <div class="lab" id="lab" hidden>
-  <aside class="col lab-l adv" aria-labelledby="hPolicy">
-    <section class="block">
-      <div class="sec-h"><h2 id="hPolicy">方策</h2><div class="end faint" id="lpWhen"></div></div>
-      <div class="lpad" id="lpPolicy"><span class="faint">読み込み中…</span></div>
-    </section>
-    <section class="block grow">
-      <div class="sec-h"><h2 id="hParams">パラメータ</h2><div class="end hint">◆ 初期値</div></div>
-      <div class="lpad" id="lpParams"></div>
-    </section>
-  </aside>
-
-  <main class="col lab-c" aria-label="学習">
-    <section class="block">
-      <div class="sec-h"><h2>学習</h2><div class="end" id="ljState"></div></div>
-      <div class="lpad">
-        <p class="lsum simple-only" id="ltSummary"></p>
-        <div class="lform">
-          <div class="grp adv"><label for="ltRoom" title="半分の地図をこのルームに似せる（大きさ・ターン数・本物の地図）。空なら一般の地図だけ">ルーム</label><input id="ltRoom" type="number" min="1" inputmode="numeric" placeholder="全部" /></div>
-          <div class="grp"><label for="ltMin">時間</label><input id="ltMin" type="number" min="0.5" step="0.5" value="5" inputmode="decimal" /><span class="lb">分</span></div>
-          <label class="chk adv" title="学習しても var/policy/params.json に保存しない"><input type="checkbox" id="ltDry" />試すだけ</label>
-          <button class="btn primary" id="ltStart" type="button">学習を始める</button>
-          <button class="btn danger" id="ltStop" type="button" hidden>止める</button>
-        </div>
-        <label class="chk idle" title="試合をしていない間、TRAIN_IDLE_CHUNK_MIN 分ずつ学習を続ける。試合が始まると止まる（.env の TRAIN_IDLE に保存）"><input type="checkbox" id="ltIdle" />試合をしていない間も学習を続ける</label>
-        <span class="hint" id="ltIdleNote"></span>
-        <div id="ljJob" class="ljob" aria-live="polite"></div>
-        <div class="curve-wrap adv"><svg id="ljCurve" role="img" aria-label="学習曲線"></svg><div class="legend" id="ljLegend"></div></div>
-      </div>
-    </section>
-    <section class="block adv">
-      <div class="sec-h"><h2>比べる</h2><span class="hint">同じ地図で2つの方策を打たせ、1ターンあたりの得点を比べる</span></div>
-      <div class="lpad lform">
-        <div class="grp"><label for="lbA">A</label><select id="lbA"><option value="default">初期値の方策</option><option value="current">今の方策</option><option value="solver">前のソルバー</option></select></div>
-        <div class="grp"><label for="lbB">B</label><select id="lbB"><option value="current">今の方策</option><option value="default">初期値の方策</option><option value="solver">前のソルバー</option></select></div>
-        <div class="grp"><label for="lbN">地図</label><input id="lbN" type="number" min="4" max="400" value="24" inputmode="numeric" /><span class="lb">枚</span></div>
-        <div class="grp"><label for="lbRoom">ルーム</label><input id="lbRoom" type="number" min="1" inputmode="numeric" placeholder="全部" /></div>
-        <button class="btn" id="lbStart" type="button">比べる</button>
-      </div>
-    </section>
-    <section class="block grow adv">
-      <div class="sec-h"><h2>学習の記録</h2><div class="end hint" id="lhCount"></div></div>
-      <div class="lhist" id="lhist"></div>
-    </section>
-  </main>
-
-  <aside class="col lab-r" aria-labelledby="hSim">
-    <section class="block">
-      <div class="sec-h"><h2 id="hSim">シミュレータ</h2><div class="end hint adv">地図は毎回ランダム（seed が同じなら同じ地図）</div></div>
-      <div class="lpad">
-        <div class="lform">
-          <div class="grp adv"><label for="lsSeed">seed</label><input id="lsSeed" type="number" min="0" inputmode="numeric" /><button class="btn quiet" id="lsDice" type="button" title="別の地図">別の地図</button></div>
-          <div class="grp adv"><label for="lsRoom">ルーム</label><input id="lsRoom" type="number" min="1" inputmode="numeric" placeholder="一般" /></div>
-          <div class="grp adv"><label for="lsTurns">ターン</label><input id="lsTurns" type="number" min="5" value="200" inputmode="numeric" /></div>
-          <div class="grp adv"><label for="lsPol">方策</label><select id="lsPol"><option value="current">今の方策</option><option value="default">初期値の方策</option><option value="solver">前のソルバー</option></select></div>
-          <button class="btn primary" id="lsRun" type="button">1試合見る</button>
-        </div>
-        <div class="simbox" id="simBox"><canvas id="simMap" aria-label="シミュレータの盤面"></canvas><div class="maptip" id="simTip" hidden></div></div>
-        <div class="simctl" id="simCtl" hidden>
-          <button class="btn" id="lsPlay" type="button" aria-label="再生">再生</button>
-          <input type="range" id="lsSlider" min="0" value="0" aria-label="ターン" />
-          <select id="lsSpeed" aria-label="速さ"><option value="4">×1</option><option value="12" selected>×3</option><option value="40">×10</option></select>
-        </div>
-        <div class="siminfo" id="simInfo"><span class="faint">「1試合見る」で、ランダムに作った地図で方策が1試合打つところを再生します。</span></div>
-      </div>
-    </section>
-    <section class="block grow adv">
-      <div class="sec-h"><h2>地図のもと</h2></div>
-      <div class="lpad" id="lmaps"></div>
-    </section>
-  </aside>
+  <div class="lab-bar">
+    <div class="grp"><label for="lmN">地図</label><input id="lmN" type="number" min="1" max="48" value="12" inputmode="numeric" /><span class="lb">枚</span></div>
+    <div class="grp"><label for="lmRoom" title="このルームに似せた地図を作る（大きさ・ターン数・保存した本物の地図）。空なら一般の地図">ルーム</label><input id="lmRoom" type="number" min="1" placeholder="一般" inputmode="numeric" /></div>
+    <button class="btn" id="lmMake" type="button">地図を作る</button>
+    <span class="sep" aria-hidden="true"></span>
+    <div class="grp"><label for="ltMin">時間</label><input id="ltMin" type="number" min="0.5" step="0.5" value="5" inputmode="decimal" /><span class="lb">分</span></div>
+    <button class="btn primary" id="ltStart" type="button">この地図で学習</button>
+    <button class="btn danger" id="ltStop" type="button" hidden>止める</button>
+    <label class="chk" title="試合をしていない間、毎回新しい地図で学習を続ける。試合が始まると止まる（.env の TRAIN_IDLE に保存）"><input type="checkbox" id="ltIdle" />試合をしていない間も学習を続ける</label>
+  </div>
+  <div class="lab-status" id="labStatus" aria-live="polite"></div>
+  <div class="lab-play" id="labPlay" hidden>
+    <button class="btn" id="lpPlay" type="button">再生</button>
+    <input type="range" id="lpSlider" min="0" value="0" aria-label="ターン" />
+    <span class="turnlbl" id="lpTurn"></span>
+    <select id="lpSpeed" aria-label="速さ"><option value="4">×1</option><option value="12" selected>×3</option><option value="40">×10</option></select>
+    <div class="seg" id="lpWhich" role="group" aria-label="どちらの方策で再生するか" hidden>
+      <button type="button" data-which="before" aria-pressed="true">学習前</button>
+      <button type="button" data-which="after" aria-pressed="false">学習後</button>
+    </div>
+  </div>
+  <div class="lab-grid" id="labGrid"><div class="lab-empty">「地図を作る」で地図を並べ、今の方策で打たせます。続けて「この地図で学習」で、その地図で学習します。</div></div>
 </div>
 
 <dialog id="dlg" aria-labelledby="dlgTitle">
@@ -1729,9 +1654,8 @@ function renderMap() {
   }
   cv.hidden = false;
   const w = map.width, h = map.height, avail = $("#mapbox").clientWidth - 30 || 296;
-  const simple = document.body.classList.contains("simple");
-  const maxH = innerWidth <= 900 ? Math.max(300, innerHeight * 0.6) : simple ? Math.max(300, innerHeight - 280) : Math.max(300, Math.min(440, innerHeight * 0.42));
-  const cell = Math.max(5, Math.min(simple ? 34 : 26, Math.floor(Math.min(avail / w, maxH / h))));
+  const maxH = innerWidth <= 900 ? Math.max(300, innerHeight * 0.6) : Math.max(300, innerHeight - 280);
+  const cell = Math.max(5, Math.min(34, Math.floor(Math.min(avail / w, maxH / h))));
   const dpr = 1; cv.width = w * cell * dpr; cv.height = h * cell * dpr; cv.style.width = w * cell + "px"; cv.style.height = h * cell + "px";
   const c = cv.getContext("2d"); c.imageSmoothingEnabled = false; c.clearRect(0, 0, cv.width, cv.height);
   c.fillStyle = cssVar("--unk"); c.fillRect(0, 0, cv.width, cv.height);
@@ -2034,18 +1958,6 @@ function connect() {
   });
   es.onerror = () => { S.disconnected = true; $("#statusLabel").textContent = "サーバに再接続中"; $("#dot").className = "dot warn"; mark("head"); };
 }
-/* かんたん表示（既定）と詳細表示。かんたん表示ではマップを中央に大きく出す */
-function applyMode(detail) {
-  document.body.classList.toggle("simple", !detail);
-  const b = $("#btnMode"); b.setAttribute("aria-pressed", String(detail)); b.textContent = detail ? "かんたん表示" : "詳細";
-  const sec = $("#secMap");
-  if (detail) $("#decide").closest("section").after(sec); else $("#center").prepend(sec);
-  save("uiMode", detail ? "detail" : "simple");
-  mark("map", "chart", "table", "decide");
-  if (window.labOnMode) window.labOnMode();
-}
-$("#btnMode").addEventListener("click", () => applyMode(document.body.classList.contains("simple")));
-applyMode(load("uiMode") === "detail");
 (async function boot() {
   showAgTab(S.agTab);
   connect();

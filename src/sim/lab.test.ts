@@ -2,9 +2,9 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { POLICY_PARAMS_PATH } from "../paths";
 import { handleLabRequest } from "../ui/lab-routes";
-import { LearningLab, readTrainLog, type LabState } from "./lab";
+import { LearningLab, type LabState } from "./lab";
 
-/** 「学習」画面の仕事（学習・比べる・1試合の再生）。worker 2つ・20ターンの短い試合で確かめる */
+/** 「学習」画面の流れ（地図を作る → 並べた地図で学習 → 学習前・後の記録）。worker 2つ・20ターンの短い試合で確かめる */
 const saved: Record<string, string | undefined> = {};
 beforeAll(() => {
   for (const [k, v] of Object.entries({ SIM_WORKERS: "2", SIM_MAX_TURNS: "20", TRAIN_IDLE: "false" })) {
@@ -19,45 +19,43 @@ afterAll(() => {
   }
 });
 
-test("学習: 世代ごとの成績が届き、終わると記録に残る。試すだけなら保存しない。同時に2つは動かさない", async () => {
+test("地図を作ると今の方策で全部打たせ、並べた地図で学習すると学習前・後の記録が同じ地図でそろう", async () => {
   const lab = new LearningLab();
   const states: LabState[] = [];
   lab.onChange((s) => states.push(s));
-  const running = lab.train({ room: null, minutes: 0.08, dryRun: true, trigger: "manual" });
-  expect(lab.busy).toBe(true);
-  expect(await lab.bench({ room: null, n: 4, a: "default", b: "current" })).toBeNull();
-  const r = await running;
-  expect(r).not.toBeNull();
-  expect(r!.generations).toBeGreaterThan(0);
-  const last = lab.state().last!;
-  expect(last.kind).toBe("train");
-  expect(last.generations.length).toBe(r!.generations);
-  expect(last.comparison?.n).toBeGreaterThan(0);
-  expect(lab.busy).toBe(false);
-  expect(states.some((s) => s.job?.generations.length)).toBe(true);
-  expect(existsSync(POLICY_PARAMS_PATH)).toBe(false);
-  expect(readTrainLog(1)[0]?.trigger).toBe("manual");
-}, 60_000);
 
-test("止める: 回っている世代が終わったところで止まる。比べる・1試合の再生", async () => {
+  expect(await lab.makeMaps({ n: 4, room: null })).toBe(true);
+  let ms = lab.mapSet();
+  expect(ms.set!.maps.length).toBe(4);
+  expect(ms.grids.length).toBe(4);
+  expect(ms.before!.length).toBe(4);
+  expect(ms.before![0]!.trace!.frames.length).toBe(ms.before![0]!.totalTurns);
+  expect(ms.set!.before).not.toBeNull();
+  expect(ms.after).toBeNull();
+
+  const r = await lab.train({ room: null, minutes: 0.08, dryRun: true, trigger: "manual", onSet: true });
+  expect(r!.generations).toBeGreaterThan(0);
+  ms = lab.mapSet();
+  expect(ms.after!.length).toBe(4);
+  expect(ms.after!.map((e) => e.scenario)).toEqual(ms.before!.map((e) => e.scenario));
+  expect(ms.set!.validation!.n).toBeGreaterThan(0);
+  expect(ms.set!.accepted).toBe(false); // 試すだけなので保存しない
+  expect(existsSync(POLICY_PARAMS_PATH)).toBe(false);
+  expect(states.some((s) => s.job?.generations.length)).toBe(true);
+  expect(lab.busy).toBe(false);
+}, 90_000);
+
+test("止める: 回っている世代が終わったところで止まる。仕事は同時に1つ", async () => {
   const lab = new LearningLab();
   const running = lab.train({ room: null, minutes: 5, dryRun: true, trigger: "manual" });
+  expect(await lab.makeMaps({ n: 2, room: null })).toBe(false);
   lab.stop();
   const r = await running;
   expect(r!.generations).toBeLessThanOrEqual(1);
   expect(lab.state().last!.stopped).toBe(true);
-
-  const c = await lab.bench({ room: null, n: 4, a: "default", b: "default" });
-  expect(c!.n).toBe(4);
-  expect(c!.diff).toBe(0);
-
-  const ep = await lab.episode({ seed: 3, room: null, maxTurns: 15, policy: "current" });
-  expect(ep.trace!.frames.length).toBe(ep.totalTurns);
-  expect(ep.trace!.grid.length).toBe(ep.trace!.height);
-  expect(ep.trace!.frames.some((f) => f.changed.length > 0)).toBe(true);
 }, 60_000);
 
-test("試合をしていない間の学習は、試合が始まると止まり、ほかの仕事に譲る", async () => {
+test("試合をしていない間の学習は、試合が始まると止まる", async () => {
   const lab = new LearningLab();
   lab.setIdle(true);
   await Bun.sleep(50);
@@ -70,13 +68,11 @@ test("試合をしていない間の学習は、試合が始まると止まり�
   expect(lab.busy).toBe(false);
 }, 60_000);
 
-test("API: 概要を返し、1試合の再生を返す", async () => {
-  const ov = await (await handleLabRequest(new Request("http://x/api/lab"), new URL("http://x/api/lab")))!.json();
-  expect(ov.ok).toBe(true);
-  expect(Object.keys(ov.policy.space)).toContain("distWeight");
-  const req = new Request("http://x/api/lab/episode", { method: "POST", body: JSON.stringify({ seed: 5, maxTurns: 10, policy: "default" }) });
-  const ep = await (await handleLabRequest(req, new URL(req.url)))!.json();
-  expect(ep.ok).toBe(true);
-  expect(ep.result.trace.frames.length).toBe(10);
+test("API: 状態を返し、地図を作る前の学習は断る", async () => {
+  const st = await (await handleLabRequest(new Request("http://x/api/lab"), new URL("http://x/api/lab")))!.json();
+  expect(st.ok).toBe(true);
+  const req = new Request("http://x/api/lab/train", { method: "POST", body: JSON.stringify({ minutes: 1 }) });
+  const res = (await handleLabRequest(req, new URL(req.url)))!;
+  expect(res.status).toBe(400);
   expect(await handleLabRequest(new Request("http://x/api/state"), new URL("http://x/api/state"))).toBeNull();
-}, 60_000);
+});

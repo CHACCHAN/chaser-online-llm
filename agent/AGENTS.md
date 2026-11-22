@@ -2,7 +2,7 @@
 
 CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備（入室前、読むだけ）→ 試合中のメイン（毎フェーズ使い捨て、ツールなし）とサブ（依頼ごと）→ 試合後の振り返り。手順はそれぞれ `agent/prompts/` にある。
 
-試合中の手は経路探索の方策（`src/solver/planner.ts`、評価関数 `src/solver/evaluator.ts`、学習したパラメータ `var/policy/params.json`）が毎フェーズすぐ出す。メインは方策を待たせず裏で作戦を出す。試合後はシミュレータ（`src/sim/`）で学習する。仕組みは `docs/learning.md`。ユーザーは WebUI の「学習」画面で学習の進み具合・記録・シミュレータの再生を見ている。
+試合中の手は経路探索の方策（`src/solver/planner.ts`、評価関数 `src/solver/evaluator.ts`、学習したパラメータ `var/policy/params.json`）が毎フェーズすぐ出す。メインは方策を待たせず裏で作戦を出す。試合後はシミュレータ（`src/sim/`）で学習する。仕組みは `docs/learning.md`。ユーザーは WebUI の「学習」画面で、作った地図を並べて方策が動くところ・学習・地図ごとの学習前→後を見ている。
 
 ## 触ってよい範囲
 | パス | 編集 |

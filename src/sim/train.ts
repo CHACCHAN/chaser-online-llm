@@ -30,6 +30,17 @@ export function makeEvalSet(base: number, n: number, room: number | null, maxTur
   return { seeds, rooms, maxTurns };
 }
 
+/** 地図の組から n 枚を選ぶ（組が n 枚以下なら全部） */
+function sampleSet(set: EvalSet, n: number, rng: () => number, maxTurns: number | null): EvalSet {
+  const idx = set.seeds.map((_, i) => i);
+  for (let i = idx.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [idx[i], idx[j]] = [idx[j]!, idx[i]!];
+  }
+  const pick = idx.slice(0, Math.min(n, idx.length));
+  return { seeds: pick.map((i) => set.seeds[i]!), rooms: pick.map((i) => set.rooms[i] ?? null), maxTurns };
+}
+
 export const perTurn = (r: EpisodeResult) => r.score / Math.max(1, r.totalTurns);
 
 export async function evaluatePolicy(pool: SimPool, policy: PolicySpec, set: EvalSet): Promise<EpisodeResult[]> {
@@ -99,6 +110,8 @@ export interface TrainOptions {
   dryRun?: boolean;
   /** 記録用: 何がきっかけの学習か（manual / idle / post-match / cli） */
   trigger?: string;
+  /** この地図の組で学習する（毎世代ここから batch 枚を選ぶ）。無ければ毎世代新しい地図を作る */
+  trainSet?: EvalSet;
   log?: (msg: string) => void;
   /** 世代ごとの成績（WebUI の学習曲線） */
   onGeneration?: (g: GenerationStat) => void;
@@ -151,7 +164,7 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
     const valCost = genMs * ((valN * 2) / (popSize * batch)) + 2000;
     if (gen > 0 && elapsed + genMs + valCost > opts.budgetMs) break;
     const g0 = Date.now();
-    const set = makeEvalSet(seedBase + gen * 1000, batch, opts.room, maxTurns);
+    const set = opts.trainSet ? sampleSet(opts.trainSet, batch, rng, maxTurns) : makeEvalSet(seedBase + gen * 1000, batch, opts.room, maxTurns);
     // 対称な候補（+ε と −ε）で雑音を減らす
     const eps: number[][] = [];
     for (let i = 0; i < popSize / 2; i++) {
