@@ -187,3 +187,22 @@ test("学習の LLM がモデルを足し、ハーネスへの要望を agent/RE
   expect(bad.changes.find((c) => c.what === "styles")).toMatchObject({ accepted: false });
   expect(readFileSync(p.styles, "utf-8")).toContain("warper");
 });
+
+test("弱点: 失っている点を大きい順に並べ、直し方の手がかりを添える", async () => {
+  const { weaknessLines } = await import("./lab-coach");
+  const r = { scenario: "m", totalTurns: 100, score: 0, putDamage: -50000, hazardHits: 1, policyErrors: 0 } as EpisodeResult;
+  const lines = weaknessLines({ runs: [r], gap: null });
+  expect(lines[0]).toContain("相手に当てられた: −500");
+  expect(lines[0]).toContain("moveValue");
+  expect(lines[1]).toContain("罠");
+});
+
+test("評価関数の手の価値: 追ってくる敵の近くでターンを終える手は dangerCost、追ってこない敵は dangerUnsure 倍を引く", async () => {
+  const { defaultParams, moveValue } = await import("../solver/evaluator");
+  const p = { ...defaultParams(), distWeight: 1, dangerCost: 5000, dangerUnsure: 0.2, dangerDist: 2 };
+  const m = { phase: "CMD2" as const, cmd: "wr", gain: 100, actionCost: -10, remaining: 20, enemyDist: Infinity, enemyNow: 5, chasing: false };
+  expect(moveValue(m, p)).toBe(70);
+  expect(moveValue({ ...m, enemyDist: 2, chasing: true }, p)).toBe(70 - 5000);
+  expect(moveValue({ ...m, enemyDist: 2 }, p)).toBe(70 - 1000);
+  expect(moveValue({ ...m, enemyDist: 3, chasing: true }, p)).toBe(70);
+});

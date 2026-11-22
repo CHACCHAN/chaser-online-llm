@@ -34,6 +34,9 @@ export const PARAM_SPACE = {
   scanValue: { init: 4, min: 0, max: 40, doc: "観測で新しく見えるマス1つの価値（gr・dig を選ぶ判断）" },
   knightWeight: { init: 1, min: 0, max: 1, doc: "桂馬（CMD2、-20で2マス先）を使うか（0.5未満なら使わない）" },
   attackGain: { init: 2000, min: 0, max: 10000, doc: "隣（上下左右）の敵にアイテムを置いて当てる価値の見込み（CMD2。予定の一歩の得点＋30 より大きければ当てる。0 なら当てない）" },
+  dangerCost: { init: 5000, min: 0, max: 20000, doc: "ターンの終わりに敵の近く（dangerDist マス以内）にいる見込みの損（狙ってくる相手は、隣に来ると置いて当てる）。moveValue が引く" },
+  dangerUnsure: { init: 0.2, min: 0, max: 1, doc: "追ってきていない敵（たまたま近くを通っただけ）の近くにいる損を dangerCost の何倍に見るか（拾う相手は当て返さない）" },
+  dangerDist: { init: 2, min: 0, max: 4, integer: true, doc: "ターンの終わりに敵からこのマス数（上下左右の歩数）以内なら危ない（相手は次のターンに1歩動いてから当てるので 2）" },
 } satisfies Record<string, ParamSpec>;
 
 export type ParamName = keyof typeof PARAM_SPACE;
@@ -79,6 +82,30 @@ export function stepCost(value: number, visitedCount: number, p: Params): number
  * 目標としての価値。gain = そのマスの得点、cluster = まわり2マス以内の正の得点の合計（自分を除く）、unknownAround = まわり3×3の未知マス数。
  * exhausted = 取り尽くした（ワープ以外に得になる目標が無い）時のワープ。0 以下なら目標にしない。
  */
+/**
+ * この手の価値（方策が、このフェーズに打てる手を比べる。一番大きい手を打つ）。
+ * gain = 着地の得点、actionCost = 手の得点（歩く -10 など）、remaining = 着地から目標までの残りの手間、
+ * enemyDist = ターンの終わりに一番近い敵までの歩数の見込み（CMD2 は着地、CMD1 は着地から次の CMD2 で行ける一番遠いマス。敵がいなければ Infinity）、
+ * enemyNow = 今の位置から一番近い敵までの歩数（いなければ Infinity）。
+ * chasing = 一番近い敵が追ってきている（直近 3 ターン、4 歩以内に居続けて離れていない）。
+ * 新しい特徴（例: 敵の向き・残りターン）を足す時は、ここと PARAM_SPACE に足す（方策 planner.ts が渡す特徴で足りなければハーネスへの要望に書く）。
+ */
+export interface MoveFeatures {
+  phase: "CMD1" | "CMD2";
+  cmd: string;
+  gain: number;
+  actionCost: number;
+  remaining: number;
+  enemyDist: number;
+  enemyNow: number;
+  chasing: boolean;
+}
+
+export function moveValue(m: MoveFeatures, p: Params): number {
+  const danger = m.enemyDist <= p.dangerDist ? p.dangerCost * (m.chasing ? 1 : p.dangerUnsure) : 0;
+  return m.gain + m.actionCost - p.distWeight * m.remaining - danger;
+}
+
 export function targetValue(cell: { value: number; gain: number; cluster: number; unknownAround: number; portal: boolean; exhausted?: boolean }, p: Params): number {
   if (cell.portal) return cell.exhausted ? p.exitValue : p.portalValue;
   let v = cell.gain > 0 ? cell.gain + p.clusterWeight * cell.cluster : 0;

@@ -8,6 +8,7 @@ import {
   type WorldMap,
 } from "../memory/world-map";
 import type * as Evaluator from "./evaluator";
+import { moveValue as currentMoveValue } from "./evaluator";
 import type { SolverDecision } from "./types";
 
 /**
@@ -299,6 +300,32 @@ interface Candidate {
   terminal: boolean;
 }
 
+/** 敵ごとの、自分からの歩数の記録（試合ごとの WorldMap に付ける。区画が変わっても歩数は変わらない） */
+const enemyTracks = new WeakMap<WorldMap, Map<number, [number, number][]>>();
+
+/**
+ * 一番近い敵が追ってきているか: 直近 3 ターン、近く（4 歩以内）に居続けて離れていない。
+ * （近づいてきた回数で見る決め方も試したが、隣に張り付いて当て合う相手を見逃して当てられる回数が増えた）
+ */
+function nearestEnemyInfo(wm: WorldMap, turn: number, x: number, y: number): { chasing: boolean } {
+  const tracks = enemyTracks.get(wm) ?? new Map<number, [number, number][]>();
+  enemyTracks.set(wm, tracks);
+  let best: { d: number; chasing: boolean } | null = null;
+  for (const e of wm.getEnemySightings()) {
+    if (e.lastSeenTurn < turn - 1) continue;
+    const d = Math.abs(e.x - x) + Math.abs(e.y - y);
+    const t = tracks.get(e.tileId) ?? [];
+    if (t.length === 0 || t[t.length - 1]![0] !== turn) t.push([turn, d]);
+    else t[t.length - 1]![1] = Math.min(t[t.length - 1]![1], d);
+    while (t.length > 4) t.shift();
+    tracks.set(e.tileId, t);
+    const recent = t.filter(([tt]) => tt >= turn - 3);
+    const chasing = recent.length >= 3 && recent.every(([, dd]) => dd <= 4) && recent[recent.length - 1]![1] <= recent[0]![1];
+    if (!best || d < best.d) best = { d, chasing };
+  }
+  return { chasing: best?.chasing ?? false };
+}
+
 /** 経路探索で手を決める（SolverDecision と同じ形で返す）。CMD2 で隣に敵がいれば、当てる価値と比べてアイテムを置いて当てる */
 export function planMove(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insight: PlanInsight } {
   const d = planRoute(wm, ctx);
@@ -309,7 +336,8 @@ export function planMove(wm: WorldMap, ctx: PlannerContext): SolverDecision & { 
 
 /**
  * 隣（上下左右）に今のターンに見えた敵がいれば、その向きにアイテムを置く手（p*3s*。-30、置いた後に横へ1マス動く）。
- * 動いた先が分かっていて通れる（罠・ワープでない）時だけ。当てる価値（attackGain）が、予定の一歩の得点 + 30 より大きい時に選ぶ。
+ * 動いた先が分かっていて通れる（罠・ワープでない）時だけ。当てる手と予定の一歩を評価関数の moveValue で比べ（当てる手の得点は attackGain。
+ * 予定の一歩は着地が敵の近くなら dangerCost を引く）、当てる手が 30 より大きく上回る時に選ぶ。
  */
 function pickAttack(wm: WorldMap, ctx: PlannerContext, planned: SolverDecision & { insight: PlanInsight }): (SolverDecision & { insight: PlanInsight }) | null {
   const { params: p, evaluator: ev } = ctx;
@@ -318,6 +346,14 @@ function pickAttack(wm: WorldMap, ctx: PlannerContext, planned: SolverDecision &
   const plannedTile = plannedSpec ? wm.getTile(x + plannedSpec.move[0], y + plannedSpec.move[1]) : undefined;
   const plannedGain = plannedTile ? Math.max(0, ev.tileGain(plannedTile.value)) : 0;
   if (p.attackGain <= plannedGain + 30) return null;
+  const moveValue = (ev as Partial<EvaluatorModule>).moveValue ?? currentMoveValue;
+  const enemies = wm.getEnemySightings().filter((e) => e.lastSeenTurn >= ctx.turn - 1);
+  const enemyDist = (tx: number, ty: number) => (enemies.length ? Math.min(...enemies.map((e) => Math.abs(e.x - tx) + Math.abs(e.y - ty))) : Infinity);
+  const enemyNow = enemyDist(x, y);
+  const { chasing } = nearestEnemyInfo(wm, ctx.turn, x, y);
+  const plannedScore = plannedSpec
+    ? moveValue({ phase: "CMD2", cmd: planned.command, gain: plannedGain, actionCost: plannedSpec.estActionCost, remaining: 0, enemyDist: enemyDist(x + plannedSpec.move[0], y + plannedSpec.move[1]), enemyNow, chasing }, p)
+    : plannedGain;
   for (const e of wm.getEnemySightings()) {
     if (e.lastSeenTurn < ctx.turn || Math.abs(e.x - x) + Math.abs(e.y - y) !== 1) continue;
     const dir = DIRS.find((k) => DIR_DELTA[k][0] === e.x - x && DIR_DELTA[k][1] === e.y - y)!;
@@ -326,7 +362,10 @@ function pickAttack(wm: WorldMap, ctx: PlannerContext, planned: SolverDecision &
     const mv = CMD2_SPECS[cmd].move;
     const dest = wm.getTile(x + mv[0], y + mv[1]);
     if (!dest || dest.offField || ev.isPortalValue(dest.value) || ev.stepCost(dest.value, dest.visitedCount, p) === null) continue;
-    return { ...planned, command: cmd, reason: `隣の敵 (${e.x},${e.y}) にアイテムを置いて当てる（見込み ${Math.round(p.attackGain)}）` };
+    // 当てる手は、当て返される見込みを引かない（隣にいれば、離れても次のターンに当てられうる。当て合いは当てる方が得）
+    const score = moveValue({ phase: "CMD2", cmd, gain: p.attackGain, actionCost: CMD2_SPECS[cmd].estActionCost, remaining: 0, enemyDist: Infinity, enemyNow, chasing }, p);
+    if (score <= plannedScore + 30) continue;
+    return { ...planned, command: cmd, reason: `隣の敵 (${e.x},${e.y}) にアイテムを置いて当てる（見込み ${Math.round(score)}）` };
   }
   return null;
 }
@@ -524,8 +563,34 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
     // 目標がワープ: 隣のマスまでの距離
     return Math.abs(board.xy(li)[0] - fx) + Math.abs(board.xy(li)[1] - fy) === 1 ? 0 : INF;
   };
-  const options: { cmd: string; score: number; warp: boolean }[] = [];
+  const options: { cmd: string; score: number; warp: boolean; danger: boolean }[] = [];
   const specs = phase === "CMD1" ? CMD1_SPECS : CMD2_SPECS;
+  // 敵からの歩数の見込み（上下左右の歩数。壁は数えないので、実際より近く見積もる＝用心する側）
+  const enemyDist = (i: number): number => {
+    if (enemies.length === 0) return Infinity;
+    const [cx, cy] = board.xy(i);
+    return Math.min(...enemies.map((e) => Math.abs(e.x - cx) + Math.abs(e.y - cy)));
+  };
+  // CMD1 の着地からは、次の CMD2 で行ける一番遠いマスでターンを終えられる
+  const bestNextDist = (li: number): number => {
+    const [cx, cy] = board.xy(li);
+    let best = enemyDist(li);
+    for (const s of Object.values(CMD2_SPECS)) {
+      const walk = s.category === "walk" || (s.category === "kei" && board.knight);
+      if (!walk) continue;
+      const j = board.idx(cx + s.move[0], cy + s.move[1]);
+      if (j < 0 || !board.known[j] || board.cost[j] === INF) continue;
+      best = Math.max(best, enemyDist(j));
+    }
+    return best;
+  };
+  const moveValue = (ev as Partial<EvaluatorModule>).moveValue ?? currentMoveValue;
+  const enemyNow = enemyDist(self);
+  const { chasing } = nearestEnemyInfo(wm, ctx.turn, x, y);
+  const value = (cmd: string, gain: number, actionCost: number, remaining: number, li: number) => {
+    const ed = phase === "CMD1" ? bestNextDist(li) : enemyDist(li);
+    return { score: moveValue({ phase, cmd, gain, actionCost, remaining, enemyDist: ed, enemyNow, chasing }, p), danger: ed <= p.dangerDist && chasing };
+  };
   for (const [cmd, spec] of Object.entries(specs) as [Cmd1Command | Cmd2Command, (typeof CMD1_SPECS)[Cmd1Command]][]) {
     const isWalk = spec.category === "walk" || (spec.category === "get_ready" && (spec.move[0] !== 0 || spec.move[1] !== 0));
     const isKnight = spec.category === "kei";
@@ -540,11 +605,22 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
     const rem = remainingFrom(li);
     if (rem === INF) continue;
     const gain = landingPortal ? 0 : warpTo >= 0 ? ev.tileGain(board.value[step]!) + Math.max(0, ev.tileGain(board.value[li]!)) : ev.tileGain(board.value[li]!);
-    options.push({ cmd, score: gain + spec.estActionCost - p.distWeight * rem, warp: warpTo >= 0 });
+    options.push({ cmd, ...value(cmd, gain, spec.estActionCost, rem, li), warp: warpTo >= 0 });
   }
   if (phase === "CMD1" && board.knight) {
     const rem = remainingFrom(self);
-    if (rem !== INF) options.push({ cmd: "gr", score: CMD1_SPECS.gr.estActionCost - p.distWeight * rem, warp: false });
+    if (rem !== INF) options.push({ cmd: "gr", ...value("gr", 0, CMD1_SPECS.gr.estActionCost, rem, self), warp: false });
+  }
+  // 目標へ向かう手がどれも危ない: 目標と関係なく、敵から離れられる手（通れて知っているマス）も比べる
+  if (enemies.length > 0 && !options.some((o) => !o.danger)) {
+    for (const [cmd, spec] of Object.entries(specs) as [Cmd1Command | Cmd2Command, (typeof CMD1_SPECS)[Cmd1Command]][]) {
+      const isWalk = spec.category === "walk" || (spec.category === "kei" && board.knight) || (spec.category === "get_ready" && (spec.move[0] !== 0 || spec.move[1] !== 0));
+      if (!isWalk || options.some((o) => o.cmd === cmd)) continue;
+      const li = board.idx(x + spec.move[0], y + spec.move[1]);
+      if (li < 0 || !board.known[li] || board.cost[li] === INF) continue;
+      const rem = remainingFrom(li);
+      options.push({ cmd, ...value(cmd, ev.tileGain(board.value[li]!), spec.estActionCost, rem === INF ? 1000 : rem, li), warp: false });
+    }
   }
   options.sort((a, b) => b.score - a.score);
   const choice = options[0];
@@ -552,8 +628,9 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
   if (!choice) return scanOrFallback(wm, ctx, board, finish);
   const routeText = route.slice(0, 3).map((r) => `(${r.x},${r.y})${r.value}`).join("→");
   const viaWarp = choice.warp;
+  const flee = enemyNow <= p.dangerDist + 1 && !choice.danger ? "（敵から離れる）" : "";
   const tag = directiveIdx === first.i ? "指定の目標" : first.terminal ? "出口のワープへ" : ev.tileGain(board.value[first.i]!) > 0 ? "回収" : "探索";
-  return finish(choice.cmd, `${tag}${viaWarp ? "（行き先の分かっているワープを通る）" : ""} ${routeText} 見込み${insight.score}`, insight);
+  return finish(choice.cmd, `${tag}${viaWarp ? "（行き先の分かっているワープを通る）" : ""}${flee} ${routeText} 見込み${insight.score}`, insight);
 }
 
 /** 行ける目標が無い: 観測する（CMD1 は gr、CMD2 は見えていない所の多い方へ dig）か、安全な手 */

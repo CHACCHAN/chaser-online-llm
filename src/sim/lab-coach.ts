@@ -230,6 +230,46 @@ export function harnessRequests(summary: string): string | null {
   return body && !/^(なし|特になし|-)$/.test(body) ? body : null;
 }
 
+/**
+ * 地図の成績から、失っている点の見込みを種類ごとに出す（1ターンあたり。大きい順）。
+ * どれも直し方の手がかりを添える（評価関数のどこ・どのパラメータ・地図・ハーネスへの要望）。
+ */
+export function weaknessLines(input: Pick<CoachInput, "runs" | "gap">): string[] {
+  const turns = Math.max(1, input.runs.reduce((a, r) => a + r.totalTurns, 0));
+  const hazardTile = (r: EpisodeResult) => r.hazardHits;
+  const items: { label: string; loss: number; hint: string }[] = [
+    {
+      label: "相手に当てられた",
+      loss: -input.runs.reduce((a, r) => a + (r.putDamage ?? 0), 0) / turns,
+      hint: "評価関数の moveValue（敵からの歩数 enemyDist・追ってきているか chasing）と dangerCost・dangerDist・dangerUnsure。当て返す価値は attackGain。traces で当てられたターンの前の動きを見る",
+    },
+    {
+      label: "罠を踏んだ",
+      loss: input.runs.reduce((a, r) => a + hazardTile(r) * 800, 0) / turns,
+      hint: "罠1回をおよそ -800 と見た目安。stepCost（罠のマスを通る手間）・knowledge/tiles.json の罠の点",
+    },
+    {
+      label: "足踏み（最後に同じ所を行き来）",
+      loss: input.runs.reduce((a, r) => a + stuckTurns(r) * 300, 0) / turns,
+      hint: "ターンの +300 を取るだけで点が増えていない見込み。目標が無い（取り尽くした・区切られた）→ exitValue・unknownValue。直らなければハーネスへの要望",
+    },
+    {
+      label: "方策の誤り（合法でない手）",
+      loss: input.runs.reduce((a, r) => a + (r.policyErrors ?? 0) * 100, 0) / turns,
+      hint: "評価関数の例外・NaN。bun run verify-policy",
+    },
+  ];
+  if (input.gap) {
+    items.push({ label: "知らないこと（理論値の目安との差）", loss: input.gap.knowledgeGap, hint: "見えない所・ワープの行き先を調べに行く価値（unknownValue・exitValue・portalValue）" });
+    items.push({ label: "考えが浅いこと（理論値の目安との差）", loss: input.gap.searchGap, hint: "candidates・depth・beam の範囲（PARAM_SPACE）" });
+  }
+  return items
+    .filter((x) => x.loss > 0.5)
+    .sort((a, b) => b.loss - a.loss)
+    .map((x, i) => `${i + 1}. ${x.label}: −${r1(x.loss)} 点/ターン — ${x.hint}`)
+    .concat(items.every((x) => x.loss <= 0.5) ? ["- 目立って失っているものは無い"] : []);
+}
+
 /** 本物の地図が保存してあるルーム */
 function roomsWithRealMaps(): number[] {
   if (!existsSync(SIM_MAPS_DIR)) return [];
@@ -308,6 +348,9 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
   }
   const weak = input.runs.map((r, i) => [perTurnOf(r), i] as const).sort((a, b) => a[0] - b[0]).slice(0, 3);
   lines.push("", `弱い地図: ${weak.map(([, i]) => `#${i}`).join(", ")}（traces.json の index。各ターンの位置・得点・手・方策の理由・変わったマス）`);
+
+  // 弱点: 失っている点の見込み（1ターンあたり、大きい順）。どこから直すかの手がかり
+  lines.push("", "## 弱点（失っている点の見込み、1ターンあたり・大きい順。上から直す）", "", ...weaknessLines(input));
 
   // 理論値の目安との差
   if (input.gap) {
