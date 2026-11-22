@@ -3,7 +3,7 @@ import { getSetting } from "../settings";
 /**
  * ハーネスが起動する Claude Code の認証（LLM_AUTH_MODE）。
  * - api          : Anthropic 互換の API（LLM_API_URL。空なら Anthropic API に直接）。送るヘッダは LLM_API_HEADERS に
- *                  "名前: 値; 名前: 値" で書き、{KEY} は LLM_API_KEY に置き換える。
+ *                  "名前: 値; 名前: 値" で書き、{KEY} は LLM_API_KEY に置き換える。LLM_API_KEY が空なら {KEY} を使うヘッダは送らない（鍵の無いローカル LLM）。
  *                  `x-api-key` は ANTHROPIC_API_KEY、`Authorization: Bearer …` は ANTHROPIC_AUTH_TOKEN として Claude Code に渡し、
  *                  それ以外は ANTHROPIC_CUSTOM_HEADERS で送る。
  * - subscription : Claude のサブスクリプション。LLM_OAUTH_TOKEN（`claude setup-token` で作る）を CLAUDE_CODE_OAUTH_TOKEN に渡す。
@@ -73,12 +73,13 @@ export function resolveLlmAuth(input: LlmAuthInput = {}): LlmAuth {
   const rawHeaders = input.headers ?? getSetting("LLM_API_HEADERS") ?? "x-api-key: {KEY}";
   const parsed = parseHeaders(rawHeaders);
   if (parsed.problem) problems.push(parsed.problem);
-  if (rawHeaders.includes("{KEY}") && !key) problems.push("LLM_API_HEADERS が {KEY} を使っているのに LLM_API_KEY が未設定");
 
   const headers: Record<string, string> = {};
   const claudeEnv: Record<string, string> = {};
   const custom: string[] = [];
   for (const [name, template] of parsed.headers) {
+    // 鍵が無い（認証の無いローカル LLM など）なら、{KEY} を使うヘッダは送らない
+    if (!key && template.includes("{KEY}")) continue;
     const value = template.replaceAll("{KEY}", key);
     headers[name] = value;
     const lower = name.toLowerCase();

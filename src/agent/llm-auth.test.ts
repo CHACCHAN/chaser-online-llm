@@ -30,10 +30,19 @@ describe("LLM_AUTH_MODE=api: ヘッダは LLM_API_HEADERS のとおり", () => {
 
   test("書き方の誤り・鍵なし・知らない方式は problem に出す", () => {
     expect(api("bad header: x").problem).toContain("LLM_API_HEADERS");
-    expect(api("x-api-key: {KEY}", { key: "" }).problem).toContain("LLM_API_KEY");
     expect(resolveLlmAuth({ mode: "oauth" }).problem).toContain("LLM_AUTH_MODE=oauth");
     expect(parseHeaders("A: b:c").headers).toEqual([["A", "b:c"]]);
   });
+});
+
+test("鍵が無い（ローカル LLM など）なら {KEY} を使うヘッダは送らず、エラーにもしない", () => {
+  const a = api("x-api-key: {KEY}; X-Local: 1", { key: "", url: "http://localhost:11434" });
+  expect(a.problem).toBeNull();
+  expect(a.headers).toEqual({ "X-Local": "1" });
+  expect(a.claudeEnv.ANTHROPIC_API_KEY).toBeUndefined();
+  expect(a.claudeEnv.ANTHROPIC_AUTH_TOKEN).toBeDefined(); // Claude Code がログインを求めないためのダミー
+  expect(a.claudeEnv.ANTHROPIC_CUSTOM_HEADERS).toBe("X-Local: 1");
+  expect(a.baseUrl).toBe("http://localhost:11434");
 });
 
 describe("LLM_AUTH_MODE=subscription", () => {

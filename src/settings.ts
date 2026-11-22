@@ -83,7 +83,7 @@ export const SETTINGS = {
     description: "api: Anthropic 互換 API の URL（/v1/messages を持つもの。末尾の /v1 は有っても無くてもよい。空なら Anthropic API に直接）",
     defaultValue: "",
   },
-  LLM_API_KEY: { group: "llm", description: "api: API キー（LLM_API_HEADERS の {KEY} に入る）", defaultValue: "", secret: true },
+  LLM_API_KEY: { group: "llm", description: "api: API キー（LLM_API_HEADERS の {KEY} に入る。鍵の無いローカル LLM なら空でよい）", defaultValue: "", secret: true },
   LLM_API_HEADERS: {
     group: "llm",
     description:
