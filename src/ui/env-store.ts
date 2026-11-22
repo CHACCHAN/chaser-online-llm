@@ -14,16 +14,21 @@ export interface EnvEntry {
   /** 設定画面の分類（SETTING_SECTIONS の id） */
   section: string;
   description: string;
+  /** 設定画面に出す短い名前（カスタム変数は無し） */
+  label?: string;
+  /** 既定値（空のまま保存した時に使う値） */
+  defaultValue?: string;
   /** 選べる値（あれば WebUI で選択肢にする） */
   options?: readonly string[];
 }
 
 /** 既知の設定は src/settings.ts から生成する（説明・既定値の二重管理をしない） */
-const KNOWN_ENV_META: Record<string, { group: SettingGroup; secret: boolean; description: string; defaultValue: string; options?: readonly string[] }> =
+const KNOWN_ENV_META: Record<string, { label: string; group: SettingGroup; secret: boolean; description: string; defaultValue: string; options?: readonly string[] }> =
   Object.fromEntries(
     Object.entries(SETTINGS).map(([k, d]) => [
       k,
       {
+        label: d.label,
         group: d.group,
         secret: "secret" in d && d.secret === true,
         description: d.description,
@@ -87,6 +92,8 @@ export function loadProjectEnvEntries(): EnvEntry[] {
       section: settingSection(key),
       secret: meta.secret,
       description: meta.description,
+      label: meta.label,
+      defaultValue: meta.defaultValue,
       ...(meta.options ? { options: meta.options } : {}),
     });
   }
