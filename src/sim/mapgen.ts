@@ -29,11 +29,25 @@ export interface MapProfile {
   warps: Range;
   blackstars: number;
   /**
+   * 仕切り: 奈落などの帯で地図を端から端まで区切る（本物の例: room720 は奈落(12)の1マス幅の縦横の帯で4つに区切られている）。
+   * 横の帯は桂馬（縦に2マス）で越えられるが、縦の帯はワープでしか越えられない。区切りごとに、越える向きのワープを portals 個置く。
+   * 書かなければ DEFAULT_PARTITIONS。chance = 0 で作らない
+   */
+  partitions?: { chance: number; tiles: number[]; count: Range; width: Range; portals: Range };
+  /**
+   * 囲み: 点の高いアイテムをジオード(4)などで1重に囲む（桂馬で中へ飛び込めば取れる。歩くと罠を踏む）。
+   * items を書かなければ fill の中で点の高い3種。書かなければ DEFAULT_ENCLOSURES。count [0,0] で作らない
+   */
+  enclosures?: { count: Range; tiles: number[]; items?: number[]; inner: Range };
+  /**
    * 相手にアイテム・土を置いて当てた時に動く得点（当てた側 +、当てられた側 −）。公式の値は未確認の仮の値。
    * 実測: room455 で6ターンのうちにプットダメージ -44990。分かったら合わせる
    */
   putHit?: number;
 }
+
+export const DEFAULT_PARTITIONS: NonNullable<MapProfile["partitions"]> = { chance: 0.3, tiles: [12], count: [1, 2], width: [1, 1], portals: [1, 2] };
+export const DEFAULT_ENCLOSURES: NonNullable<MapProfile["enclosures"]> = { count: [0, 3], tiles: [4], inner: [0, 1] };
 
 /** 1試合分の設定（地図・開始位置・ターン数） */
 export interface Scenario {
@@ -207,7 +221,86 @@ export function generateGrid(rng: Rng, profile: MapProfile, w: number, h: number
   if (rng() < profile.blackstars) {
     for (const t of [60, 61, 62, 63]) set(randInt(rng, 0, w - 1), randInt(rng, 0, h - 1), t);
   }
+  addEnclosures(rng, profile, grid);
+  addPartitions(rng, profile, grid);
   return grid;
+}
+
+/** 仕切り（帯）と、それを越えるワープ */
+function addPartitions(rng: Rng, profile: MapProfile, grid: number[][]): void {
+  const cfg = profile.partitions ?? DEFAULT_PARTITIONS;
+  const h = grid.length;
+  const w = grid[0]!.length;
+  if (rng() >= cfg.chance || w < 9 || h < 9) return;
+  const n = randInt(rng, cfg.count[0], cfg.count[1]);
+  const passable = (x: number, y: number) => {
+    const info = getTileInfo(grid[y]![x]!);
+    return info.passable && !info.hazard && !isPortalTile(grid[y]![x]!);
+  };
+  for (let i = 0; i < n; i++) {
+    const vertical = rng() < 0.5;
+    const span = vertical ? w : h;
+    const width = randInt(rng, cfg.width[0], cfg.width[1]);
+    const at = randInt(rng, 3, span - 4 - width);
+    const t = pick(rng, cfg.tiles);
+    for (let k = 0; k < width; k++) {
+      for (let j = 0; j < (vertical ? h : w); j++) {
+        if (vertical) grid[j]![at + k] = t;
+        else grid[at + k]![j] = t;
+      }
+    }
+    // 帯を越えるワープ（両向きに、着地が通れるマスになる番号を選ぶ）
+    const portals = randInt(rng, cfg.portals[0], cfg.portals[1]);
+    for (let p = 0; p < portals * 2; p++) {
+      const forward = p % 2 === 0;
+      for (let tries = 0; tries < 60; tries++) {
+        const tile = pick(rng, [20, 21, 22, 23, 30, 31, 32, 33, 40, 41, 42, 43, 50, 51, 52, 53]);
+        const d = warpDelta(tile)!;
+        const along = vertical ? d[0] : d[1];
+        const across = vertical ? d[1] : d[0];
+        if (across !== 0 || (forward ? along <= 0 : along >= 0)) continue;
+        const x = randInt(rng, 0, w - 1);
+        const y = randInt(rng, 0, h - 1);
+        const pos = vertical ? x : y;
+        const dest = pos + along;
+        const crosses = forward ? pos < at && dest >= at + width : pos >= at + width && dest < at;
+        const tx = x + d[0];
+        const ty = y + d[1];
+        if (!crosses || tx < 0 || ty < 0 || tx >= w || ty >= h || !passable(x, y) || !passable(tx, ty)) continue;
+        grid[y]![x] = tile;
+        break;
+      }
+    }
+  }
+}
+
+/** 点の高いアイテムを罠で1重に囲む */
+function addEnclosures(rng: Rng, profile: MapProfile, grid: number[][]): void {
+  const cfg = profile.enclosures ?? DEFAULT_ENCLOSURES;
+  const h = grid.length;
+  const w = grid[0]!.length;
+  const items = cfg.items?.length
+    ? cfg.items
+    : Object.keys(fillWeights(profile))
+        .map(Number)
+        .filter((v) => getTileInfo(v).score > 0 && !isPortalTile(v))
+        .sort((a, b) => getTileInfo(b).score - getTileInfo(a).score)
+        .slice(0, 3);
+  if (items.length === 0) return;
+  const n = randInt(rng, cfg.count[0], cfg.count[1]);
+  for (let i = 0; i < n; i++) {
+    const r = randInt(rng, cfg.inner[0], cfg.inner[1]);
+    const cx = randInt(rng, r + 3, w - r - 4);
+    const cy = randInt(rng, r + 3, h - r - 4);
+    if (cx < r + 3 || cy < r + 3) continue;
+    const t = pick(rng, cfg.tiles);
+    for (let dy = -r - 1; dy <= r + 1; dy++) {
+      for (let dx = -r - 1; dx <= r + 1; dx++) {
+        const ring = Math.max(Math.abs(dx), Math.abs(dy)) === r + 1;
+        grid[cy + dy]![cx + dx] = ring ? t : pick(rng, items);
+      }
+    }
+  }
 }
 
 /** 本物の地図を少し変える（点のあるマスの一部を近くへ動かす）。同じ地図ばかり覚えないように */

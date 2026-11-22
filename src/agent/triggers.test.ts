@@ -16,6 +16,17 @@ function fakeMap(o: { pos?: [number, number]; est?: number; item?: number; unkno
 const dec = (command: string, reason = "回収", score?: number) => ({ command, reason, confidence: 1, ...(score !== undefined ? { insight: { route: [], score, candidates: 1 } } : {}) }) as never;
 
 describe("試合中の LLM を呼ぶきっかけ", () => {
+  test("行ったり来たり: 相手に置いて当てながらの往復は数えない", () => {
+    const run = (cmd2: string) => {
+      const m = new TriggerMonitor([]);
+      const ids: string[] = [];
+      for (let t = 1; t <= 8; t++) ids.push(...m.turnEnd({ wm: fakeMap({ pos: [t % 2, 0] }), turn: t, totalTurns: null, cmd2: t === 5 ? cmd2 : "wr" }).map((f) => f.id));
+      return ids;
+    };
+    expect(run("wl")).toContain("stuck");
+    expect(run("pu2wl")).not.toContain("stuck");
+  });
+
   test("設定は範囲に収め、知らない項目は捨てる", () => {
     const c = normalizeTriggerConfig({ thresholds: { stuck: 99, enemyNear: 2.6, nope: 1 }, enabled: { heartbeat: false }, cooldownTurns: -3 });
     expect(c.thresholds.stuck).toBe(6);

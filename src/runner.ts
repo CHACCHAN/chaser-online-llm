@@ -206,6 +206,8 @@ export async function runAgentMatch(
     turnBudgetSec: config.turnBudgetSec,
   };
   const worldMap = new WorldMap();
+  // 過去の試合で記録したワープ（絶対座標）。Webマップで位置合わせできたら、方策が行き先の分かっているワープを道として使う
+  worldMap.setKnownGlobalWarps((getRoomProfile(config.room).warps ?? []).filter((w) => isWarpTile(w.tile)));
   const roomProfileBefore = getRoomProfile(config.room);
   /** 1試合の全ターン数（過去の公式結果、なければ Webマップの残りターンから分かった時に入る） */
   let totalTurns: number | null = roomProfileBefore.totalTurns ?? knownTotalTurns(config.room);
@@ -580,6 +582,7 @@ export async function runAgentMatch(
           totalTurns,
           web: webMap.lastScore,
           warpMisaligned: warpWaits.some((w) => !w.aligned),
+          cmd2,
         });
         firedThisTurn.push(...turnEndFired);
       } catch (err) {

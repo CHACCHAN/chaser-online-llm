@@ -25,7 +25,7 @@ flowchart LR
 
 | 役 | ファイル | 内容 |
 | :--- | :--- | :--- |
-| 方策 | `src/solver/planner.ts`（ハーネス） | 知っているマスで Dijkstra。目標の候補（得点のあるマス＋固まりの加点・未知との境目・ワープ・LLM の作戦の目標）から上位 K 個を選び、残りの歩数の中で回る順をビームサーチ。最初の一歩（歩く・斜め）を返す。ワープの中心が見えたら `gr`。行ける目標が無い時は、知っている通れるマスへ動く（場外 -500 を避ける） |
+| 方策 | `src/solver/planner.ts`（ハーネス） | 知っているマスで Dijkstra。目標の候補（得点のあるマス＋固まりの加点・未知との境目・ワープ・LLM の作戦の目標）から上位 K 個を選び、残りの歩数の中で回る順をビームサーチ。最初の一歩（歩く・斜め）を返す。ワープの中心が見えたら `gr`。行き先の分かっているワープ（この試合で入った・過去の試合の記録 `var/room-profiles.json` を Webマップで位置合わせしたもの。`WorldMap.getKnownPortalLinks`）と桂馬（間のマスを飛び越える）は道として使う。得になる目標が無い（取り尽くした）時は、行き先の分からないワープを出口として目標にする（価値は評価関数の `exitValue`）。それも無ければ、直近に立った所を除いた一番近い候補へ（2マスの行ったり来たりを防ぐ）、無ければ知っている通れるマスへ動く（場外 -500 を避ける） |
 | 評価関数 | `src/solver/evaluator.ts`（**エージェントが直してよい**） | マスの通りにくさ（`stepCost`）・目標の価値（`targetValue`）・得点（`tileGain`）と、パラメータの範囲（`PARAM_SPACE`）。学習で決まった値は `var/policy/params.json` |
 | 試合中の LLM | `src/agent/main-agent.ts`・`agent/prompts/main.md` | 方策を待たせず、毎フェーズ「考え中でなければ」今の盤面（全体マップ・経過・メモ・方策の判断）で裏の問い合わせを始める。返ってきた `plan` を作戦にする（考えている間にワープなどで座標系が変わっていれば、その目標は捨てる）。1回の上限は `AGENT_TURN_BUDGET_SEC` |
 
@@ -36,7 +36,7 @@ flowchart LR
 | ファイル | 内容 |
 | :--- | :--- |
 | `engine.ts` | ルール: 動き・観測（`CMD1_SPECS`/`CMD2_SPECS`）、得点は `getTileInfo`（`knowledge/tiles.json`）。ターン完了 +300、場外 -500（動かない）、岩盤・プレイヤーは通れない、踏んだマスは穴、ワープ（十の位で距離 2:10・3:5・4:6・5:15、一の位で向き）、ブラックスター 60→63、端の観測は要素が少ない。相手にアイテム・土を置いて当てると、当てた側 +・当てられた側 − に `putHit`（`sim-profiles.json`。公式の値は未確認の仮の値 5000） |
-| `mapgen.ts` | **毎回ランダムに地図を作る**（seed が同じなら同じ地図）。`knowledge/sim-profiles.json` のタイルの重み・帯・固まり・ワープ数に、`tiles.json` にあって重みに無いタイル（新しく分かったアイテム）を `otherTiles` の重みで混ぜる。大きさ・ターン数・Webマップの有無はルームの実測（`var/room-profiles.json`）に合わせる。本物の地図（`var/maps/room<N>/`、試合中の最初の Webマップを runner が保存）を `realMapShare` の割合で、少し変えて使う |
+| `mapgen.ts` | **毎回ランダムに地図を作る**（seed が同じなら同じ地図）。`knowledge/sim-profiles.json` のタイルの重み・帯・固まり・ワープ数に、`tiles.json` にあって重みに無いタイル（新しく分かったアイテム）を `otherTiles` の重みで混ぜる。大きさ・ターン数・Webマップの有無はルームの実測（`var/room-profiles.json`）に合わせる。本物の地図（`var/maps/room<N>/`、試合中の最初の Webマップを runner が保存）を `realMapShare` の割合で、少し変えて使う。形も作る: `partitions`（奈落などの帯で端から端まで区切り、越えるワープを置く。本物の例 room720）・`enclosures`（点の高いアイテムをジオードなどで1重に囲む。桂馬で飛び込めば取れる）。書かなければ `DEFAULT_PARTITIONS`・`DEFAULT_ENCLOSURES` |
 | `episode.ts` | 1試合。自分は本番と同じ `WorldMap`（観測の反映・Webマップでの位置合わせ）と方策で打つ。相手は下の「相手と自己対戦」 |
 | `bots.ts`・`opponents.ts` | 相手（拾う・狙う・自分）と、自己対戦の相手の控え（リーグ `var/policy/league.json`） |
 | `pool.ts`・`worker.ts` | Bun Worker で並列（`SIM_WORKERS`、既定は CPU 数−2、最大16） |
@@ -95,7 +95,7 @@ flowchart LR
 1. `var/lab-coach/<日時>/` に統計 `report.md`（学習の前→後と確かめ用の地図の結果、地図ごとの点/ターン・罠・足踏み・方策の誤り、作った地図と本物の地図のタイルの割合の違い、最近の学習）と再生の記録 `traces.json` を書き出す。並べた地図で学習した時はその地図の前→後、それ以外は今の方策で 12 枚打たせたもの。
 2. ツールありの Claude Code（`agent/prompts/lab-coach.md`、モデルは `LAB_COACH_MODEL`・空なら LLM と同じ、上限 `LAB_COACH_TIMEOUT_MIN` 分）が読んで直す。直してよいのは次の3つ:
    - **評価関数** `src/solver/evaluator.ts` → 改修前と同じ地図で比べ（`gateEvaluatorChange`、試合後の振り返りと同じ）、弱くなっていれば戻す。
-   - **地図の作り方** `knowledge/sim-profiles.json` → 地図が作れなければ戻す。本物の地図があるルームで、作った地図のタイルの割合が本物から遠ざかったら（L1 距離が 0.02 より増えたら）戻す。方策の得点では比べない（易しい地図にすれば得点は上がってしまうので）。
+   - **地図の作り方** `knowledge/sim-profiles.json` → 地図が作れなければ戻す。本物の地図があるルームで、作った地図のタイルの割合が本物から遠ざかったら（L1 距離が 0.02 より増えたら）戻す。方策の得点では比べない（易しい地図にすれば得点は上がってしまうので）。統計には地図の形（区画の数・一番大きい区画の外の点・罠に囲まれた点。`mapStructure`）も本物と作ったものを並べ、学習の LLM が `partitions`・`enclosures` を本物に合わせる。
    - **学習のやり方** `knowledge/train-config.json`（1世代の候補の数 `popSize`・地図の数 `batch`・確かめ用の地図の数 `validation`・探す幅 `sigmaStart`/`sigmaEnd`。`trainPolicy` が毎回読む）→ 範囲の外なら戻す。
 3. それ以外（ハーネス）の変更は戻す（edit-guard）。試合が始まる・「止める」を押すと LLM を止め、確かめていない改修を全部戻す。結果は `var/lab-coach/log.jsonl` に残し、「学習」画面に出す。
 

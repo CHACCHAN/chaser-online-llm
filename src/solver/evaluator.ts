@@ -22,7 +22,8 @@ export const PARAM_SPACE = {
   unknownValue: { init: 12, min: 0, max: 120, doc: "見えていないマス1つの見込みの価値（フロンティアの価値 = これ × 周りの未知マス数）" },
   holeCost: { init: 20, min: 0, max: 80, doc: "穴(0)を通る追加の手間（実際の失点は -20）" },
   revisitCost: { init: 8, min: 0, max: 60, doc: "何度も通った穴を通る追加の手間（通った回数ごと、3回まで）" },
-  portalValue: { init: -40, min: -400, max: 400, doc: "ワープ・ブラックスターを目標にする価値（正なら行き先が読めなくても使う）" },
+  portalValue: { init: -40, min: -400, max: 400, doc: "行き先の分からないワープ・ブラックスターを目標にする価値（正なら行き先が読めなくても使う。行き先の分かっているワープは道として使う）" },
+  exitValue: { init: 300, min: 0, max: 3000, doc: "取り尽くした（ワープ以外に得になる目標が無い）時に、行き先の分からないワープを出口として目標にする価値（0 なら使わずにその場で待つ）" },
   enemyRadius: { init: 1, min: 0, max: 3, integer: true, doc: "最近見た敵のまわり何マスを通らないか" },
   directiveBonus: { init: 300, min: 0, max: 2000, doc: "メイン（LLM）が指定した目標に足す価値" },
   clusterWeight: { init: 0.25, min: 0, max: 1.5, doc: "目標のまわり（2マス以内）の点の合計を価値に足す割合" },
@@ -76,10 +77,10 @@ export function stepCost(value: number, visitedCount: number, p: Params): number
 
 /**
  * 目標としての価値。gain = そのマスの得点、cluster = まわり2マス以内の正の得点の合計（自分を除く）、unknownAround = まわり3×3の未知マス数。
- * 0 以下なら目標にしない。
+ * exhausted = 取り尽くした（ワープ以外に得になる目標が無い）時のワープ。0 以下なら目標にしない。
  */
-export function targetValue(cell: { value: number; gain: number; cluster: number; unknownAround: number; portal: boolean }, p: Params): number {
-  if (cell.portal) return p.portalValue;
+export function targetValue(cell: { value: number; gain: number; cluster: number; unknownAround: number; portal: boolean; exhausted?: boolean }, p: Params): number {
+  if (cell.portal) return cell.exhausted ? p.exitValue : p.portalValue;
   let v = cell.gain > 0 ? cell.gain + p.clusterWeight * cell.cluster : 0;
   if (cell.unknownAround > 0) v += p.unknownValue * cell.unknownAround;
   return v;

@@ -13,8 +13,10 @@ import type { SolverDecision } from "./types";
 /**
  * 経路探索の方策（試合中は毎フェーズ数ms で手を決める。LLM は待たない）。
  *
- * 1. 今の区画の分かっているマスで、自分から全マスへの最安経路（ダイクストラ）を出す。
- * 2. 目標の候補（点のあるマス・見えていない所に接するマス・メインの指定）を価値で選ぶ。
+ * 1. 今の区画の分かっているマスで、自分から全マスへの最安経路（ダイクストラ）を出す。行き先の分かっているワープは道として使う
+ *    （この試合で入ったもの・過去の試合の記録。WorldMap.getKnownPortalLinks）。
+ * 2. 目標の候補（点のあるマス・見えていない所に接するマス・メインの指定）を価値で選ぶ。得になる目標が無い（取り尽くした）時は、
+ *    行き先の分からないワープを「出口」として目標にする（価値は evaluator の targetValue の exhausted）。
  * 3. 候補どうしの距離を出し、残りターンの中で「どの順に回ると一番得か」をビームサーチで探す。
  * 4. その最初の目標へ近づく手を、このフェーズで打てる手（歩く・桂馬・観測）から選ぶ。
  *
@@ -112,6 +114,12 @@ class Board {
   readonly visited: Uint8Array;
   readonly cost: Float64Array;
   readonly nb: Int32Array;
+  /** 行き先の分かっているワープ: 入口 → 着地（無ければ -1） */
+  readonly portalDest: Int32Array;
+  /** 着地 → そこへ飛ぶ入口（逆向きの探索用） */
+  readonly portalFrom = new Map<number, number[]>();
+  /** 桂馬（CMD2、間のマスを飛び越える）を経路に入れるか */
+  readonly knight: boolean;
 
   constructor(wm: WorldMap, blocked: Set<string>, p: Evaluator.Params, ev: EvaluatorModule) {
     const [sx, sy] = wm.getPosition();
@@ -143,6 +151,19 @@ class Board {
       const c = ev.stepCost(rec.value, rec.visitedCount, p);
       if (c !== null) this.cost[i] = c;
     });
+    this.knight = p.knightWeight >= 0.5;
+    // 行き先の分かっているワープ（着地が盤の中で、通れるマスの時だけ）
+    this.portalDest = new Int32Array(n).fill(-1);
+    for (const l of wm.getKnownPortalLinks()) {
+      const a = this.idx(l.from[0], l.from[1]);
+      const b = this.idx(l.to[0], l.to[1]);
+      if (a < 0 || b < 0 || a === b || !this.known[a] || !ev.isPortalValue(this.value[a]!) || this.cost[b] === INF) continue;
+      if (blocked.has(`${l.from[0]},${l.from[1]}`)) continue;
+      this.portalDest[a] = b;
+      const list = this.portalFrom.get(b) ?? [];
+      list.push(a);
+      this.portalFrom.set(b, list);
+    }
     // 4近傍（盤の外は -1）
     this.nb = new Int32Array(n * 4).fill(-1);
     for (let y = 0; y < this.h; y++) {
@@ -180,10 +201,16 @@ class Board {
       const [d, i] = heap.pop();
       if (d > dist[i]!) continue;
       for (let k = 0; k < 4; k++) {
-        const j = this.nb[i * 4 + k]!;
+        let j = this.nb[i * 4 + k]!;
         if (j < 0) continue;
-        const c = this.cost[j]!;
-        if (c === INF) continue;
+        let c = this.cost[j]!;
+        if (c === INF) {
+          // 行き先の分かっているワープ: 入った1歩で着地へ
+          const to = this.portalDest[j]!;
+          if (to < 0) continue;
+          j = to;
+          c = PORTAL_STEP_COST;
+        }
         const nd = d + c;
         if (nd < dist[j]!) {
           dist[j] = nd;
@@ -191,10 +218,80 @@ class Board {
           heap.push(nd, j);
         }
       }
+      // 桂馬: 間のマス（奈落の帯・ジオードの囲みなど）を飛び越える
+      if (this.knight) {
+        const [x, y] = this.xy(i);
+        for (const [dx, dy] of KNIGHT_MOVES) {
+          const j = this.idx(x + dx, y + dy);
+          if (j < 0 || this.cost[j] === INF) continue;
+          const nd = d + this.cost[j]! + KNIGHT_EXTRA_COST;
+          if (nd < dist[j]!) {
+            dist[j] = nd;
+            steps[j] = steps[i]! + 1;
+            heap.push(nd, j);
+          }
+        }
+      }
     }
     return { dist, steps };
   }
+
+  /** 全マスから dst までの最安の手間（ワープは一方通行なので、逆向きにたどる） */
+  dijkstraTo(dst: number): Float64Array {
+    const n = this.w * this.h;
+    const dist = new Float64Array(n).fill(INF);
+    dist[dst] = 0;
+    const heap = new MinHeap();
+    heap.push(0, dst);
+    while (heap.size > 0) {
+      const [d, u] = heap.pop();
+      if (d > dist[u]!) continue;
+      // u へ1歩で入れるマス v（v→u の手間は u に入る手間）
+      const cu = this.cost[u]!;
+      if (cu !== INF) {
+        for (let k = 0; k < 4; k++) {
+          const v = this.nb[u * 4 + k]!;
+          if (v < 0 || (this.cost[v] === INF && v !== dst)) continue;
+          if (d + cu < dist[v]!) {
+            dist[v] = d + cu;
+            heap.push(d + cu, v);
+          }
+        }
+      }
+      // u へ桂馬で飛べるマス
+      if (this.knight && cu !== INF) {
+        const [ux, uy] = this.xy(u);
+        for (const [dx, dy] of KNIGHT_MOVES) {
+          const v = this.idx(ux - dx, uy - dy);
+          if (v < 0 || this.cost[v] === INF) continue;
+          const nd = d + cu + KNIGHT_EXTRA_COST;
+          if (nd < dist[v]!) {
+            dist[v] = nd;
+            heap.push(nd, v);
+          }
+        }
+      }
+      // u に着くワープの入口の隣
+      for (const a of this.portalFrom.get(u) ?? []) {
+        for (let k = 0; k < 4; k++) {
+          const v = this.nb[a * 4 + k]!;
+          if (v < 0 || this.cost[v] === INF) continue;
+          if (d + PORTAL_STEP_COST < dist[v]!) {
+            dist[v] = d + PORTAL_STEP_COST;
+            heap.push(d + PORTAL_STEP_COST, v);
+          }
+        }
+      }
+    }
+    return dist;
+  }
 }
+
+/** ワープに入る1歩の手間（歩く1歩と同じ） */
+const PORTAL_STEP_COST = 10;
+/** 桂馬の動き（CMD2 の keilu・keiru・keild・keird）。歩く手より 10 多くかかる（-20） */
+const KNIGHT_MOVES: [number, number][] = [[-1, -2], [1, -2], [-1, 2], [1, 2]];
+const KNIGHT_EXTRA_COST = 10;
 
 interface Candidate {
   i: number;
@@ -292,9 +389,12 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
     return s;
   };
   const scored: { c: Candidate; key: number }[] = [];
+  /** 行き先の分からないワープ（取り尽くした時の出口の候補）: 入口と、そこまでの手間 */
+  const exits: { i: number; d: number }[] = [];
   for (let i = 0; i < n; i++) {
     if (i === self || !board.known[i]) continue;
     const portal = ev.isPortalValue(board.value[i]!);
+    if (portal && board.portalDest[i]! >= 0) continue;
     let d = from0.dist[i]!;
     if (portal) {
       // ワープは通れない扱いなので、隣までの距離 + 1歩
@@ -304,12 +404,20 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
       }
     }
     if (d === INF) continue;
+    if (portal) exits.push({ i, d });
     const gain = ev.tileGain(board.value[i]!);
     const ua = unknownAround(i);
     if (!portal && gain <= 0 && ua === 0) continue;
     const value = ev.targetValue({ value: board.value[i]!, gain, cluster: gain > 0 ? clusterAround(i) : 0, unknownAround: ua, portal }, p);
     if (value <= 0) continue;
     scored.push({ c: { i, value, terminal: portal }, key: value - p.distWeight * d });
+  }
+  // 取り尽くした（ワープ以外に得になる目標が無い）: 行き先の分からないワープを出口として目標にする
+  if (!scored.some((s) => !s.c.terminal && s.c.value > 0)) {
+    for (const e of exits) {
+      const value = ev.targetValue({ value: board.value[e.i]!, gain: 0, cluster: 0, unknownAround: 0, portal: true, exhausted: true }, p);
+      if (value > 0 && !scored.some((s) => s.c.i === e.i)) scored.push({ c: { i: e.i, value, terminal: true }, key: value - p.distWeight * e.d });
+    }
   }
   // メインの指定: 分かっていて行けるマスならそこ、無理ならそれに一番近い行けるマス
   let directiveIdx = -1;
@@ -379,14 +487,23 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
     if (!bestNode || beam[0]!.score > bestNode.score) bestNode = beam[0]!;
   }
   if (!bestNode || bestNode.score <= 0) {
-    // 得になる目標が無い: 一番近い候補へ（見えていない所を減らす）、それも無ければ観測
-    const nearest = picked.map((c, j) => ({ j, d: distTo(null, j).d })).filter((e) => e.d < INF).sort((a, b) => a.d - b.d)[0];
+    // 得になる目標が無い: 行き先の分からないワープ（出口）があればそこへ。無ければ一番近い候補へ（見えていない所を減らす）、
+    // それも無ければ観測。直近に立った所は候補から外す（2マスの行ったり来たりを防ぐ）
+    const recent = new Set(wm.getRecentTrail(6).map(([tx, ty]) => board.idx(tx, ty)));
+    const exitValue = ev.targetValue({ value: 0, gain: 0, cluster: 0, unknownAround: 0, portal: true, exhausted: true }, p);
+    const usable = picked.map((c, j) => ({ c, j, d: distTo(null, j).d })).filter((e) => e.d < INF && !recent.has(e.c.i));
+    const exit = exitValue > 0 ? exits.filter((e) => !recent.has(e.i)).sort((a, b) => a.d - b.d)[0] : undefined;
+    if (exit && !usable.some((e) => e.c.terminal && e.c.i === exit.i)) {
+      picked.push({ i: exit.i, value: exitValue, terminal: true });
+      usable.push({ c: picked[picked.length - 1]!, j: picked.length - 1, d: exit.d });
+    }
+    const nearest = (exit ? usable.filter((e) => e.c.i === exit.i) : usable).sort((a, b) => a.d - b.d)[0];
     if (!nearest) return scanOrFallback(wm, ctx, board, finish);
     bestNode = { seq: [nearest.j], at: nearest.j, steps: distTo(null, nearest.j).s, score: 0 };
   }
 
   const first = picked[bestNode.seq[0]!]!;
-  const toFirst = first.terminal ? null : from[bestNode.seq[0]!]!;
+  const toFirst = first.terminal ? null : board.dijkstraTo(first.i);
   const route = bestNode.seq.map((j) => {
     const [cx, cy] = board.xy(picked[j]!.i);
     return { x: cx, y: cy, value: Math.round(picked[j]!.value), steps: 0 };
@@ -403,32 +520,40 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
   const [fx, fy] = board.xy(first.i);
   const remainingFrom = (li: number): number => {
     if (li === first.i) return 0;
-    if (toFirst) return toFirst.dist[li]!;
+    if (toFirst) return toFirst[li]!;
     // 目標がワープ: 隣のマスまでの距離
     return Math.abs(board.xy(li)[0] - fx) + Math.abs(board.xy(li)[1] - fy) === 1 ? 0 : INF;
   };
-  const options: { cmd: string; score: number }[] = [];
+  const options: { cmd: string; score: number; warp: boolean }[] = [];
   const specs = phase === "CMD1" ? CMD1_SPECS : CMD2_SPECS;
   for (const [cmd, spec] of Object.entries(specs) as [Cmd1Command | Cmd2Command, (typeof CMD1_SPECS)[Cmd1Command]][]) {
     const isWalk = spec.category === "walk" || (spec.category === "get_ready" && (spec.move[0] !== 0 || spec.move[1] !== 0));
     const isKnight = spec.category === "kei";
     if (!isWalk && !(isKnight && p.knightWeight >= 0.5)) continue;
-    const li = board.idx(x + spec.move[0], y + spec.move[1]);
-    if (li < 0 || !board.known[li]) continue;
-    const landingPortal = li === first.i && first.terminal;
-    if (board.cost[li] === INF && !landingPortal) continue;
+    const step = board.idx(x + spec.move[0], y + spec.move[1]);
+    if (step < 0 || !board.known[step]) continue;
+    const landingPortal = step === first.i && first.terminal;
+    // 行き先の分かっているワープに入る手は、飛んだ先に着いたとして数える
+    const warpTo = board.cost[step] === INF && !landingPortal ? board.portalDest[step]! : -1;
+    if (board.cost[step] === INF && !landingPortal && warpTo < 0) continue;
+    const li = warpTo >= 0 ? warpTo : step;
     const rem = remainingFrom(li);
     if (rem === INF) continue;
-    const gain = landingPortal ? 0 : ev.tileGain(board.value[li]!);
-    options.push({ cmd, score: gain + spec.estActionCost - p.distWeight * rem });
+    const gain = landingPortal ? 0 : warpTo >= 0 ? ev.tileGain(board.value[step]!) + Math.max(0, ev.tileGain(board.value[li]!)) : ev.tileGain(board.value[li]!);
+    options.push({ cmd, score: gain + spec.estActionCost - p.distWeight * rem, warp: warpTo >= 0 });
+  }
+  if (phase === "CMD1" && board.knight) {
+    const rem = remainingFrom(self);
+    if (rem !== INF) options.push({ cmd: "gr", score: CMD1_SPECS.gr.estActionCost - p.distWeight * rem, warp: false });
   }
   options.sort((a, b) => b.score - a.score);
   const choice = options[0];
   const insight = { route, score: Math.round(bestNode.score), candidates: picked.length };
   if (!choice) return scanOrFallback(wm, ctx, board, finish);
   const routeText = route.slice(0, 3).map((r) => `(${r.x},${r.y})${r.value}`).join("→");
-  const tag = directiveIdx === first.i ? "指定の目標" : first.terminal ? "ワープへ" : ev.tileGain(board.value[first.i]!) > 0 ? "回収" : "探索";
-  return finish(choice.cmd, `${tag} ${routeText} 見込み${insight.score}`, insight);
+  const viaWarp = choice.warp;
+  const tag = directiveIdx === first.i ? "指定の目標" : first.terminal ? "出口のワープへ" : ev.tileGain(board.value[first.i]!) > 0 ? "回収" : "探索";
+  return finish(choice.cmd, `${tag}${viaWarp ? "（行き先の分かっているワープを通る）" : ""} ${routeText} 見込み${insight.score}`, insight);
 }
 
 /** 行ける目標が無い: 観測する（CMD1 は gr、CMD2 は見えていない所の多い方へ dig）か、安全な手 */

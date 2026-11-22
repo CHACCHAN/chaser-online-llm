@@ -3,7 +3,7 @@ import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { EVALUATOR_PATH, SIM_PROFILES_PATH, TRAIN_CONFIG_PATH } from "../paths";
-import { histogramDistance, readCoachLog, runLabCoach, stuckTurns, tileHistogram } from "./lab-coach";
+import { histogramDistance, mapStructure, readCoachLog, runLabCoach, stuckTurns, tileHistogram } from "./lab-coach";
 import { LearningLab } from "./lab";
 import type { EpisodeResult } from "./episode";
 import type { TrainResult } from "./train";
@@ -114,3 +114,18 @@ test("学習が終わると学習の LLM が続けて動き、結果が状態に
   await lab.train({ room: null, minutes: 0.08, trigger: "manual", onSet: true, dryRun: true });
   expect(asked).toBe(1);
 }, 90_000);
+
+test("地図の形: 帯で区切られた区画の数・大きい区画の外の点・罠に囲まれた点", () => {
+  // 0 = 穴, 12 = 奈落, 4 = ジオード, 77 = 点の高いアイテム（土 10 より高いものを点と数える）
+  const g = [
+    [0, 0, 0, 0, 12, 0, 0],
+    [0, 0, 0, 0, 12, 0, 0],
+    [0, 4, 0, 0, 12, 0, 0],
+    [4, 77, 4, 0, 12, 0, 77],
+    [0, 4, 0, 0, 12, 0, 0],
+  ];
+  const s = mapStructure(g);
+  expect(s.regions).toBe(2);
+  expect(s.enclosed).toBeGreaterThan(0);
+  expect(s.outsideMain).toBeGreaterThan(0);
+});

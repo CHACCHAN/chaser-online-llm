@@ -113,9 +113,12 @@ export interface TurnEndInput {
   web?: { ourTurn: number; itemPoint: number; totalScore?: number; putDamage?: number } | null;
   /** ワープ後の位置合わせを待って、合わせられなかった */
   warpMisaligned?: boolean;
+  /** このターンの CMD2（置いて当てる手 p…2w… の往復は「行ったり来たり」に数えない） */
+  cmd2?: string | null;
 }
 
 const NO_TARGET_PREFIX = "行ける目標が無い";
+
 
 export class TriggerMonitor {
   readonly config: TriggerConfig;
@@ -126,6 +129,7 @@ export class TriggerMonitor {
   private prevExpected: { value: number; route: number } | null = null;
   private noTargetRun = 0;
   private readonly positions: string[] = [];
+  private putTurns: boolean[] = [];
   private readonly estByTurn = new Map<number, { item: number; total: number }>();
   private lastPutDamage: number | null = null;
   private lastGapFired = 0;
@@ -227,8 +231,11 @@ export class TriggerMonitor {
     // 行ったり来たり（区画ごとの座標で数える）
     const [x, y] = wm.getPosition();
     this.positions.push(`${wm.getSegmentId()}:${x},${y}`);
+    this.putTurns.push(/^p[udlr]2w[udlr]$/.test(input.cmd2 ?? ""));
     if (this.positions.length > 8) this.positions.shift();
-    if (this.positions.length === 8) {
+    if (this.putTurns.length > 8) this.putTurns.shift();
+    // 相手に置いて当てながら横に動いている（攻めの往復）は除く
+    if (this.positions.length === 8 && !this.putTurns.some(Boolean)) {
       const distinct = new Set(this.positions).size;
       if (distinct <= th.stuck) this.emit(out, turn, { id: "stuck", value: distinct, detail: `直近 8 ターンで ${distinct} マスだけ` });
     }

@@ -521,6 +521,32 @@ export class WorldMap {
     return this.globalOffset ? [this.globalOffset[0], this.globalOffset[1]] : null;
   }
 
+  /** 過去の試合で記録したワープ（絶対座標。試合の初めに runner が渡す） */
+  private priorWarps: { from: [number, number]; to: [number, number] }[] = [];
+
+  public setKnownGlobalWarps(list: { from: [number, number]; to: [number, number] }[]): void {
+    this.priorWarps = list.map((w) => ({ from: [w.from[0], w.from[1]], to: [w.to[0], w.to[1]] }));
+  }
+
+  /**
+   * 行き先が分かっているワープを、今の座標系で返す（方策がワープを道として使う）。
+   * この試合で入って同じ区画に着いたもの、と、Webマップで位置合わせできている時はこの試合・過去の試合の記録（絶対座標）。
+   * 入口が同じなら、この試合で見たものを優先する。
+   */
+  public getKnownPortalLinks(): { from: [number, number]; to: [number, number] }[] {
+    const out = new Map<string, { from: [number, number]; to: [number, number] }>();
+    const off = this.globalOffset;
+    if (off) {
+      for (const w of this.priorWarps) out.set(`${w.from[0] - off[0]},${w.from[1] - off[1]}`, { from: [w.from[0] - off[0], w.from[1] - off[1]], to: [w.to[0] - off[0], w.to[1] - off[1]] });
+      for (const w of this.getGlobalWarpLinks()) out.set(`${w.from[0] - off[0]},${w.from[1] - off[1]}`, { from: [w.from[0] - off[0], w.from[1] - off[1]], to: [w.to[0] - off[0], w.to[1] - off[1]] });
+    }
+    for (const l of this.warpLinks) {
+      if (l.fromSegment !== this.segmentIndex || l.toSegment !== this.segmentIndex) continue;
+      out.set(`${l.fromPos[0]},${l.fromPos[1]}`, { from: [l.fromPos[0], l.fromPos[1]], to: [l.toPos[0], l.toPos[1]] });
+    }
+    return [...out.values()].filter((w) => w.from[0] !== w.to[0] || w.from[1] !== w.to[1]);
+  }
+
   /** 入口と着地の両方の区画が Webマップで位置合わせできたワープを、絶対座標で返す */
   public getGlobalWarpLinks(): GlobalWarpLink[] {
     const out: GlobalWarpLink[] = [];
@@ -610,6 +636,11 @@ export class WorldMap {
         };
       }
     }
+  }
+
+  /** 直近 n 回に動いた先（今の座標系。新しい順でなく古い順） */
+  public getRecentTrail(n: number): [number, number][] {
+    return this.trail.slice(-n).map((p) => [p[0], p[1]]);
   }
 
   /** 取得を始めた時の位置から今までに通った位置（同じ座標系の中だけ）。最初が取得開始時、最後が今 */

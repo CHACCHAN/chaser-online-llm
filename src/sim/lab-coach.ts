@@ -6,6 +6,8 @@ import { AGENT_DIR, EVALUATOR_PATH, LAB_COACH_DIR, LAB_COACH_LOG_PATH, POLICY_TR
 import { getSetting, numSetting } from "../settings";
 import { logger } from "../tools/logger";
 import type { EpisodeResult } from "./episode";
+import { getTileInfo } from "../memory/world-map";
+import { isPortalTile } from "./engine";
 import { loadRealMaps, makeScenario } from "./mapgen";
 import { gateEvaluatorChange, type GateResult } from "./post-match";
 import { makeRng } from "./rng";
@@ -95,6 +97,72 @@ export function tileHistogram(grids: number[][][]): Map<number, number> {
   return h;
 }
 
+/**
+ * 地図の形（タイルの割合では分からない所）: 歩いてつながる区画の数（罠・壁・ワープで区切られる）、
+ * 一番大きい区画の外にある点の割合（ワープ・桂馬でしか取れない）、罠に囲まれた点（4近傍が全部罠・壁）の割合。
+ */
+export interface MapStructure {
+  regions: number;
+  outsideMain: number;
+  enclosed: number;
+}
+
+export function mapStructure(grid: number[][]): MapStructure {
+  const h = grid.length;
+  const w = grid[0]?.length ?? 0;
+  const walk = (x: number, y: number) => {
+    const v = grid[y]![x]!;
+    const info = getTileInfo(v);
+    return info.passable && !info.hazard && !isPortalTile(v);
+  };
+  const region = new Int32Array(w * h).fill(-1);
+  const sizes: number[] = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (region[y * w + x]! >= 0 || !walk(x, y)) continue;
+    const id = sizes.length;
+    let size = 0;
+    const stack = [[x, y]];
+    region[y * w + x] = id;
+    while (stack.length) {
+      const [cx, cy] = stack.pop()!;
+      size += 1;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx! + dx!, ny = cy! + dy!;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h || region[ny * w + nx]! >= 0 || !walk(nx, ny)) continue;
+        region[ny * w + nx] = id;
+        stack.push([nx, ny]);
+      }
+    }
+    sizes.push(size);
+  }
+  const main = sizes.indexOf(Math.max(...sizes));
+  let points = 0, outside = 0, enclosed = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = grid[y]![x]!;
+    // 点 = 土（10）より高いアイテム（土・ワープは数えない）
+    if (getTileInfo(v).score <= 10 || isPortalTile(v)) continue;
+    points += 1;
+    if (region[y * w + x] !== main) outside += 1;
+    const open = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+      const nx = x + dx!, ny = y + dy!;
+      return nx >= 0 && ny >= 0 && nx < w && ny < h && walk(nx, ny);
+    });
+    if (!open) enclosed += 1;
+  }
+  // 区画は 4 マス以上だけ数える（小さな囲みは enclosed で見る）
+  return { regions: sizes.filter((s) => s >= 4).length, outsideMain: points ? outside / points : 0, enclosed: points ? enclosed / points : 0 };
+}
+
+export function averageStructure(grids: number[][][]): MapStructure {
+  const list = grids.map(mapStructure);
+  const avg = (f: (s: MapStructure) => number) => list.reduce((a, s) => a + f(s), 0) / Math.max(1, list.length);
+  return { regions: avg((s) => s.regions), outsideMain: avg((s) => s.outsideMain), enclosed: avg((s) => s.enclosed) };
+}
+
+export function fmtStructure(s: MapStructure): string {
+  return `区画 ${s.regions.toFixed(1)}・大きい区画の外の点 ${(s.outsideMain * 100).toFixed(0)}%・囲まれた点 ${(s.enclosed * 100).toFixed(0)}%`;
+}
+
 /** 2つのタイルの割合の違い（L1 距離。0 = 同じ、2 = 全く違う） */
 export function histogramDistance(a: Map<number, number>, b: Map<number, number>): number {
   let d = 0;
@@ -112,13 +180,13 @@ function roomsWithRealMaps(): number[] {
 }
 
 /** 作った地図（本物の地図は混ぜない）と本物の地図の違い。本物の地図が無ければ null */
-export function generatedVsReal(room: number, n = 24): { distance: number; realMaps: number; gen: Map<number, number>; real: Map<number, number> } | null {
+export function generatedVsReal(room: number, n = 24): { distance: number; realMaps: number; gen: Map<number, number>; real: Map<number, number>; genShape: MapStructure; realShape: MapStructure } | null {
   const real = loadRealMaps(room);
   if (real.length === 0) return null;
   const gen = Array.from({ length: n }, (_, i) => makeScenario(makeRng(5_000_000 + i), { room, realMaps: [] }).grid);
   const hg = tileHistogram(gen);
   const hr = tileHistogram(real.map((m) => m.grid));
-  return { distance: histogramDistance(hg, hr), realMaps: real.length, gen: hg, real: hr };
+  return { distance: histogramDistance(hg, hr), realMaps: real.length, gen: hg, real: hr, genShape: averageStructure(gen), realShape: averageStructure(real.map((m) => m.grid)) };
 }
 
 /** 地図の作り方が読めて、地図が作れるか（作れなければ理由） */
@@ -189,7 +257,7 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
     const g = generatedVsReal(room);
     if (!g) continue;
     any = true;
-    lines.push(`- ルーム ${room}（本物 ${g.realMaps} 枚）: 違い ${g.distance.toFixed(3)}（0 = 同じ）`, `  - 本物: ${fmtHist(g.real)}`, `  - 作った: ${fmtHist(g.gen)}`);
+    lines.push(`- ルーム ${room}（本物 ${g.realMaps} 枚）: 違い ${g.distance.toFixed(3)}（0 = 同じ）`, `  - 本物: ${fmtHist(g.real)}`, `  - 作った: ${fmtHist(g.gen)}`, `  - 形 本物: ${fmtStructure(g.realShape)} / 作った: ${fmtStructure(g.genShape)}（partitions・enclosures で合わせる）`);
   }
   if (!any) lines.push("- 本物の地図はまだ保存されていない（試合で全体マップが取れると var/maps/ に保存される）。地図の作り方は var/room-profiles.json の実測（大きさ・ターン数）と knowledge/tiles.json に合わせる");
 
