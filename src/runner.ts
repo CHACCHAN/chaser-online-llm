@@ -17,9 +17,11 @@ import { boolSetting, getSetting, numSetting } from "./settings";
 import { saveRealMap } from "./sim/mapgen";
 import * as defaultEvaluator from "./solver/evaluator";
 import type { EvaluatorModule } from "./solver/planner";
-import { buildVoters, defaultTriggerConfig, type FiredTrigger, TriggerMonitor } from "./agent/triggers";
-import { loadModelParams, playModelId } from "./solver/models";
-import { makePlannerPolicy } from "./solver/policy";
+import { type FiredTrigger, loadAllModels, TriggerMonitor, votersFrom } from "./agent/triggers";
+import { summarizeMatchPlan } from "./agent/match-plan";
+import { getStyle, loadModelParams, playModelId } from "./solver/models";
+import { makePlannerPolicy, type PolicyFn } from "./solver/policy";
+import { TRIGGER_DEFS } from "./agent/triggers";
 import type { AgentPlan, SolverDecision } from "./solver/types";
 import { type UiPredictionState, uiBus } from "./ui/event-bus";
 
@@ -46,10 +48,14 @@ export interface TurnRecord {
   /** このターン最後のメイン問い合わせ1回の入力トークン（キャッシュ込み） */
   mainInputTokens?: number | null;
   breakpointReasons: string[];
-  /** 試合中の LLM を呼ぶきっかけで、このターンに鳴ったもの（src/agent/triggers.ts。いまは記録するだけ） */
+  /** 試合中の LLM を呼ぶきっかけで、このターンに鳴ったもの（src/agent/triggers.ts） */
   triggers?: FiredTrigger[];
   /** 特性ごとのモデルの手（試合で使うモデルと違う手を出したモデルがあった時だけ） */
   modelVotes?: Partial<Record<"CMD1" | "CMD2", Record<string, string>>>;
+  /** このターンに試合中の LLM を呼んだきっかけ（フェーズごと。毎回呼ぶ設定では空の配列） */
+  calledBy?: Partial<Record<"CMD1" | "CMD2", string[]>>;
+  /** このターンの終わりに使っていたモデル（試合中に切り替えた時だけ） */
+  model?: string;
   /** 最後に取れた Webマップの `turn=` とその時のハーネスのターン（Webマップのターン表示の意味を確かめるため） */
   webMapTurn?: { ourTurn: number; webTurn: number | null } | null;
   /** このターンに踏んだタイル（番号 → 回数）。タイルの得点の実測に使う */
@@ -78,6 +84,14 @@ export interface RunSummary {
   policyModel?: string;
   /** 試合中の LLM を呼ぶきっかけの集計（鳴った回数・条件を満たした回数・比べたモデルの数・しきい値） */
   triggers?: ReturnType<TriggerMonitor["summary"]>;
+  /** 試合中の LLM を呼んだ時（trigger = きっかけが鳴った時だけ / every = 毎回）。LLM なしは null */
+  callMode?: "trigger" | "every" | null;
+  /** 準備の LLM が決めた試合の設定（最初のモデル・きっかけ・判断の目安） */
+  matchPlan?: { model: string | null; triggers: unknown; guide: Record<string, string>; notes: string[] } | null;
+  /** 試合中に LLM がモデルを切り替えた記録 */
+  modelSwitches?: { turn: number; phase: string; from: string; to: string; by: string[] }[];
+  /** 試合の終わりに使っていたモデル */
+  finalModel?: string;
   webMapDetected: boolean;
   webMapUrl: string | null;
   turns: number;
@@ -231,12 +245,47 @@ export async function runAgentMatch(
   uiBus.updateMap(worldMap.buildUiMapState(null));
 
   // 方策（経路探索 ＋ 評価関数 ＋ 学習したパラメータ）は試合開始時に1回だけ読み込む（試合中にファイルが変わっても、この試合は同じもので通す）
-  const policyModel = playModelId();
-  const matchParams = loadModelParams(policyModel);
+  // 特性ごとのモデルは全部読み込んでおき、試合中の LLM が切り替えられる。最初のモデルは準備の LLM が選ぶ（無ければ POLICY_MODEL）
+  const matchPlan = mainAgent?.matchPlan ?? null;
   const evaluator = await loadEvaluator();
-  const planner = makePlannerPolicy(matchParams, evaluator);
-  // 試合中の LLM を呼ぶきっかけ（いまは記録して統計に出すだけ）。ほかの特性のモデルにも同じ盤面で手を出させて比べる
-  const triggerMonitor = new TriggerMonitor(buildVoters(policyModel, evaluator), defaultTriggerConfig());
+  const models = loadAllModels(evaluator);
+  const settingModel = playModelId();
+  const policyModel = matchPlan?.model && models.some((m) => m.id === matchPlan.model) ? matchPlan.model : settingModel;
+  const matchParams = loadModelParams(policyModel);
+  let activeModel = policyModel;
+  let planner: PolicyFn = models.find((m) => m.id === policyModel)?.policy ?? makePlannerPolicy(matchParams, evaluator);
+  const modelSwitches: { turn: number; phase: string; from: string; to: string; by: string[] }[] = [];
+  const switchModel = (to: string, turn: number, phase: string, by: string[]) => {
+    const m = models.find((x) => x.id === to);
+    if (!m || to === activeModel) return;
+    modelSwitches.push({ turn, phase, from: activeModel, to, by });
+    activeModel = to;
+    planner = m.policy;
+    triggerMonitor.setVoters(votersFrom(models, to));
+    uiBus.patchState({ matchModel: { id: to, name: m.name, callMode: mainAgent ? callMode : null, switches: modelSwitches.length } });
+  };
+  // 試合中の LLM を呼ぶきっかけ（準備の LLM が選んだ設定）。ほかの特性のモデルにも同じ盤面で手を出させて比べる
+  const triggerMonitor = new TriggerMonitor(votersFrom(models, policyModel), matchPlan?.triggers);
+  /** trigger = きっかけが鳴った時だけ LLM を呼ぶ / every = 毎回（前の動き） */
+  const callMode = getSetting("AGENT_CALL_MODE") === "every" ? "every" : "trigger";
+  const pendingLabel = (ids: string[]) => ids.map((id) => TRIGGER_DEFS.find((d) => d.id === id)?.label ?? id).join("・");
+  /** 鳴ったが、LLM が考え中でまだ渡せていないきっかけ（次に呼ぶ時にまとめて渡す。同じきっかけは新しい方） */
+  let pendingTriggers: FiredTrigger[] = [];
+  /** 持ち越したきっかけが鳴ったターン（古くなったものは渡さない。知らないタイル・終盤は残す） */
+  const pendingAt = new Map<string, number>();
+  const PENDING_KEEP_TURNS = 5;
+  const dropStalePending = (turn: number) => {
+    pendingTriggers = pendingTriggers.filter((f) => f.id === "unknownTile" || f.id === "endgame" || turn - (pendingAt.get(f.id) ?? turn) <= PENDING_KEEP_TURNS);
+  };
+  uiBus.patchState({ matchModel: { id: policyModel, name: getStyle(policyModel).name, callMode: mainAgent ? callMode : null, switches: 0 } });
+  if (mainAgent && matchPlan) {
+    uiBus.pushClaudeEvent({
+      context: "in_game",
+      kind: "system",
+      title: "試合の設定（準備）",
+      content: `${summarizeMatchPlan(matchPlan)}${policyModel !== settingModel ? `（設定は ${getStyle(settingModel).name}）` : ""} / LLM を呼ぶ時: ${callMode === "trigger" ? "きっかけが鳴った時だけ" : "毎回"}${matchPlan.notes.length ? ` / 直したこと: ${matchPlan.notes.join("; ")}` : ""}`,
+    });
+  }
   /** 前のターンの終わりに鳴ったきっかけ（次のフェーズの画面に出す） */
   let turnEndFired: FiredTrigger[] = [];
   /** 方策が例外を投げても試合は止めない（安全な手にして続ける。UI には最初の1回と以後100回ごとに知らせる） */
@@ -309,6 +358,8 @@ export async function runAgentMatch(
       const breakpointReasons: string[] = [];
       const warpWaits: { phase: string; ms: number; aligned: boolean }[] = [];
       const firedThisTurn: FiredTrigger[] = [];
+      /** このターンに LLM を呼んだきっかけ（フェーズごと） */
+      const calledBy: Partial<Record<"CMD1" | "CMD2", string[]>> = {};
       const modelVotes: Partial<Record<"CMD1" | "CMD2", Record<string, string>>> = {};
 
       /** ソルバー候補 → メインエージェント判断 → 送信 → 観測反映 を1フェーズ分行う */
@@ -320,12 +371,20 @@ export async function runAgentMatch(
         for (const r of events) if (!breakpointReasons.includes(r)) breakpointReasons.push(r);
         // きっかけ: LLM の目標なしの方策の手と、ほかのモデルの手・観測から（例外は試合に響かせない）
         let uiTriggers: { id: string; label: string; detail: string }[] = [];
+        let lastVotes: Record<string, string> | null = null;
         try {
           const play = mainAgent?.currentPlan ? planner(worldMap, phase, turn, { totalTurns, directive: null }) : solverDecision;
           const tr = triggerMonitor.phase({ wm: worldMap, phase, turn, totalTurns, play });
           firedThisTurn.push(...tr.fired);
-          if (tr.votes) modelVotes[phase] = { [policyModel]: play.command, ...tr.votes };
-          uiTriggers = [...(phase === "CMD1" ? turnEndFired : []), ...tr.fired].map((f) => ({ id: f.id, label: f.label ?? f.id, detail: f.detail }));
+          if (tr.votes) modelVotes[phase] = { [activeModel]: play.command, ...tr.votes };
+          const now = [...(phase === "CMD1" ? turnEndFired : []), ...tr.fired];
+          uiTriggers = now.map((f) => ({ id: f.id, label: f.label ?? f.id, detail: f.detail }));
+          for (const f of now) {
+            pendingTriggers = [...pendingTriggers.filter((p) => p.id !== f.id), f];
+            pendingAt.set(f.id, turn);
+          }
+          dropStalePending(turn);
+          lastVotes = tr.votes ? { [activeModel]: play.command, ...tr.votes } : null;
         } catch (err) {
           logger.warn({ turn, phase, err: err instanceof Error ? err.message : String(err) }, "きっかけを計算できなかった");
         }
@@ -338,14 +397,26 @@ export async function runAgentMatch(
           mainAgent.syncFrame(worldMap);
           decision = decideSolver(worldMap, phase, turn, mainAgent.currentPlan);
           const askedAt = `T${turn} ${phase}`;
-          const started = mainAgent.startBackground(
-            { turn, phase, worldMap, events, solve: (plan) => decideSolver(worldMap, phase, turn, plan) },
+          // trigger: 鳴ったきっかけがある時だけ呼ぶ（考え中なら次に持ち越す）。every: 空いていれば毎回
+          const callNow = !mainAgent.thinking && (callMode === "every" || pendingTriggers.length > 0);
+          const by = pendingTriggers.map((f) => f.id);
+          const started = callNow && mainAgent.startBackground(
+            {
+              turn,
+              phase,
+              worldMap,
+              events,
+              solve: (plan) => decideSolver(worldMap, phase, turn, plan),
+              triggers: pendingTriggers,
+              models: { active: activeModel, list: models.map((m) => ({ id: m.id, name: m.name, trait: getStyle(m.id).trait })), votes: lastVotes },
+            },
             (res, error) => {
               if (!res) {
                 asyncMainActions.push(`${askedAt}:error(${(error ?? "").slice(0, 60)})`);
                 return;
               }
-              asyncMainActions.push(`${askedAt}:${res.source === "main" ? res.action : `solver(${res.note})`}${res.planStatus ? `(${res.planStatus})` : ""}`);
+              if (res.model) switchModel(res.model, turn, phase, by);
+              asyncMainActions.push(`${askedAt}${by.length ? `[${by.join(",")}]` : ""}:${res.source === "main" ? res.action : `solver(${res.note})`}${res.planStatus ? `(${res.planStatus})` : ""}${res.model ? `(model→${res.model})` : ""}`);
               if (res.durationMs !== null) asyncMainLatency.push(res.durationMs);
               reloadTilesKnowledge();
               uiBus.pushClaudeEvent({
@@ -356,9 +427,17 @@ export async function runAgentMatch(
               });
             },
           );
+          if (started) {
+            calledBy[phase] = by;
+            pendingTriggers = [];
+          }
           syncUiPredictionAndMap(worldMap, turn, phase, decision, "solver", events, {
             mainAction: started ? "thinking" : mainAgent.thinking ? "thinking" : null,
-            mainNote: started ? `${askedAt} の盤面で考え始めた` : "考え中（前の問い合わせ）",
+            mainNote: started
+              ? `${askedAt} の盤面で考え始めた${by.length ? `（きっかけ: ${pendingLabel(by)}）` : ""}`
+              : mainAgent.thinking
+                ? "考え中（前の問い合わせ）"
+                : "待機（きっかけが鳴ったら呼ぶ）",
             mainLatencyMs: null,
             plan: mainAgent.currentPlan,
             triggers: uiTriggers,
@@ -510,6 +589,8 @@ export async function runAgentMatch(
         breakpointReasons,
         ...(firedThisTurn.length > 0 ? { triggers: firedThisTurn } : {}),
         ...(Object.keys(modelVotes).length > 0 ? { modelVotes } : {}),
+        ...(Object.keys(calledBy).length > 0 ? { calledBy } : {}),
+        ...(activeModel !== policyModel || modelSwitches.length > 0 ? { model: activeModel } : {}),
         webMapTurn: webMap.lastTurn,
         landed,
         ...(newScore ? { webScore: newScore } : {}),
@@ -609,6 +690,10 @@ export async function runAgentMatch(
     model: agentSettings.model,
     policyModel,
     triggers: triggerMonitor.summary(turnLogs.length),
+    callMode: mainAgent ? callMode : null,
+    matchPlan: matchPlan ? { model: matchPlan.model, triggers: matchPlan.triggers, guide: matchPlan.guide, notes: matchPlan.notes } : null,
+    modelSwitches,
+    finalModel: activeModel,
     webMapDetected: webMap.available,
     webMapUrl: webMap.sourceUrl,
     turns: turnLogs.length,

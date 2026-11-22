@@ -84,9 +84,9 @@
       <td class="n">${r.official !== null ? fmt(r.official) : `<span class="dim" title="推定">${fmt(r.estimated)}</span>`}</td><td class="n">${fmt(r.perTurn)}</td>
       <td class="n ${r.putDamage < 0 ? "neg" : ""}">${r.putDamage ? fmt(r.putDamage) : "-"}</td>
       <td class="n ${r.gap !== null && Math.abs(r.gap) > 1000 ? "neg" : ""}" title="公式 − 推定。大きいと推定が見落としたもの（当てられた得点など）がある">${r.gap === null ? "-" : fmt(r.gap)}</td>
-      <td class="wrap dim">${esc(r.endReason || "-")}</td><td>${esc(r.policyModel || "-")}</td>
+      <td class="wrap dim">${esc(r.endReason || "-")}</td><td title="${r.modelSwitches?.length ? esc(r.modelSwitches.map((x) => `T${x.turn} ${x.from} → ${x.to}（${x.by.map(trigName).join("・") || "きっかけなし"}）`).join("\n")) : "試合中に切り替えなかった"}">${esc(r.policyModel || "-")}${r.modelSwitches?.length ? ` <span class="dim">→${esc(r.modelSwitches[r.modelSwitches.length - 1].to)} (${r.modelSwitches.length})</span>` : ""}</td>
       <td>${r.llm.calls ? `${esc(r.llm.model || "-")}${r.llm.effort ? ` <span class="dim">${esc(r.llm.effort)}</span>` : ""}` : `<span class="dim">なし</span>`}</td>
-      <td class="n">${r.llm.calls ? fmt(r.llm.calls) : "-"}</td><td class="n">${usd(r.llm.costUsd)}</td>
+      <td class="n" title="${r.callMode === "trigger" ? "きっかけが鳴った時だけ呼んだ" : r.callMode === "every" ? "毎回呼んだ" : ""}">${r.llm.calls ? fmt(r.llm.calls) : "-"}</td><td class="n">${usd(r.llm.costUsd)}</td>
       <td class="n">${r.llm.calls ? pct(r.llm.directedPhases, r.llm.phases) : "-"}</td>
       <td class="n" title="${r.triggers ? esc(Object.entries(r.triggers.counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${trigName(k)} ${v}`).join("\n") || "鳴らなかった") : "記録を始める前の試合"}">${r.triggers ? fmt(Object.values(r.triggers.counts).reduce((a, b) => a + b, 0)) : "-"}</td></tr>`).join("");
 
@@ -94,7 +94,7 @@
       <section><div class="st-h"><h2>ルーム</h2><span class="dim">行を押すと、そのルームの試合だけを下に出す。1ターンの得点は5ターン以上の試合から（公式があれば公式、なければ推定）</span></div>
         <div class="stbl-wrap"><table class="stbl"><thead><tr><th>ルーム</th><th class="n">試合</th><th class="n">最高</th><th class="n">1ターン 最高</th><th class="n">1ターン 平均</th><th class="n">全ターン</th><th>大きさ</th><th>Webマップ</th><th class="n">当てられた</th><th class="n">LLM 費用</th><th>終わり方</th></tr></thead><tbody>${roomRows || `<tr><td colspan="11" class="dim">まだ試合がありません</td></tr>`}</tbody></table></div></section>
       <section><div class="st-h"><h2>試合${T.room !== null ? `（ルーム ${T.room}）` : ""}</h2><span class="dim">得点は公式（薄い字は推定）。「ずれ」は公式 − 推定。「LLM が動かした」は、LLM が手を決めた（前の構成）か、LLM の目標で方策が動いた（今の構成）手の割合</span>${T.room !== null ? `<button class="btn quiet" type="button" id="stAllRooms">全部のルーム</button>` : ""}</div>
-        <div class="stbl-wrap"><table class="stbl"><thead><tr><th>開始</th><th>ルーム</th><th class="n">ターン</th><th class="n">得点</th><th class="n">1ターン</th><th class="n">当てられた</th><th class="n">ずれ</th><th>終わり方</th><th>方策</th><th>LLM</th><th class="n">呼んだ回数</th><th class="n">費用</th><th class="n">LLM が動かした</th><th class="n" title="試合中の LLM を呼ぶきっかけが鳴った回数（いまは記録するだけ）。マウスを載せると内訳">きっかけ</th></tr></thead><tbody>${runRows || `<tr><td colspan="14" class="dim">試合がありません</td></tr>`}</tbody></table></div></section>`;
+        <div class="stbl-wrap"><table class="stbl"><thead><tr><th>開始</th><th>ルーム</th><th class="n">ターン</th><th class="n">得点</th><th class="n">1ターン</th><th class="n">当てられた</th><th class="n">ずれ</th><th>終わり方</th><th>方策</th><th>LLM</th><th class="n">呼んだ回数</th><th class="n">費用</th><th class="n">LLM が動かした</th><th class="n" title="試合中の LLM を呼ぶきっかけが鳴った回数。マウスを載せると内訳">きっかけ</th></tr></thead><tbody>${runRows || `<tr><td colspan="14" class="dim">試合がありません</td></tr>`}</tbody></table></div></section>`;
     $$("#stRooms tr[data-room]").forEach((tr) => tr.addEventListener("click", () => { const r = Number(tr.dataset.room); T.room = T.room === r ? null : r; renderRooms(); }));
     $("#stAllRooms")?.addEventListener("click", () => { T.room = null; renderRooms(); });
     $$("#stRooms tr[data-run]").forEach((tr) => tr.addEventListener("click", () => {

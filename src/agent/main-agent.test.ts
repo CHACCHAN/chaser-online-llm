@@ -394,3 +394,71 @@ test("考えている間にワープしたら、返答の作戦目標（古い�
   await agent.end();
   delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
 });
+
+test("準備の返答から試合の設定（最初のモデル・きっかけ・目安）を読み、範囲の外・知らないものは直す", async () => {
+  const { parsePrepReply } = await import("./main-agent");
+  const { parseMatchPlan, summarizeMatchPlan, matchPlanChoicesText } = await import("./match-plan");
+  const r = parsePrepReply(
+    '読んだ\n{"memo": "東へ", "model": "guardian", "triggers": {"enabled": {"heartbeat": false}, "thresholds": {"enemyNear": 99, "noTarget": 8}}, "guide": {"enemyNear": "離れる", "nope": "x"}}',
+  );
+  expect(r.memo).toBe("東へ");
+  const plan = parseMatchPlan(r.json);
+  expect(plan.model).toBe("guardian");
+  expect(plan.triggers.enabled.heartbeat).toBe(false);
+  expect(plan.triggers.thresholds.enemyNear).toBe(12); // 範囲 1〜12 に収める
+  expect(plan.triggers.thresholds.noTarget).toBe(8);
+  expect(plan.guide).toEqual({ enemyNear: "離れる" });
+  expect(plan.notes.join()).toContain("敵が近い");
+  expect(summarizeMatchPlan(plan)).toContain("使わない: 定期");
+  expect(parseMatchPlan({ model: "nope" }).model).toBeNull();
+  // JSON が無い返答は本文をメモにし、設定は既定
+  expect(parsePrepReply("ただのメモ").json).toBeNull();
+  expect(parseMatchPlan(null).triggers.enabled.enemyNear).toBe(true);
+  // 準備に見せる選択肢: モデルの id ときっかけの範囲
+  const text = matchPlanChoicesText();
+  expect(text).toContain("`guardian`");
+  expect(text).toContain("`enemyNear`");
+  expect(text).toContain("範囲 1〜12");
+});
+
+test("きっかけで呼んだ時: きっかけ・準備の目安・モデルの手を見せ、返答でモデルを選べる（知らない id は使わない）", async () => {
+  const { parseMainReply } = await import("./main-agent");
+  const ids = ["standard", "hunter"];
+  expect(parseMainReply('{"turn":3,"phase":"CMD1","action":"continue","model":"hunter"}', 3, "CMD1", [], ids)?.model).toBe("hunter");
+  expect(parseMainReply('{"turn":3,"phase":"CMD1","action":"continue","model":"zzz"}', 3, "CMD1", [], ids)?.model).toBeUndefined();
+  expect(parseMainReply('{"turn":3,"phase":"CMD1","action":"continue","model":"hunter"}', 3, "CMD1", [])?.model).toBeUndefined();
+
+  Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
+  sent.length = 0;
+  const { parseMatchPlan } = await import("./match-plan");
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 }, { memo: "m", usage: emptyUsage(), plan: parseMatchPlan({ guide: { enemyNear: "ガーディアンにして離れる" } }) });
+  expect(agent.matchPlan.guide.enemyNear).toBe("ガーディアンにして離れる");
+  const wm = new WorldMap();
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 2, 2, 2, 2], 1);
+  const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
+  proto.ask = async function (this: { options: ClaudeSessionOptions }, text: string): Promise<AskResult> {
+    sent.push({ label: this.options.label ?? "", text, options: this.options });
+    return { status: "ok", text: '{"turn": 2, "phase": "CMD1", "action": "continue", "model": "hunter"}', durationMs: 1 };
+  };
+  const res = await new Promise<MainDecision | null>((resolve) => {
+    agent.startBackground(
+      {
+        ...ctxOf(wm, 2, "CMD1"),
+        triggers: [{ id: "enemyNear", label: "敵が近い", phase: "CMD1", value: 2, detail: "P2 が 2 マス" }],
+        models: { active: "standard", list: [{ id: "standard", name: "バランス", trait: "標準" }, { id: "hunter", name: "ハンター", trait: "攻撃型" }], votes: { standard: "wr", hunter: "pr" } },
+      },
+      (r) => resolve(r),
+    );
+  });
+  const msg = sent.find((x) => x.label === "main")!.text;
+  expect(msg).toContain("## 呼んだきっかけ");
+  expect(msg).toContain("敵が近い（CMD1）: P2 が 2 マス ／ 準備で決めた目安: ガーディアンにして離れる");
+  expect(msg).toContain("今のモデル: standard（バランス）");
+  expect(msg).toContain("バランス wr・ハンター pr");
+  expect(res?.model).toBe("hunter");
+  expect(res?.note).toContain("モデルを ハンター へ");
+  proto.ask = origAsk;
+  await agent.end();
+  delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
+});

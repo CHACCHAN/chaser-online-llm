@@ -1565,7 +1565,9 @@ function renderDecide() {
     why = `<div class="dline"><span class="k">代行理由</span><b>${esc(reasonJa(p.mainNote) || "記録なし")}</b>${p.mainNote && reasonJa(p.mainNote) !== p.mainNote ? ` <span class="faint">(${esc(p.mainNote)})</span>` : ""}</div>`;
   }
   if (bp) why += `<div class="dline dim">${esc(bp)}</div>`;
-  if (p.triggers?.length) why += `<div class="dline" title="試合中の LLM を呼ぶきっかけ（いまは記録するだけで、LLM の呼び方は変えていない）"><span class="k">きっかけ</span>${p.triggers.map((f) => `<span class="ev trig" title="${esc(f.detail)}">${esc(f.label)}</span>`).join(" ")}</div>`;
+  const mm = st.matchModel;
+  if (mm) why += `<div class="dline" title="方策のモデル（特性）。試合中の LLM がきっかけで呼ばれた時に切り替えられる"><span class="k">モデル</span><b>${esc(mm.name)}</b>${mm.switches ? ` <span class="faint">切り替え ${mm.switches} 回</span>` : ""}${mm.callMode ? ` <span class="faint">／ LLM を呼ぶ時: ${mm.callMode === "trigger" ? "きっかけが鳴った時" : "毎回"}</span>` : ""}</div>`;
+  if (p.triggers?.length) why += `<div class="dline" title="試合中の LLM を呼ぶきっかけ（鳴ると、LLM が空いていれば呼ぶ。考え中なら次に持ち越す）"><span class="k">きっかけ</span>${p.triggers.map((f) => `<span class="ev trig" title="${esc(f.detail)}">${esc(f.label)}</span>`).join(" ")}</div>`;
   const plan = curPlan(), hasMain = p.mainAction !== undefined || p.mainNote !== undefined || plan;
   const planLine = plan
     ? `<div class="planline"><b>作戦目標 (${esc(plan.target[0])}, ${esc(plan.target[1])})</b>${plan.note ? ` ${esc(plan.note)}` : ""}</div>`
@@ -1594,6 +1596,7 @@ function renderPrepInfo(prep, running) {
     el.classList.add(prep.versionChanged ? "warn" : "ok");
     el.textContent = `Room ${prep.room} 準備済み（${Math.round((prep.durationMs || 0) / 1000)}秒・${fmtTok(prep.tokens)}）${ver}`;
   } else { el.textContent = ""; }
+  if (prep.state === "ready" && prep.plan) el.textContent += ` ／ ${prep.plan}`;
   el.title = [el.textContent, prep.officialVersion ? `公式 ver ${prep.officialVersion}（記録 ${prep.knownVersion ?? "-"}）` : ""].filter(Boolean).join("\n");
 }
 

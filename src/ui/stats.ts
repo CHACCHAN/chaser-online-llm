@@ -32,6 +32,9 @@ export interface RunStat {
   holeRevisits: number;
   /** 試合中の LLM を呼ぶきっかけ（鳴った回数。記録を始める前の試合は null） */
   triggers: { counts: Record<string, number>; voters: number } | null;
+  /** 試合中の LLM を呼んだ時（trigger / every）と、モデルの切り替え（聞いたターン・前→後） */
+  callMode: "trigger" | "every" | null;
+  modelSwitches: { turn: number; from: string; to: string; by: string[] }[];
   llm: {
     enabled: boolean;
     model: string | null;
@@ -153,6 +156,8 @@ export function listRunStats(limit = 500): RunStat[] {
         hazardHits: num(s.hazardHits) ?? 0,
         triggers: s.triggers && typeof s.triggers === "object" ? { counts: s.triggers.counts ?? {}, voters: num(s.triggers.voters) ?? 0 } : null,
         holeRevisits: num(s.holeRevisits) ?? 0,
+        callMode: s.callMode === "trigger" || s.callMode === "every" ? s.callMode : null,
+        modelSwitches: Array.isArray(s.modelSwitches) ? s.modelSwitches.filter((x: { to?: unknown }) => x && typeof x.to === "string") : [],
         llm: {
           enabled: s.agent?.enabled !== false,
           model: s.agent?.model ?? s.model ?? null,

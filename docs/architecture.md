@@ -37,7 +37,7 @@ flowchart LR
   Loop --> Runner
   Runner -- "毎フェーズすぐ手を決める" --> Policy
   Policy --> World
-  Runner -. "startBackground（考え中でなければ）" .-> Main
+  Runner -. "startBackground（きっかけが鳴り、考え中でなければ）" .-> Main
   Main -- "JSON: continue / plan / memo" --> MainSess
   Main -. "plan の目標（届いた時から使う）" .-> Policy
   MainSess -- "stream-json" --> GW
@@ -75,13 +75,13 @@ flowchart LR
 ## 1フェーズの処理（runner.ts `playPhase`）
 
 1. 方策がすぐ手を決める（`decideSolver`。今の作戦 `plan` を渡す）。ただし 1 ターン目の CMD1 は `gr`（初期観測）に固定する。方策が例外を投げたら安全な手。
-2. `evaluateBreakpoint` が「新種タイル」「ワープ」「移動不可」「敵が近い」などの理由を集める（止めるためではなく、LLM への情報として渡す）。続けて、試合中の LLM を呼ぶ**きっかけ**を計算する（下の節。いまは記録するだけ）。
-3. LLM が考え中でなければ、今の盤面（全体マップ・経過・メモ・方策の今の手）で `startBackground` を呼んで裏の問い合わせを始める。前の問い合わせの返答が届いていれば `plan`・メモを反映する（考えている間にワープなどで座標系が変わっていれば、その目標は捨てる）。`AGENT_TURN_BUDGET_SEC` を超えた問い合わせは止める。
+2. `evaluateBreakpoint` が「新種タイル」「ワープ」「移動不可」「敵が近い」などの理由を集める（止めるためではなく、LLM への情報として渡す）。続けて、試合中の LLM を呼ぶ**きっかけ**を計算する（下の節）。
+3. きっかけが鳴っていて（`AGENT_CALL_MODE=every` なら毎回）LLM が考え中でなければ、今の盤面（全体マップ・経過・メモ・方策の今の手・呼んだきっかけ・モデル）で `startBackground` を呼んで裏の問い合わせを始める。考え中に鳴ったきっかけは次に持ち越す（5 ターンより古いものは捨てる。知らないタイル・終盤は残す）。返答でモデルが選ばれていれば、届いた時から方策をそのモデルに切り替える。前の問い合わせの返答が届いていれば `plan`・メモを反映する（考えている間にワープなどで座標系が変わっていれば、その目標は捨てる）。`AGENT_TURN_BUDGET_SEC` を超えた問い合わせは止める。
 4. サーバへ送信し、返ってきた 3×3 観測を `WorldMap.applyObservation` で反映する。ワープしたら Web マップを再取得する。
 
 ### 試合中の LLM を呼ぶきっかけ（`src/agent/triggers.ts`）
 
-試合中の LLM を毎フェーズ呼ぶのをやめ、「学習した方策が知らないこと」が起きた時だけ呼ぶための準備。**いまは計算して記録・表示するだけで、LLM の呼び方は変えていない。** 例外が出ても試合には響かせない。
+試合中の LLM は毎フェーズは呼ばず、「学習した方策が知らないこと」が起きた時（きっかけが鳴った時）だけ呼ぶ（`AGENT_CALL_MODE=trigger`。既定）。LLM は作戦目標と**使うモデル**（特性ごとのモデル）を選ぶ。どのきっかけを使うか・しきい値・きっかけごとの判断の目安は、準備の LLM が決める（下の「試合の設定」）。計算で例外が出ても試合には響かせない。
 
 | きっかけ | もと | 鳴る条件（既定のしきい値） |
 | :--- | :--- | :--- |
@@ -97,9 +97,14 @@ flowchart LR
 | 終盤 `endgame` | ターン | 残りが全体の 10% を切った（1回） |
 | 定期 `heartbeat` | ターン | 50 ターンごと |
 
-- 同じきっかけは 5 ターンの間は続けて鳴らない（知らないタイル・当てられた・終盤・定期は別）。しきい値と範囲は `TRIGGER_DEFS`（次の段階で、準備の LLM がルームの記録を見て範囲の中で選ぶ）。
-- 記録: `turns.jsonl` の `triggers`（鳴ったきっかけ: id・名前・フェーズ・値・内容）と `modelVotes`（モデルの手が割れたフェーズだけ、モデルごとの手）。`summary.json` の `triggers`（鳴った回数 `counts`・条件を満たした回数 `raw`・比べたモデルの数・しきい値）。Webマップの得点 `webScore` には、アイテム得点に加えて公式の合計・プット得点・プットダメージも残す。
-- 画面: 試合の「いまの判断」に鳴ったきっかけ、「統計」の試合ごとの回数（内訳はマウスで）と全体の 100 ターンあたり、ターン履歴のイベント。
+- 同じきっかけは 5 ターンの間は続けて鳴らない（知らないタイル・当てられた・終盤・定期は別）。しきい値の既定と範囲は `TRIGGER_DEFS`。
+- 比べるモデル（モデルの不一致）は、今使っているモデル以外でパラメータが違うもの。モデルを切り替えると入れ替わる。
+- 記録: `turns.jsonl` の `triggers`（鳴ったきっかけ: id・名前・フェーズ・値・内容）・`modelVotes`（モデルの手が割れたフェーズだけ、モデルごとの手）・`calledBy`（そのターンに LLM を呼んだきっかけ）・`model`（切り替えた後のモデル）。`summary.json` の `triggers`（鳴った回数 `counts`・条件を満たした回数 `raw`・比べたモデルの数・しきい値）・`callMode`・`matchPlan`（準備で決めた設定）・`modelSwitches`（聞いたターン・前→後・きっかけ）・`finalModel`。`policyModel` は最初のモデル（試合後の学習はこのモデル）。Webマップの得点 `webScore` には、アイテム得点に加えて公式の合計・プット得点・プットダメージも残す。
+- 画面: 試合の「いまの判断」に今のモデル・LLM を呼ぶ時・鳴ったきっかけ、準備の欄に準備で決めた設定、「統計」の試合ごとの回数（内訳はマウスで）・モデルの切り替えと全体の 100 ターンあたり、ターン履歴のイベント。
+
+#### 試合の設定（準備の LLM が決める。`src/agent/match-plan.ts`）
+
+準備の返答の最後の JSON に、メモと一緒に `model`（最初のモデル）・`triggers`（`enabled`・`thresholds`・`cooldownTurns`）・`guide`（きっかけごとの判断の目安、160 字まで）を書かせる。準備には選べるモデル（学習済みか・シミュレータでの特性）ときっかけ（既定・範囲）の一覧を見せる。読む時に、範囲の外は範囲に収め、知らないモデル・きっかけは捨てる（直したことは `notes` に残し、試合の初めに画面へ出す）。書かれていなければ既定（モデルは `POLICY_MODEL`、きっかけは全部・既定のしきい値）。試合中の LLM には、呼んだきっかけの横に目安を見せる。
 - シミュレータで鳴る回数を数える: `bun src/cli.ts triggers --n 12 [--room N] [--model id]`（Webマップの得点が無いので、当てられた・得点のずれは鳴らない）。
 
 フェーズが想定外の状態で終わった場合は、安全手（`pickSafeFallback`）で補完してターンを閉じる。想定外の例外（ゲームオーバー以外）は試合を終了させ、ダッシュボードにエラーを出す。
@@ -120,6 +125,8 @@ flowchart LR
 | `src/agent/claude-env.ts` | 隔離 env と起動引数（ゲートウェイ・モデル・effort） |
 | `src/agent/claude-session.ts` | `--input-format stream-json` で起動する Claude Code プロセス（使い捨て・常駐の両用。`ask` は同時に 1 件） |
 | `src/agent/main-agent.ts` | 試合中の LLM（`begin` / `startBackground` / `postMatch`）、応答 JSON の解析、作戦の追跡 |
+| `src/agent/triggers.ts` | 試合中の LLM を呼ぶきっかけ（`TRIGGER_DEFS`・`TriggerMonitor`）、特性ごとのモデルの読み込みと比べるモデル |
+| `src/agent/match-plan.ts` | 準備の LLM が決める試合の設定（最初のモデル・きっかけ・目安）の読み取りと、準備に見せる選択肢 |
 | `src/agent/models.ts` | ゲートウェイの `/models` 一覧と effort の定義 |
 | `src/agent/turn-events.ts` | ブレークポイント理由の評価（停止はしない） |
 | `src/solver/planner.ts`・`policy.ts`・`types.ts` | 経路探索の方策（試合中の手）。`policy.ts` はパラメータ（`var/policy/params.json`）の読み書きと方策の組み立て。`types.ts` は作戦（`AgentPlan`）と手の判断（`SolverDecision`）の型 |

@@ -6,6 +6,7 @@ import { waitAwareClientConfig } from "./client/wait-status";
 import { boolSetting, numSetting } from "./settings";
 import { getRoomProfile, knownTotalTurns, loadRoomProfiles } from "./memory/knowledge-store";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
+import { summarizeMatchPlan } from "./agent/match-plan";
 import { totalTokens } from "./agent/usage";
 import type { PrepUiState } from "./ui/event-bus";
 import { runAgentMatch } from "./runner";
@@ -69,7 +70,7 @@ async function main() {
     uiBus.patchState({ prep: { ...uiBus.getState().prep, required: prepRequired(), ...patch } });
   const resetPrep = () => {
     prepared = null;
-    publishPrep({ state: "none", room: null, model: null, effort: null, at: null, durationMs: null, tokens: null, error: null });
+    publishPrep({ state: "none", room: null, model: null, effort: null, at: null, durationMs: null, tokens: null, error: null, plan: null });
   };
   const idleStatus = () =>
     prepRequired() && !isPrepared()
@@ -98,6 +99,7 @@ async function main() {
           officialVersion: r.official.version,
           knownVersion: r.official.knownVersion,
           versionChanged: r.official.changed,
+          plan: ok ? summarizeMatchPlan(r.plan) : null,
         });
         if (ok) uiBus.patchState({ agentMemo: r.memo });
         if (r.official.changed) {
@@ -352,7 +354,7 @@ async function main() {
               highScore: profile.highScore ?? 0,
               totalTurns: knownTotalTurns(config.room),
             },
-            prep ? { memo: prep.memo, usage: prep.usage } : null,
+            prep ? { memo: prep.memo, usage: prep.usage, plan: prep.plan } : null,
           );
           logger.info({ ready: ready.status }, "Main agent warm-up finished");
         }

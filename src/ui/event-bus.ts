@@ -58,7 +58,7 @@ export interface UiPredictionState {
   mainLatencyMs?: number | null;
   /** 現在の作戦目標（ローカル座標） */
   plan?: { target: [number, number]; note?: string } | null;
-  /** このフェーズと前のターンの終わりに鳴った、試合中の LLM を呼ぶきっかけ（src/agent/triggers.ts。いまは記録するだけ） */
+  /** このフェーズと前のターンの終わりに鳴った、試合中の LLM を呼ぶきっかけ（src/agent/triggers.ts） */
   triggers?: { id: string; label: string; detail: string }[];
 }
 
@@ -108,6 +108,8 @@ export interface UiDashboardState {
   agentUsage: AgentUsageReport | null;
   /** メインが次のフェーズへ引き継ぐメモ */
   agentMemo: string;
+  /** 今の試合で使っている方策のモデル（試合中の LLM が切り替える）と、LLM を呼ぶ時 */
+  matchModel?: { id: string; name: string; callMode: "trigger" | "every" | null; switches: number } | null;
   /** 準備フェーズの状態（「開始」はこれが ready の時だけ。準備不要の設定なら required=false） */
   prep: PrepUiState;
   recentTurns: TurnRecord[];
@@ -131,6 +133,8 @@ export interface PrepUiState {
   officialVersion: string | null;
   knownVersion: string | null;
   versionChanged: boolean;
+  /** 準備の LLM が決めた試合の設定の要約（最初のモデル・使わないきっかけ・しきい値） */
+  plan?: string | null;
 }
 
 export interface UiControlCommand {
@@ -377,6 +381,7 @@ class UiEventBus {
       phase: "READY_CMD1",
       recentTurns: [],
       prediction: null,
+      matchModel: null,
       updatedAt: new Date().toISOString(),
     };
     this.emit("state", this.state);

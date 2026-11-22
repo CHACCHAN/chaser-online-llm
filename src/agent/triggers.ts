@@ -6,7 +6,7 @@ import { makePlannerPolicy, type PolicyFn } from "../solver/policy";
 
 /**
  * 試合中の LLM を呼ぶ「きっかけ」。方策（学習したモデル）の出力と、ハーネスの観測から毎フェーズ計算する（数ミリ秒）。
- * いまは記録して統計に出すだけで、LLM の呼び方は変えない（docs/architecture.md の「試合中の LLM を呼ぶきっかけ」）。
+ * 鳴った時だけ試合中の LLM を呼ぶ（AGENT_CALL_MODE=trigger）。使うきっかけ・しきい値は準備の LLM が選ぶ（match-plan.ts。docs/architecture.md の「試合中の LLM を呼ぶきっかけ」）。
  * しきい値は TRIGGER_DEFS の範囲の中で変えられる（次の段階で準備の LLM が選ぶ）。
  */
 
@@ -119,7 +119,7 @@ const NO_TARGET_PREFIX = "行ける目標が無い";
 
 export class TriggerMonitor {
   readonly config: TriggerConfig;
-  private readonly voters: ModelVoter[];
+  private voters: ModelVoter[];
   private readonly last = new Map<TriggerId, number>();
   private readonly fired: Record<string, number> = {};
   private readonly raw: Record<string, number> = {};
@@ -134,6 +134,11 @@ export class TriggerMonitor {
   constructor(voters: ModelVoter[], config: TriggerConfig = defaultTriggerConfig()) {
     this.voters = voters;
     this.config = config;
+  }
+
+  /** 試合中に使うモデルを切り替えた時に、比べるモデルを入れ替える（数えた回数はそのまま） */
+  setVoters(voters: ModelVoter[]): void {
+    this.voters = voters;
   }
 
   /** 比べるモデルの数（パラメータが試合で使うモデルと違うもの） */
@@ -174,7 +179,7 @@ export class TriggerMonitor {
       }
       if (differ.length > 0) votes = all;
       const need = Math.min(th.modelSplit, this.voters.length);
-      if (differ.length >= need) this.emit(out, turn, { id: "modelSplit", phase, value: differ.length, detail: `試合のモデル ${play.command}／${differ.join("・")}` });
+      if (differ.length >= need) this.emit(out, turn, { id: "modelSplit", phase, value: differ.length, detail: `今のモデル ${play.command}／${differ.join("・")}` });
     }
 
     // 見込みの急落（推定得点 ＋ 予定の経路の見込み）
@@ -272,12 +277,28 @@ export function sameParams(a: Record<string, number>, b: Record<string, number>)
   return true;
 }
 
+/** 試合の初めに読み込んだ全部のモデル（試合中はファイルが変わってもこれを使う） */
+export interface LoadedModel {
+  id: string;
+  name: string;
+  params: Record<string, number>;
+  policy: PolicyFn;
+}
+
+export function loadAllModels(evaluator?: EvaluatorModule): LoadedModel[] {
+  return loadStyles().map((s) => {
+    const params = loadModelParams(s.id);
+    return { id: s.id, name: s.name, params: params as unknown as Record<string, number>, policy: makePlannerPolicy(params, evaluator) };
+  });
+}
+
+/** 使っているモデル以外で、パラメータが違うモデル（同じものは同じ手を出すので比べない） */
+export function votersFrom(models: LoadedModel[], active: string): ModelVoter[] {
+  const play = models.find((m) => m.id === active)?.params ?? {};
+  return models.filter((m) => m.id !== active && !sameParams(m.params, play)).map((m) => ({ id: m.id, name: m.name, policy: m.policy }));
+}
+
 /** 試合で使うモデル以外の、パラメータが違うモデルに手を出させる準備（同じ評価関数で） */
 export function buildVoters(playModel: string, evaluator?: EvaluatorModule): ModelVoter[] {
-  const play = loadModelParams(playModel) as unknown as Record<string, number>;
-  return loadStyles()
-    .filter((s) => s.id !== playModel)
-    .map((s) => ({ s, params: loadModelParams(s.id) }))
-    .filter(({ params }) => !sameParams(params as unknown as Record<string, number>, play))
-    .map(({ s, params }) => ({ id: s.id, name: s.name, policy: makePlannerPolicy(params, evaluator) }));
+  return votersFrom(loadAllModels(evaluator), playModel);
 }

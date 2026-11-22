@@ -11,6 +11,29 @@ import { AGENT_WORK_TOOLS, type AskResult, ClaudeSession } from "./claude-sessio
 import { activePolicyPrompt } from "./policy";
 import { addUsage, emptyUsage, totalTokens, type UsageTotals } from "./usage";
 import { checkOfficialVersion, type OfficialVersionCheck } from "../perception/official-check";
+import { defaultMatchPlan, type MatchPlan, matchPlanChoicesText, parseMatchPlan } from "./match-plan";
+import type { FiredTrigger } from "./triggers";
+
+/** 試合中の LLM に見せるモデルの情報（きっかけで呼んだ時） */
+export interface ModelContext {
+  /** 今使っているモデル */
+  active: string;
+  list: { id: string; name: string; trait: string }[];
+  /** このフェーズで、モデルごとに出した手（手が割れた時だけ） */
+  votes: Record<string, string> | null;
+}
+
+/** 1回の問い合わせに渡すもの */
+export interface AskContext {
+  turn: number;
+  phase: "CMD1" | "CMD2";
+  worldMap: WorldMap;
+  solve: (plan: AgentPlan | null) => SolverDecision;
+  events: string[];
+  /** この問い合わせを呼んだきっかけ（きっかけで呼ぶ時だけ） */
+  triggers?: FiredTrigger[];
+  models?: ModelContext;
+}
 
 
 export type MainAction = "continue" | "plan";
@@ -24,6 +47,8 @@ export interface MainDecision {
   note: string;
   /** 作戦目標があった時、送る手が目標に向かっているか（followed）・目標へ経路が無い（no_route）・ソルバーが別の手を選んだ（other） */
   planStatus?: "followed" | "no_route" | "other";
+  /** LLM が選んだモデル（切り替える時だけ。知らない id は入らない） */
+  model?: string;
 }
 
 /** 作戦目標に対して、送る手が向かっているか */
@@ -64,6 +89,8 @@ interface MainReply {
   memoAdd?: string;
   /** メモの行を番号で書き換える（"" で削除）。番号は依頼文に表示した行番号 */
   memoSet?: Record<number, string>;
+  /** 使うモデル（knowledge/styles.json の id） */
+  model?: string;
 }
 
 /** 依頼文で付けた行番号（"3| "）をモデルが書き写しても、メモに残さない */
@@ -108,6 +135,8 @@ export class MainAgent {
   private hedgeCount = 0;
   /** 前のフェーズの座標系（ワープで変わったら作戦目標・メモの座標が無効になる） */
   private frameVersion: number | null = null;
+  /** 準備で決めた試合の設定（最初のモデル・きっかけ・判断の目安） */
+  private plannedMatch: MatchPlan = defaultMatchPlan();
 
   constructor(
     private readonly settings: ClaudeModelSettings,
@@ -132,6 +161,11 @@ export class MainAgent {
     return this.memo;
   }
 
+  /** 準備で決めた試合の設定（準備しなかった・読めなかった時は既定） */
+  get matchPlan(): MatchPlan {
+    return this.plannedMatch;
+  }
+
   usage(): AgentUsageReport {
     const main = this.postSession ? addUsage(this.mainUsage, this.postSession.usage) : this.mainUsage;
     const total = main;
@@ -154,7 +188,7 @@ export class MainAgent {
    */
   async begin(
     info: { room: number; stageName: string | null; webMap: boolean; highScore: number; totalTurns?: number | null },
-    prepared?: { memo: string; usage: UsageTotals } | null,
+    prepared?: { memo: string; usage: UsageTotals; plan?: MatchPlan } | null,
   ): Promise<AskResult> {
     this.started = true;
     this.plan = null;
@@ -179,6 +213,7 @@ export class MainAgent {
       policy ? `\n${policy}` : "",
       strategy ? `\n## 戦略知識（knowledge/strategy.md）\n${strategy}` : "",
     ].join("\n");
+    this.plannedMatch = prepared?.plan ?? defaultMatchPlan();
     if (prepared) {
       this.memo = prepared.memo;
       this.mainUsage = addUsage(this.mainUsage, prepared.usage);
@@ -208,10 +243,7 @@ export class MainAgent {
    * 返答の作戦（plan）・メモは届いた時に反映する。
    * 聞いてから返答までにワープで座標系が変わっていたら、返答の作戦の座標は古いので使わない。
    */
-  startBackground(
-    ctx: { turn: number; phase: "CMD1" | "CMD2"; worldMap: WorldMap; solve: (plan: AgentPlan | null) => SolverDecision; events: string[] },
-    onDone: (r: MainDecision | null, error?: string) => void,
-  ): boolean {
+  startBackground(ctx: AskContext, onDone: (r: MainDecision | null, error?: string) => void): boolean {
     if (this.inflight || !this.started) return false;
     this.syncFrame(ctx.worldMap);
     const solverNow = ctx.solve(this.plan);
@@ -362,10 +394,7 @@ export class MainAgent {
     return s;
   }
 
-  private async ask(
-    ctx: { turn: number; phase: "CMD1" | "CMD2"; worldMap: WorldMap; solve: (plan: AgentPlan | null) => SolverDecision; events: string[] },
-    solverNow: SolverDecision,
-  ): Promise<MainDecision> {
+  private async ask(ctx: AskContext, solverNow: SolverDecision): Promise<MainDecision> {
     const fallback = (why: string, durationMs: number | null): MainDecision => ({
       decision: solverNow,
       source: "solver",
@@ -409,7 +438,7 @@ export class MainAgent {
     if (res.status === "timeout") return fallback(`timeout ${res.durationMs}ms`, res.durationMs);
     if (res.status !== "ok") return fallback(res.status === "dead" ? res.error : res.status, null);
 
-    const reply = parseMainReply(res.text, ctx.turn, ctx.phase, legal);
+    const reply = parseMainReply(res.text, ctx.turn, ctx.phase, legal, ctx.models?.list.map((m) => m.id));
     if (!reply) return fallback("応答に有効な JSON がない", res.durationMs);
     // 正常に返答したので、このフェーズで見せた通知を届けたことにする
     this.notices.splice(0, shownNotices);
@@ -426,7 +455,10 @@ export class MainAgent {
     }
     const planStatus = planFollowStatus(ctx.worldMap, this.plan, decision.command);
     if (reply.action === "continue" && planStatus) note = `作戦どおり（${PLAN_STATUS_LABEL[planStatus]}）`;
+    const model = reply.model && ctx.models && reply.model !== ctx.models.active ? reply.model : undefined;
+    if (model) note = `モデルを ${ctx.models!.list.find((m) => m.id === model)?.name ?? model} へ / ${note}`;
     return {
+      ...(model ? { model } : {}),
       decision: { ...decision, reason: `${decision.reason}${reply.note ? ` / ${reply.note}` : ""}` },
       source: "main",
       action: reply.action,
@@ -471,7 +503,7 @@ export class MainAgent {
     const est = ctx.worldMap.getStats().estimatedTotalScore;
     const delta = this.lastEst === null ? "" : ` (${est - this.lastEst >= 0 ? "+" : ""}${est - this.lastEst})`;
     this.lastEst = est;
-    const who = r.source === "main" ? `LLM/${r.action}${r.planStatus && r.planStatus !== "followed" ? ` ${PLAN_STATUS_LABEL[r.planStatus]}` : ""}` : `方策: ${r.note}`;
+    const who = r.source === "main" ? `LLM/${r.action}${r.model ? ` モデル→${r.model}` : ""}${r.planStatus && r.planStatus !== "followed" ? ` ${PLAN_STATUS_LABEL[r.planStatus]}` : ""}` : `方策: ${r.note}`;
     this.recent.push(`T${ctx.turn} ${ctx.phase} pos(${x},${y}) est=${est}${delta} → ${r.decision.command} [${who}]`);
     const keep = numSetting("AGENT_RECENT_PHASES", { min: 0, integer: true });
     if (this.recent.length > keep) this.recent.splice(0, this.recent.length - keep);
@@ -613,7 +645,7 @@ export class MainAgent {
   }
 
   private buildTurnMessage(
-    ctx: { turn: number; phase: "CMD1" | "CMD2"; worldMap: WorldMap; events: string[] },
+    ctx: AskContext,
     solverNow: SolverDecision,
     legal: readonly string[],
   ): { message: string; shownNotices: number } {
@@ -650,6 +682,19 @@ export class MainAgent {
       );
     }
     if (ctx.events.length > 0) lines.push(`イベント: ${ctx.events.join(", ")}`);
+    if (ctx.triggers?.length) {
+      lines.push("## 呼んだきっかけ");
+      for (const f of ctx.triggers) {
+        const guide = this.plannedMatch.guide[f.id];
+        lines.push(`- ${f.label ?? f.id}${f.phase ? `（${f.phase}）` : ""}: ${f.detail}${guide ? ` ／ 準備で決めた目安: ${guide}` : ""}`);
+      }
+    }
+    if (ctx.models) {
+      const name = (id: string) => ctx.models!.list.find((m) => m.id === id)?.name ?? id;
+      lines.push("## モデル");
+      lines.push(`今のモデル: ${ctx.models.active}（${name(ctx.models.active)}）。選べる: ${ctx.models.list.map((m) => `${m.id}（${m.name}・${m.trait}）`).join(" / ")}`);
+      if (ctx.models.votes) lines.push(`このフェーズの各モデルの手: ${Object.entries(ctx.models.votes).map(([id, c]) => `${name(id)} ${c}`).join("・")}`);
+    }
     // 通知は、LLM が正常に返答した時に届けたことにする（時間切れなら次の問い合わせにもう一度出す）。溜まりすぎたら古いものから捨てる
     if (this.notices.length > 20) this.notices.splice(0, this.notices.length - 20);
     const shownNotices = this.notices.length;
@@ -666,6 +711,8 @@ export interface PrepResult {
   status: AskResult["status"];
   error: string | null;
   memo: string;
+  /** 試合の設定（最初のモデル・きっかけ・判断の目安）。返答に無ければ既定 */
+  plan: MatchPlan;
   usage: UsageTotals;
   durationMs: number;
   official: OfficialVersionCheck;
@@ -683,7 +730,7 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
   const official = await checkOfficialVersion();
   // バージョン確認の間に止められたら、セッションを起こさずに終える（abort の登録は起動の後なので、ここで確かめる）
   if (signal?.aborted) {
-    return { status: "dead", error: "中止", memo: "", usage: emptyUsage(), durationMs: Date.now() - t0, official };
+    return { status: "dead", error: "中止", memo: "", plan: defaultMatchPlan(), usage: emptyUsage(), durationMs: Date.now() - t0, official };
   }
   const pastRuns = existsSync(RUNS_DIR)
     ? readdirSync(RUNS_DIR)
@@ -725,13 +772,19 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
       pastRuns.length > 0 ? pastRuns.join("\n") : "(まだない。初めてのルーム)",
       "",
       policy || "(ユーザー定義の作戦方針なし)",
+      "",
+      "## 試合の設定で選べるもの（返答の JSON の model・triggers・guide）",
+      matchPlanChoicesText(),
     ].join("\n"),
     timeoutSec * 1000,
   );
   let memo = "";
+  let plan = defaultMatchPlan();
   if (res.status === "ok") {
     await session.stop();
-    memo = parsePrepMemo(res.text).slice(0, memoMax);
+    const parsed = parsePrepReply(res.text);
+    memo = parsed.memo.slice(0, memoMax);
+    plan = parseMatchPlan(parsed.json);
   } else {
     session.kill();
   }
@@ -739,6 +792,7 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
     status: res.status,
     error: res.status === "ok" ? null : res.status === "dead" ? res.error : res.status,
     memo,
+    plan,
     usage: session.usage,
     durationMs: Date.now() - t0,
     official,
@@ -747,18 +801,23 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
 
 /** 準備フェーズの返答から最初のメモを取り出す（最後の JSON 行の memo。無ければ本文全体） */
 export function parsePrepMemo(text: string): string {
+  return parsePrepReply(text).memo;
+}
+
+/** 準備フェーズの返答: 最後の JSON 行（memo と試合の設定）。無ければ本文全体をメモにする */
+export function parsePrepReply(text: string): { memo: string; json: Record<string, unknown> | null } {
   const lines = text.split("\n").map((l) => l.trim().replace(/^```(?:json)?|```$/g, "").trim());
   for (let i = lines.length - 1; i >= 0; i--) {
     const l = lines[i]!;
     if (!l.startsWith("{") || !l.endsWith("}")) continue;
     try {
-      const obj = JSON.parse(l) as { memo?: unknown };
-      if (typeof obj.memo === "string" && obj.memo.trim()) return obj.memo.trim();
+      const obj = JSON.parse(l) as Record<string, unknown>;
+      if (typeof obj.memo === "string" && obj.memo.trim()) return { memo: obj.memo.trim(), json: obj };
     } catch {
       // 次の行へ
     }
   }
-  return text.trim();
+  return { memo: text.trim(), json: null };
 }
 
 /** memo_set は {"行番号": "新しい内容"}。文字列でない値・番号でないキーは捨てる */
@@ -774,6 +833,8 @@ export function parseMainReply(
   turn: number,
   phase: string,
   legal: readonly string[],
+  /** 選べるモデルの id（無ければ model は読まない） */
+  models?: readonly string[],
 ): MainReply | null {
   // 最後の行から JSON を探す（memo に { } が入っていても読めるよう、まず行全体を JSON として読む）
   // 後ろから試すので、行全体の候補を最後に置いて優先する
@@ -795,14 +856,16 @@ export function parseMainReply(
       const rawAdd = Array.isArray(obj.memo_add) ? obj.memo_add.filter((v) => typeof v === "string").join("\n") : obj.memo_add;
       const memoAdd = typeof rawAdd === "string" && rawAdd.trim() ? rawAdd : undefined;
       const memoSet = parseMemoSet((obj as { memo_set?: unknown }).memo_set);
-      if (obj.action === "continue") return { action: "continue", note, memo, memoAdd, memoSet };
+      const rawModel = (obj as { model?: unknown }).model;
+      const model = typeof rawModel === "string" && models?.includes(rawModel) ? rawModel : undefined;
+      if (obj.action === "continue") return { action: "continue", note, memo, memoAdd, memoSet, ...(model ? { model } : {}) };
       if (
         obj.action === "plan" &&
         Array.isArray(obj.target) &&
         obj.target.length === 2 &&
         obj.target.every((v) => Number.isInteger(v))
       ) {
-        return { action: "plan", target: [obj.target[0] as number, obj.target[1] as number], note, memo, memoAdd, memoSet };
+        return { action: "plan", target: [obj.target[0] as number, obj.target[1] as number], note, memo, memoAdd, memoSet, ...(model ? { model } : {}) };
       }
     } catch {
       // 次の候補へ

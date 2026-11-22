@@ -50,7 +50,7 @@ try {
         highScore: profile.highScore ?? 0,
         totalTurns: knownTotalTurns(config.room),
       },
-      prep ? { memo: prep.memo, usage: prep.usage } : null,
+      prep ? { memo: prep.memo, usage: prep.usage, plan: prep.plan } : null,
     );
     console.log(JSON.stringify({ warmup: ready.status, ms: Date.now() - t0 }));
   }

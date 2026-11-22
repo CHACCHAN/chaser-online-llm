@@ -171,6 +171,12 @@ export const SETTINGS = {
     defaultValue: "default",
   },
   AGENT_USE_MAIN: { label: "試合中に LLM を使う", group: "llm", description: "試合中に LLM が裏で作戦（目標）を出す（false なら方策だけで打つ）", defaultValue: "true" },
+  AGENT_CALL_MODE: {
+    label: "試合中の LLM を呼ぶ時",
+    group: "llm",
+    description: "trigger = きっかけ（モデルの不一致・敵が近い・当てられた など。準備の LLM が使うものとしきい値を選ぶ）が鳴った時だけ呼び、LLM は作戦目標と使うモデルを選ぶ / every = 前の問い合わせが終わるたびに毎回呼ぶ（前の動き）",
+    defaultValue: "trigger",
+  },
   AGENT_HEDGE_SEC: {
     label: "返答が遅い時に二重に聞くまでの秒数",
     group: "llm",
@@ -295,7 +301,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "model", title: "LLM のつなぎ方・モデル", keys: ["LLM_AUTH_MODE", "LLM_API_URL", "LLM_API_KEY", "LLM_API_HEADERS", "LLM_OAUTH_TOKEN", "LLM_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_CONTEXT_WINDOW", "LLM_AUTO_COMPACT", "LLM_AUTO_COMPACT_PCT", "LLM_MAX_OUTPUT_TOKENS", "LLM_MODELS_TIMEOUT_SEC"] },
   { id: "learn", title: "方策・学習", keys: ["POLICY_MODEL", "TRAIN_AFTER_MATCH_MIN", "TRAIN_IDLE", "TRAIN_IDLE_CHUNK_MIN", "SIM_MAX_TURNS", "SIM_WORKERS"] },
   { id: "coach", title: "学習の LLM", keys: ["LAB_COACH", "LAB_COACH_MODEL", "LAB_COACH_EFFORT", "LAB_COACH_TIMEOUT_MIN"] },
-  { id: "main", title: "LLM（試合中）", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
+  { id: "main", title: "LLM（試合中）", keys: ["AGENT_USE_MAIN", "AGENT_CALL_MODE", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
   { id: "post", title: "試合後（進化・レビュー）", keys: ["AGENT_EVOLVE", "AGENT_EVOLVE_MIN_TURNS", "AGENT_POST_MATCH_TIMEOUT_MIN", "AGENT_REVIEW", "AGENT_REVIEW_TIMEOUT_SEC", "AGENT_REVIEW_KEEP"] },
   { id: "other", title: "その他", keys: ["PORT"] },
