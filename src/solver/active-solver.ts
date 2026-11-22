@@ -1,11 +1,8 @@
 import {
-  CMD1_SPECS,
   CMD2_SPECS,
-  classifyTileSafety,
   DIR_DELTA,
   DIRS,
   getHoleRevisitPenalty,
-  getPathUtility,
   getTileInfo,
   OPPOSITE_DIR,
   type Cmd1Command,
@@ -14,7 +11,7 @@ import {
   type WorldMap,
 } from "../memory/world-map";
 
-/** メインエージェントが決める作戦。ソルバーは目標マスへ向かう手を優先する */
+/** メインエージェントが指定する、現在の区画の経由点。 */
 export interface AgentPlan {
   target: [number, number];
   note?: string;
@@ -28,221 +25,209 @@ export interface SolverDecision {
   triggerReason?: string;
 }
 
-/**
- * ハーネス自身が試合中または試合後のメタ進化フェーズで書き換えて進化できる主力ソルバー。
- * 訪問回数ペナルティにより穴(0)同士の往復ループを防ぎ、ワープ/ブラックスターも脱出先として評価する。
- */
+const key = (x: number, y: number) => `${x},${y}`;
+const isPortal = (value: number) => {
+  const name = getTileInfo(value).name;
+  return name === "warp" || name === "blackstar";
+};
+const DIGS = ["du", "dr", "dd", "dl"] as const;
+const KNIGHTS = ["keilu", "keiru", "keild", "keird"] as const;
+const PUTS = (Object.keys(CMD2_SPECS) as Cmd2Command[]).filter(cmd =>
+  CMD2_SPECS[cmd].putDir || CMD2_SPECS[cmd].put3Dir);
+
+interface Route {
+  x: number;
+  y: number;
+  steps: number;
+  cost: number;
+  first: Dir | null;
+  value: number;
+}
+
 export function decideTurnAction(
   worldMap: WorldMap,
   phase: "CMD1" | "CMD2",
-  _turn: number,
+  turn: number,
   plan: AgentPlan | null = null,
 ): SolverDecision {
   const [x, y] = worldMap.getPosition();
-  // 初手も既知の安全マスがあれば通常の経路選択へ。地図がなければ移動せず観測する。
-  if (phase === "CMD1" && _turn === 1 && !worldMap.getLastGrid() && !DIRS.some(dir => {
-    const [dx, dy] = DIR_DELTA[dir];
-    const rec = worldMap.getTile(x + dx, y + dy);
-    if (!rec) return false;
-    const info = getTileInfo(rec.value);
-    return info.known && info.passable && !info.hazard;
-  })) {
-    return { command: "gr", reason: "Initial scan: no known safe neighbor", confidence: 1 };
-  }
-  const planStepRaw = plan ? worldMap.firstStepTowards(plan.target[0], plan.target[1]) : null;
-  const planStep = planStepRaw && planStepRaw !== "here" ? planStepRaw : null;
-  const planTag = plan && planStep ? `plan(@${plan.target[0]},${plan.target[1]} d=${planStep.distance})` : null;
+  const grid = worldMap.getLastGrid();
   const events = worldMap.getLastEventFlags();
-
-  if (events.newUnknownTiles.length > 0) {
-    const fallback = worldMap.pickSafeFallback(phase) as Cmd1Command | Cmd2Command;
-    return {
-      command: fallback,
-      reason: `New unknown tile(s) detected: ${events.newUnknownTiles.join(",")}`,
-      confidence: 0.2,
-      triggerHarness: true,
-      triggerReason: `UNKNOWN_TILE:${events.newUnknownTiles.join(",")}`,
-    };
-  }
-
-  const { topValueTargets, nearestFrontiers } = worldMap.findPathTargets();
-
-  if (phase === "CMD1") {
-    let bestDir: Dir | null = null;
-    // 静止 gr は -40。訪問罰は探索上の優先度であって、静止との得点比較には使わない。
-    const stayCost = CMD1_SPECS.gr.estActionCost + getTileInfo(0).score;
-    let bestScore = -Infinity;
-    let bestIsRouted = false;
-
-    const preferredFirstStep =
-      planStep?.dir ??
-      (topValueTargets[0] && getPathUtility(topValueTargets[0]) > -35
-        ? topValueTargets[0].firstStep
-        : nearestFrontiers[0]?.firstStep ?? null);
-
-    for (const dir of DIRS) {
-      const [dx, dy] = DIR_DELTA[dir];
-      const nx = x + dx;
-      const ny = y + dy;
-      const rec = worldMap.getTile(nx, ny);
-      if (!rec) continue;
-
-      const info = getTileInfo(rec.value);
-      if (!info.passable || info.hazard || !info.known) continue;
-
-      // 目標がなければ未踏の安全マスを優先。既訪の穴が唯一の出口でも静止しない。
-      const routed = info.score > 0 || preferredFirstStep === dir;
-      if (bestIsRouted && !routed) continue;
-      let score = info.score + CMD1_SPECS[`gr${dir}`].estActionCost - getHoleRevisitPenalty(rec);
-      if (preferredFirstStep === dir) score += 8;
-      if (DIRS.some((d2) => {
-        if (d2 === OPPOSITE_DIR[dir]) return false;
-        const [dx2, dy2] = DIR_DELTA[d2];
-        const next = worldMap.getTile(nx + dx2, ny + dy2);
-        if (!next) return true; // Observation opportunity, not permission to land there.
-        const nextInfo = getTileInfo(next.value);
-        return next.visitedCount === 0 && nextInfo.known && nextInfo.passable && !nextInfo.hazard;
-      })) score += 12;
-      if ((routed && !bestIsRouted) || score > bestScore) {
-        bestScore = score;
-        bestIsRouted = routed;
-        bestDir = dir;
-      }
+  const walk = (dir: Dir, reason: string): SolverDecision => ({
+    command: phase === "CMD1" ? `gr${dir}` : `w${dir}`, reason, confidence: 0.92,
+  });
+  const scan = (reason: string, triggerReason?: string): SolverDecision => ({
+    command: phase === "CMD1" ? "gr" : DIGS.reduce((best, cmd) =>
+      unknownScanCells(cmd) > unknownScanCells(best) ? cmd : best, DIGS[0] as typeof DIGS[number]),
+    reason, confidence: 0.5, triggerHarness: !!triggerReason, triggerReason,
+  });
+  const unknownScanCells = (cmd: typeof DIGS[number]) => {
+    const [dx, dy] = CMD2_SPECS[cmd].obsOffset;
+    let unseen = 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      if (!worldMap.getTile(x + dx + ox, y + dy + oy)) unseen++;
     }
-
-    if (bestDir) {
-      const cmd = `gr${bestDir}` as Cmd1Command;
-      return {
-        command: cmd,
-        reason: `${planTag && preferredFirstStep === bestDir ? `${planTag} ` : ""}Forward ${cmd} (priority=${bestScore})`,
-        confidence: 0.92,
-      };
-    }
-
-    return {
-      command: "gr",
-      reason: `Stay and scan with gr (cost ${stayCost}); no safe forward step beats staying`,
-      confidence: 0.9,
-    };
-  }
-
-  // === CMD2 ===
-  const lastDir = worldMap.getLastMoveDir();
-  const dirOrder: Dir[] = lastDir
-    ? [
-        lastDir,
-        ...DIRS.filter((d) => d !== lastDir && d !== OPPOSITE_DIR[lastDir]),
-        OPPOSITE_DIR[lastDir],
-      ]
-    : DIRS;
-
-  const bestTarget =
-    topValueTargets[0] && getPathUtility(topValueTargets[0]) > -80
-      ? topValueTargets[0]
-      : null;
-  const bestFrontier = nearestFrontiers[0] ?? null;
-
-  let chosenWalk: Cmd2Command | null = null;
-  let chosenScore = -Infinity;
-  let chosenReason = "";
-  let allNeighborsAreHolesOrBlocked = true;
-
-  for (let i = 0; i < dirOrder.length; i++) {
-    const dir = dirOrder[i]!;
-    const [dx, dy] = DIR_DELTA[dir];
-    const rec = worldMap.getTile(x + dx, y + dy);
-    const val = rec?.value ?? null;
-    const safety = classifyTileSafety(val);
-
-    if (safety === "HAZARD" || safety === "BLOCKED") continue;
-
-    if (val === null || (val !== 0 && getTileInfo(val).score > 0)) {
-      allNeighborsAreHolesOrBlocked = false;
-    }
-
-    const immediateScore = val !== null ? getTileInfo(val).score + CMD2_SPECS[`w${dir}` as Cmd2Command].estActionCost : 0;
-    let routeBonus = 0;
-    let reasonTag = "walk";
-
-    if (planStep && planStep.dir === dir) {
-      routeBonus += 400;
-      reasonTag = planTag!;
-    } else if (bestTarget && bestTarget.firstStep === dir) {
-      routeBonus += 260 + Math.max(-60, bestTarget.estimatedNetGain);
-      reasonTag = `target(${bestTarget.tileLabel}@${bestTarget.x},${bestTarget.y} d=${bestTarget.distance})`;
-    } else if (bestFrontier && bestFrontier.firstStep === dir) {
-      routeBonus += 130 - bestFrontier.distance * 5;
-      reasonTag = `frontier(@${bestFrontier.x},${bestFrontier.y} d=${bestFrontier.distance})`;
-    }
-
-    // 訪問回数が多いマスへの再突入と直前の逆走を抑止して往復振動を防ぐ
-    const revisitPenalty = getHoleRevisitPenalty(rec);
-    const reversePenalty = lastDir && dir === OPPOSITE_DIR[lastDir] ? 12 : 0;
-    const inertiaBonus = (dirOrder.length - i) * 0.5;
-    const total = immediateScore + routeBonus + inertiaBonus - revisitPenalty - reversePenalty;
-
-    if (total > chosenScore) {
-      chosenScore = total;
-      chosenWalk = `w${dir}` as Cmd2Command;
-      chosenReason = `${reasonTag} immediate=${immediateScore}`;
-    }
-  }
-
-  if (allNeighborsAreHolesOrBlocked) {
-    for (const keiCmd of ["keilu", "keiru", "keild", "keird"] as Cmd2Command[]) {
-      const [kdx, kdy] = CMD2_SPECS[keiCmd].move;
-      const kRec = worldMap.getTile(x + kdx, y + kdy);
-      if (!kRec) continue; // 未知へは飛ばない（room556 で大損）
-      const kInfo = getTileInfo(kRec.value);
-      if (kInfo.passable && !kInfo.hazard && kInfo.score >= 400) {
-        return {
-          command: keiCmd,
-          reason: `Knight jump ${keiCmd} over holes/traps onto high-value ${kInfo.label}(+${kInfo.score})`,
-          confidence: 0.85,
-        };
-      }
-    }
-  }
-
-  if (chosenWalk) {
-    const stuckInHoles = !bestTarget && !bestFrontier && allNeighborsAreHolesOrBlocked;
-    return {
-      command: chosenWalk,
-      reason: chosenReason,
-      confidence: stuckInHoles ? 0.35 : 0.9,
-      triggerHarness: stuckInHoles,
-      triggerReason: stuckInHoles ? "STUCK_IN_HOLES_NO_FRONTIER" : undefined,
-    };
-  }
-
-  // room556 実測: kei* は -250 の高疲労。未知マスや穴へ飛ぶと大損するため、既知の安全マスだけを候補にする。
-  const escapes = (["keilu", "keiru", "keild", "keird"] as Cmd2Command[])
-    .map((keiCmd) => {
-      const [kdx, kdy] = CMD2_SPECS[keiCmd].move;
-      const kRec = worldMap.getTile(x + kdx, y + kdy);
-      const kInfo = kRec ? getTileInfo(kRec.value) : null;
-      return { keiCmd, kRec, kInfo };
-    })
-    .filter((o) => o.kInfo !== null && o.kInfo.passable && !o.kInfo.hazard)
-    .filter((o) => o.kInfo!.score >= 150 || o.kInfo!.score === 0);
-  if (escapes.length > 0) {
-    // 高得点着地を最優先。同点なら疲労を無駄にしないよう穴(0)より安全な土/アイテムへ。
-    escapes.sort((a, b) => b.kInfo!.score - a.kInfo!.score || (a.kRec!.visitedCount ?? 0) - (b.kRec!.visitedCount ?? 0));
-    const best = escapes[0]!;
-    return {
-      command: best.keiCmd,
-      reason: `Knight escape ${best.keiCmd} onto known ${best.kInfo!.label}(${best.kInfo!.score})`,
-      confidence: 0.4,
-      triggerHarness: true,
-      triggerReason: "SURROUNDED_BY_HAZARDS",
-    };
-  }
-
-  return {
-    command: "du",
-    reason: "Completely blocked; stationary remote scan du",
-    confidence: 0.3,
-    triggerHarness: true,
-    triggerReason: "COMPLETELY_BLOCKED",
+    return unseen;
   };
+
+  // CMD1 の中心が入口番号なら、周囲3×3も入口側の可能性がある。
+  // 見た目が一致してワープ検出が遅れる場合も、座標つきの手を続けない。
+  if (grid?.[4] !== undefined && isPortal(grid[4])) {
+    return scan("Portal center: position not confirmed; observe without moving", "PORTAL_POSITION_UNCONFIRMED");
+  }
+  const warped = events.warped;
+  const enemies = warped ? [] : worldMap.getEnemySightings().filter(e => {
+    const dx = e.x - x, dy = e.y - y;
+    if ((!dx && !dy) || e.lastSeenTurn > turn || e.lastSeenTurn < turn - (phase === "CMD1" ? 1 : 0)) return false;
+    const observed = phase === "CMD2" && Math.abs(dx) <= 1 && Math.abs(dy) <= 1
+      ? grid?.[(dy + 1) * 3 + dx + 1] : undefined;
+    return observed === undefined || observed === e.tileId;
+  });
+  const occupied = new Set(enemies.map(e => key(e.x, e.y)));
+  const tileValue = (tx: number, ty: number) => {
+    const dx = tx - x;
+    const dy = ty - y;
+    // CMD1 の中心付き観測は、帰還区画やWebマップの古いマスより優先する。
+    if (phase === "CMD2" && (dx || dy) && Math.abs(dx) <= 1 && Math.abs(dy) <= 1) {
+      const observed = grid?.[(dy + 1) * 3 + dx + 1];
+      if (observed !== undefined) return observed;
+      if (warped) return undefined;
+    }
+    return worldMap.getTile(tx, ty)?.value;
+  };
+  const safeValue = (tx: number, ty: number) => {
+    if (occupied.has(key(tx, ty))) return undefined;
+    const value = tileValue(tx, ty);
+    if (value === undefined || value >= 1000) return undefined;
+    const info = getTileInfo(value);
+    return info.known && info.passable && !info.hazard ? value : undefined;
+  };
+
+  let put: Cmd2Command | undefined;
+  let putScore = -Infinity;
+  for (const cmd of PUTS) {
+    const spec = CMD2_SPECS[cmd];
+    const [dx, dy] = DIR_DELTA[(spec.putDir ?? spec.put3Dir)!];
+    if (!occupied.has(key(x + dx, y + dy))) continue;
+    const [mx, my] = spec.move;
+    const value = safeValue(x + mx, y + my);
+    if (value === undefined || isPortal(value)) continue;
+    const score = getTileInfo(value).score + spec.estActionCost;
+    if (score > putScore) { put = cmd; putScore = score; }
+  }
+  if (put) return phase === "CMD2"
+    ? { command: put, reason: "Put toward fresh adjacent opponent with safe landing", confidence: 0.95 }
+    : { command: "gr", reason: "Recheck adjacent opponent before CMD2 put", confidence: 0.9 };
+
+  const origin: Route = { x, y, steps: 0, cost: 0, first: null, value: 0 };
+  const lastDir = worldMap.getLastMoveDir();
+  const dirs = lastDir ? [lastDir, ...DIRS.filter(d => d !== lastDir)] : DIRS;
+  if (enemies.some(e => Math.abs(e.x - x) + Math.abs(e.y - y) <= 5)) {
+    // BFS to a square adjacent to the enemy; never route through its square or a portal.
+    const queue = [origin];
+    const seen = new Set([key(x, y)]);
+    for (const node of queue) {
+      if (node.first && DIRS.some(d => {
+        const [dx, dy] = DIR_DELTA[d];
+        return occupied.has(key(node.x + dx, node.y + dy));
+      })) return walk(node.first, `Pursue nearby opponent (${node.steps} steps to adjacency)`);
+      if (node.steps >= 4) continue;
+      for (const dir of dirs) {
+        const [dx, dy] = DIR_DELTA[dir];
+        const nx = node.x + dx, ny = node.y + dy, id = key(nx, ny);
+        const value = safeValue(nx, ny);
+        if (seen.has(id) || value === undefined || isPortal(value)) continue;
+        seen.add(id);
+        queue.push({ x: nx, y: ny, steps: node.steps + 1, cost: 0, first: node.first ?? dir, value });
+      }
+    }
+  }
+
+  // ワープ直後は、同じ座標に見えても前区画の経路を使わない。
+  if (warped) plan = null;
+  const targets = new Map([[key(x, y), origin]]);
+  const queue = [origin];
+  let reward: Route | null = null, frontier: Route | null = null;
+  let portal: Route | null = null, fallback: Route | null = null, pickup: Route | null = null;
+  let rewardScore = 0, frontierScore = -Infinity;
+  const targetKey = plan ? key(...plan.target) : null;
+  while (queue.length) {
+    queue.sort((a, b) => a.cost - b.cost || a.steps - b.steps);
+    const node = queue.shift()!;
+    const id = key(node.x, node.y);
+    if (targets.get(id) !== node) continue;
+    if (node.first && id === targetKey) {
+      return walk(node.first, `plan(@${id} d=${node.steps})`);
+    }
+    if (node.first && isPortal(node.value)) {
+      portal ??= node;
+      continue; // portals are terminal waypoints, never shortcuts through the current frame
+    }
+    const remaining = DIRS.map(dir => {
+      const [dx, dy] = DIR_DELTA[dir];
+      return [node.x + dx, node.y + dy, dir] as const;
+    });
+    if (node.first) {
+      fallback ??= node;
+      const gain = getTileInfo(node.value).score;
+      if (node.steps === 1 && gain > 0 && (!pickup || gain > getTileInfo(pickup.value).score)) pickup = node;
+      // Nearby onward rewards beat a similar isolated pickup. Charge for revisits
+      // and for exiting a dead end, without treating holes as walls.
+      let onward = 0;
+      let exits = 0;
+      for (const [nx, ny] of remaining) {
+        const v = safeValue(nx, ny);
+        if (v === undefined || isPortal(v) || (nx === x && ny === y)) continue;
+        exits++;
+        if ((worldMap.getTile(nx, ny)?.visitedCount ?? 0) === 0) onward = Math.max(onward, getTileInfo(v).score);
+      }
+      const utility = gain - node.cost + (gain > 0 ? Math.min(80, onward / 4) - (exits ? 0 : 15) : 0);
+      if (gain > 0 && utility > rewardScore) { reward = node; rewardScore = utility; }
+      const unknown = remaining.filter(([nx, ny]) => tileValue(nx, ny) === undefined && !occupied.has(key(nx, ny)));
+      if (unknown.length) {
+        const openSide = unknown.some(([nx, ny]) => !DIRS.some(dir => {
+          const [dx, dy] = DIR_DELTA[dir];
+          return tileValue(nx + dx, ny + dy) === 12 && tileValue(nx + 2 * dx, ny + 2 * dy) === 12;
+        }));
+        const priority = -node.cost + (openSide ? 1 : 0);
+        if (priority > frontierScore) { frontier = node; frontierScore = priority; }
+      }
+    }
+    if (node.steps >= (warped ? 1 : plan ? 60 : 35)) continue;
+    for (const [nx, ny, dir] of remaining) {
+      const value = safeValue(nx, ny);
+      if (value === undefined) continue;
+      const rec = worldMap.getTile(nx, ny);
+      const reverse = !node.first && lastDir && dir === OPPOSITE_DIR[lastDir] ? 8 : 0;
+      const cost = node.cost + 10 + Math.max(0, -getTileInfo(value).score) +
+        (value === 0 && rec?.value === 0 ? 2 * getHoleRevisitPenalty(rec) : 0) + reverse;
+      const id = key(nx, ny);
+      if (cost >= (targets.get(id)?.cost ?? Infinity)) continue;
+      const next = { x: nx, y: ny, steps: node.steps + 1, cost, first: node.first ?? dir, value };
+      targets.set(id, next);
+      queue.push(next);
+    }
+  }
+
+  const route = reward ?? pickup ?? frontier ?? (!warped ? portal : null);
+  if (route?.first) return walk(route.first,
+    `${route === reward || route === pickup ? "Collect" : route === frontier ? "Observe frontier from" : "Exit via portal"} @${route.x},${route.y}`);
+
+  if (phase === "CMD2" && !warped) {
+    let best: { cmd: Cmd2Command; score: number } | null = null;
+    for (const cmd of KNIGHTS) {
+      const [dx, dy] = CMD2_SPECS[cmd].move;
+      const value = safeValue(x + dx, y + dy);
+      if (value === undefined || isPortal(value)) continue;
+      const rec = worldMap.getTile(x + dx, y + dy);
+      const gain = getTileInfo(value).score;
+      if (fallback && gain < 400) continue;
+      const score = gain + CMD2_SPECS[cmd].estActionCost - getHoleRevisitPenalty(rec);
+      if (!best || score > best.score) best = { cmd, score };
+    }
+    if (best) return { command: best.cmd, reason: "Knight jump onto known safe tile", confidence: 0.8 };
+  }
+  if (fallback?.first) return { ...walk(fallback.first, "Known safe exit; no reachable reward or frontier"),
+    triggerHarness: true, triggerReason: "STUCK_IN_HOLES_NO_FRONTIER" };
+  return scan("No confirmed safe move; observe without moving", "COMPLETELY_BLOCKED");
 }
