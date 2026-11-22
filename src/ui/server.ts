@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { SETTING_SECTIONS } from "../settings";
 import path from "node:path";
 import { ASSETS_DIR, PUBLIC_DIR, isRunDirName, RUNS_DIR } from "../paths";
+import { statsOverview } from "./stats";
 import { EFFORT_LEVELS, listGatewayModels } from "../agent/models";
 import { claudeLogin } from "../agent/claude-login";
 import { verifyPolicyWithReplay } from "../evolution/replay-verifier";
@@ -84,6 +85,10 @@ export function startWebUiServer(port: number) {
       }
 
       // 画面のスクリプト（「学習」画面など）
+      if (url.pathname === "/stats.js") {
+        return new Response(Bun.file(path.join(PUBLIC_DIR, "stats.js")), { headers: { "Content-Type": "text/javascript; charset=utf-8" } });
+      }
+      if (url.pathname === "/api/stats") return Response.json({ ok: true, ...statsOverview() });
       if (url.pathname === "/lab.js") {
         return new Response(Bun.file(path.join(PUBLIC_DIR, "lab.js")), { headers: { "Content-Type": "text/javascript; charset=utf-8" } });
       }
@@ -214,7 +219,7 @@ export function startWebUiServer(port: number) {
       if (url.pathname === "/api/runs") {
         return Response.json({
           rooms: loadRoomProfiles().rooms,
-          runs: listRecentRuns(25),
+          runs: listRecentRuns(60),
         });
       }
 

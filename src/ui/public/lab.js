@@ -4,7 +4,7 @@
    API は /api/lab/…（シミュレータだけを使い、CHaser サーバには触れない）。状態の変化は SSE の "lab" で届く。
    ===================================================================== */
 (() => {
-  const L = { view: load("view") === "lab" ? "lab" : "match", lab: null, data: null, which: "before", t: 0, playing: false, timer: 0, cards: [], tab: load("labTab") === "models" ? "models" : "maps", models: null };
+  const L = { view: ["lab", "stats"].includes(load("view")) ? load("view") : "match", lab: null, data: null, which: "before", t: 0, playing: false, timer: 0, cards: [], tab: load("labTab") === "models" ? "models" : "maps", models: null };
   const num = (v) => (v === null || v === undefined || Number.isNaN(Number(v)) ? "-" : (Math.round(Number(v) * 10) / 10).toLocaleString("ja-JP"));
   const sign = (v) => (v > 0 ? "+" : "") + num(v);
 
@@ -19,11 +19,15 @@
   function setView(v) {
     L.view = v; save("view", v);
     document.body.classList.toggle("view-lab", v === "lab");
+    document.body.classList.toggle("view-stats", v === "stats");
     $(".work").hidden = v !== "match";
     $("#lab").hidden = v !== "lab";
+    $("#stats").hidden = v !== "stats";
     $("#viewMatch").setAttribute("aria-pressed", String(v === "match"));
     $("#viewLab").setAttribute("aria-pressed", String(v === "lab"));
+    $("#viewStats").setAttribute("aria-pressed", String(v === "stats"));
     if (v === "lab") { refresh(); loadSet(); loadRooms(); loadModels(); setTab(L.tab); } else { stopPlay(); if (typeof mark === "function") mark("map"); }
+    if (v === "stats" && typeof window.statsShow === "function") window.statsShow();
   }
   $$(".views [data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 
@@ -150,6 +154,7 @@
     $("#ltStart").disabled = busy || !set || !L.data?.before;
     $("#ltStop").hidden = !job;
     $("#ltIdle").checked = !!st.idle.enabled;
+    syncCoach(st);
 
     const parts = [];
     if (job) {
@@ -204,7 +209,7 @@
       return `<div class="coach"><div class="head"><b>学習の LLM が学習環境を直しています</b><span class="dim">${Math.floor(sec / 60)}分${Math.round(sec % 60)}秒</span></div><div class="msg">結果を読んで評価関数・地図の作り方・学習のやり方を直し、直したものは確かめて、弱くなっていれば戻します</div></div>`;
     }
     const c = st.lastCoach;
-    if (!c) return st.coachEnabled ? "" : `<div class="msg">学習の LLM は切っています（設定の「学習の LLM」）</div>`;
+    if (!c) return st.coachEnabled ? "" : `<div class="msg">学習の LLM は切っています（上の「学習の LLM」で入れられます）</div>`;
     const when = new Date(c.finishedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
     const status = { ok: "", timeout: "（時間切れ）", dead: "（止まった）", stopped: "（試合が始まったので止めて、改修は戻した）" }[c.status] ?? "";
     const items = c.changes.map((x) => `<li class="${x.accepted ? "ok" : "ng"}">${esc(COACH_WHAT[x.what] || x.what)}: ${x.accepted ? "採用" : "戻した"} — ${esc(x.detail.replace(/^(採用|戻した)[:：]\s*/, ""))}</li>`);
@@ -227,6 +232,28 @@
     catch (err) { $("#labStatus").innerHTML = `<div class="down">${esc(err.message)}</div>`; }
   });
   $("#ltStop").addEventListener("click", () => post("/api/lab/stop").catch(() => {}));
+  /* ---------- 学習の LLM（入れるか・モデル・思考の深さ） ---------- */
+  function syncCoach(st) {
+    const c = st.coach || {}, on = !!st.coachEnabled;
+    $("#lcOn").checked = on;
+    const mi = $("#lcModel"), es = $("#lcEffort");
+    if (document.activeElement !== mi) mi.value = c.model || "";
+    mi.placeholder = c.fallbackModel ? `試合と同じ（${c.fallbackModel}）` : "試合の LLM と同じ";
+    if (document.activeElement !== es) {
+      const eff = (typeof S !== "undefined" && S.efforts) || ["low", "medium", "high", "xhigh", "max"];
+      es.innerHTML = `<option value="">思考: 試合と同じ${c.fallbackEffort ? `（${esc(c.fallbackEffort)}）` : ""}</option>` + eff.map((e) => `<option>${esc(e)}</option>`).join("");
+      es.value = c.effort || "";
+    }
+    mi.disabled = es.disabled = !on;
+  }
+  async function saveCoach(patch, revert) {
+    try { const r = await post("/api/lab/coach", patch); window.labOnState(r.lab); }
+    catch (err) { revert?.(); $("#labStatus").innerHTML = `<div class="down">${esc(err.message)}</div>`; }
+  }
+  $("#lcOn").addEventListener("change", (e) => saveCoach({ enabled: e.target.checked }, () => { e.target.checked = !e.target.checked; }));
+  $("#lcModel").addEventListener("change", (e) => saveCoach({ model: e.target.value.trim() }));
+  $("#lcEffort").addEventListener("change", (e) => saveCoach({ effort: e.target.value }));
+
   $("#ltIdle").addEventListener("change", async (e) => {
     try { const r = await post("/api/lab/idle", { enabled: e.target.checked }); window.labOnState(r.lab); }
     catch (err) { e.target.checked = !e.target.checked; $("#labStatus").innerHTML = `<div class="down">${esc(err.message)}</div>`; }
@@ -346,6 +373,7 @@
   // 仕事の経過時間を進める
   setInterval(() => { if (L.view === "lab" && L.lab?.job) renderState(); }, 1000);
 
-  setView(L.view);
+  window.setView = setView;
+  setView(L.view); // 統計の画面で開いた時は、stats.js が読み込まれた所で中身を出す
   jget("/api/lab").then((r) => { if (!L.lab) { L.lab = r.lab; renderDot(); } }).catch(() => {});
 })();

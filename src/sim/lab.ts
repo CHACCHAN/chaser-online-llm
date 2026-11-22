@@ -106,6 +106,8 @@ export interface LabState {
   matchActive: boolean;
   /** 学習のたびに学習の LLM が学習環境を直すか（LAB_COACH） */
   coachEnabled: boolean;
+  /** 学習の LLM のモデル・思考の深さ（空なら試合の LLM と同じ。fallback はその値） */
+  coach: { model: string; effort: string; fallbackModel: string; fallbackEffort: string };
   /** 最後の学習の LLM の結果 */
   lastCoach: CoachResult | null;
   /** シミュレータの相手: 種類の重み（拾う・狙う・自分）と、自己対戦の相手に残っている前の自分の数 */
@@ -158,6 +160,7 @@ export class LearningLab {
       idle: { enabled: this.idleOn(), chunkMin: numSetting("TRAIN_IDLE_CHUNK_MIN", { min: 1 }), reason: this.idleReason() },
       matchActive: this.matchActive,
       coachEnabled: boolSetting("LAB_COACH"),
+      coach: { model: getSetting("LAB_COACH_MODEL") ?? "", effort: getSetting("LAB_COACH_EFFORT") ?? "", fallbackModel: getSetting("LLM_MODEL_NAME") ?? "", fallbackEffort: getSetting("LLM_MODEL_EFFORT") ?? "" },
       opponents: (() => {
         const c = loadTrainConfig().config;
         return { greedy: c.oppGreedy, hunter: c.oppHunter, self: c.oppSelf, league: loadLeague().members.length };

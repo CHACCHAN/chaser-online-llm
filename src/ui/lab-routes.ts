@@ -1,5 +1,6 @@
 import { lab, roomChoices } from "../sim/lab";
 import { loadStyles } from "../solver/models";
+import { EFFORT_LEVELS } from "../agent/models";
 import { setProjectEnvValue } from "./env-store";
 
 /**
@@ -77,6 +78,21 @@ export async function handleLabRequest(req: Request, url: URL): Promise<Response
     const enabled = body.enabled === true;
     setProjectEnvValue("TRAIN_IDLE", enabled ? "true" : "false");
     lab.setIdle(enabled);
+    return Response.json({ ok: true, lab: lab.state() });
+  }
+
+  // 学習の LLM（入れるか・モデル・思考の深さ。.env の LAB_COACH・LAB_COACH_MODEL・LAB_COACH_EFFORT に保存。次に動く時から）
+  if (url.pathname === "/api/lab/coach" && req.method === "POST") {
+    if (typeof body.enabled === "boolean") setProjectEnvValue("LAB_COACH", body.enabled ? "true" : "false");
+    if (typeof body.model === "string") {
+      const m = body.model.trim();
+      if (m.length > 200 || /[\s"'`]/.test(m)) return Response.json({ ok: false, error: "モデル名に使えない文字があります" }, { status: 400 });
+      setProjectEnvValue("LAB_COACH_MODEL", m);
+    }
+    if (typeof body.effort === "string") {
+      if (body.effort !== "" && !(EFFORT_LEVELS as readonly string[]).includes(body.effort)) return Response.json({ ok: false, error: "知らない思考の深さです" }, { status: 400 });
+      setProjectEnvValue("LAB_COACH_EFFORT", body.effort);
+    }
     return Response.json({ ok: true, lab: lab.state() });
   }
 

@@ -448,16 +448,48 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 .views { flex: none; }
 .views button { padding: 4px 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 .vdot { width: 7px; height: 7px; border-radius: 50%; background: var(--pos); animation: pulse 1.6s infinite; }
-/* 画面に出さない入力（値は 設定 › .env で変える。JS は値を読むので要素は残す） */
-.adv { display: none !important; }
 /* 試合: 中央にマップ、右にいまの判断とエージェント */
 .work { grid-template-columns: minmax(0, 1fr) 400px; }
-.col.rail, .chart-wrap, .run-head, .center > .tabs, #tblWrap { display: none !important; }
 .col.center { overflow-y: auto; background: var(--panel); }
 .decide .meter, .decide .prev, .decide .cand { display: none !important; }
-/* 学習の画面では試合の項目を出さない */
+/* 学習・統計の画面では試合の項目を出さない */
 #labFlow { display: none; }
-body.view-lab #flow, body.view-lab .actions, body.view-lab .strip, body.view-lab .setup, body.view-lab #btnSetup { display: none !important; }
+body.view-lab #flow, body.view-lab .actions, body.view-lab .strip, body.view-lab .setup, body.view-lab #btnSetup,
+body.view-stats #flow, body.view-stats .actions, body.view-stats .strip, body.view-stats .setup, body.view-stats #btnSetup { display: none !important; }
+/* ---------- 統計 ---------- */
+.stats { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+.st-pane { flex: 1; overflow: auto; padding: 14px var(--s4) 28px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-content: start; min-height: 0; }
+.st-pane[hidden] { display: none; }
+.st-rec { padding: 0; gap: 0; grid-template-columns: 264px minmax(0, 1fr); align-content: stretch; overflow: hidden; }
+.st-rec .col.rail { min-height: 0; }
+.st-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.st-h { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin: 0 0 8px; }
+.st-h h2 { margin: 0; font-size: var(--t-m); }
+.st-h .dim { font-size: var(--t-s); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 10px; }
+.tile { border: 1px solid var(--line); border-radius: var(--r); background: var(--sunk); padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
+.tile span { font-size: var(--t-xs); color: var(--ink3); }
+.tile b { font-family: var(--mono); font-size: var(--t-l); font-weight: 600; }
+.tile small { font-size: var(--t-xs); color: var(--ink2); overflow-wrap: anywhere; }
+.stbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); }
+.stbl { border-collapse: collapse; width: 100%; font-size: var(--t-s); }
+.stbl th, .stbl td { padding: 6px 10px; border-bottom: 1px solid var(--line2); text-align: left; white-space: nowrap; }
+.stbl thead th { background: var(--sunk); font-weight: 600; font-size: var(--t-xs); color: var(--ink2); position: sticky; top: 0; }
+.stbl td.n, .stbl th.n { text-align: right; font-family: var(--mono); }
+.stbl tbody tr[data-room], .stbl tbody tr[data-run] { cursor: pointer; }
+.stbl tbody tr:hover { background: var(--sunk); }
+.stbl tbody tr[aria-selected="true"] { background: var(--sunk); box-shadow: inset 3px 0 0 var(--ink); }
+.stbl .wrap { white-space: normal; min-width: 160px; }
+.stbl .neg { color: var(--neg); }
+.mini { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
+.mini .box { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; min-width: 0; position: relative; }
+.mini .box h3 { margin: 0 0 4px; font-size: var(--t-s); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.mini .box h3 span { font-weight: 400; color: var(--ink3); font-size: var(--t-xs); }
+.mini svg { display: block; width: 100%; height: 130px; overflow: visible; }
+.mini svg text { font-family: var(--font); font-size: 10px; fill: var(--ink3); }
+.st-tip { position: fixed; z-index: 50; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 9px; font-size: var(--t-xs); box-shadow: 0 2px 8px rgba(0,0,0,.12); max-width: 260px; }
+.st-key { display: flex; gap: 14px; font-size: var(--t-xs); color: var(--ink2); align-items: center; flex-wrap: wrap; }
+.st-key i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 body.view-lab #labFlow { display: flex; }
 #lmRoom { max-width: 320px; }
 
@@ -467,7 +499,8 @@ body.view-lab #labFlow { display: flex; }
 .lab-bar .grp + .grp { padding-left: 0; border-left: 0; }
 .lab-bar input[type="number"] { width: 72px; }
 .lab-bar .sep { width: 1px; align-self: stretch; background: var(--line2); }
-.lab-bar .chk { margin-left: auto; }
+.lab-bar > .chk { margin-left: auto; }
+#lcModel { width: 150px; } #lcEffort { width: auto; }
 .lab-status { padding: 10px var(--s4); border-bottom: 1px solid var(--line2); display: grid; gap: 6px; font-size: var(--t-s); }
 .lab-status:empty { display: none; }
 .lab-status .msg { color: var(--ink2); overflow-wrap: anywhere; }
@@ -567,13 +600,18 @@ body.view-lab #labFlow { display: flex; }
   .ro { align-items: flex-start; border-left: 0; padding: 0; }
   .work { display: flex; flex-direction: column; }
   .lab-grid { overflow: visible; }
-  .lab-bar .chk { margin-left: 0; }
+  .lab-bar > .chk { margin-left: 0; }
   .lab-bar .sep { display: none; }
   .lab-play { flex-wrap: wrap; }
   .lab-play input[type="range"] { order: 5; flex-basis: 100%; }
   .col.center { order: 1; overflow: visible; }
   .col.live { order: 2; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
   .col.rail { order: 3; border-right: 0; border-top: 1px solid var(--line); }
+  .stats { overflow: visible; }
+  .st-pane { overflow: visible; }
+  .st-rec { display: flex; flex-direction: column; overflow: visible; }
+  .st-rec .col.rail { order: 0; border-top: 0; border-bottom: 1px solid var(--line); }
+  .st-main { overflow: visible; }
   .runs { max-height: 60vh; }
   .tbl-wrap { flex: none; max-height: 70vh; }
   .agent { min-height: 0; }
@@ -613,6 +651,7 @@ body.view-lab #labFlow { display: flex; }
     <div class="views seg" role="group" aria-label="画面">
       <button type="button" id="viewMatch" data-view="match" aria-pressed="true">試合</button>
       <button type="button" id="viewLab" data-view="lab" aria-pressed="false">学習<span class="vdot" id="labDot" hidden aria-label="学習中"></span></button>
+      <button type="button" id="viewStats" data-view="stats" aria-pressed="false">統計</button>
     </div>
     <ol class="flow" id="flow" aria-label="試合の流れ">
       <li data-step="prep"><span class="pip" aria-hidden="true"></span><span class="fl">準備</span></li>
@@ -624,7 +663,7 @@ body.view-lab #labFlow { display: flex; }
       <li data-step="maps"><span class="pip" aria-hidden="true"></span><span class="fl">地図</span></li>
       <li data-step="train"><span class="pip" aria-hidden="true"></span><span class="fl">学習</span></li>
       <li data-step="coach" id="labFlowCoach"><span class="pip" aria-hidden="true"></span><span class="fl">学習の LLM</span></li>
-      <li data-step="stats"><span class="pip" aria-hidden="true"></span><span class="fl">統計</span></li>
+      <li data-step="stats"><span class="pip" aria-hidden="true"></span><span class="fl">結果</span></li>
     </ol>
     <div class="util">
       <button class="btn quiet" id="btnSetup" type="button" aria-expanded="false" aria-controls="setup">試合の設定</button>
@@ -638,18 +677,18 @@ body.view-lab #labFlow { display: flex; }
     <span class="prep-info" id="prepInfo"></span>
     <div class="readout" aria-label="スコア">
       <div class="ro lead"><span>推定スコア</span><b id="nEst" class="num">0</b></div>
-      <div class="ro adv"><span>公式（途中）</span><b id="nOff" class="num">-</b></div>
+      <div class="ro"><span>公式（途中）</span><b id="nOff" class="num">-</b></div>
       <div class="ro"><span id="nBestSub">ルーム最高</span><b id="nBest" class="num">-</b></div>
       <div class="ro"><span>ターン</span><b><span id="nTurn" class="num">0</span><small id="nTurnSub"></small></b></div>
-      <div class="ro adv" id="lnTok"><span id="nTokSub">トークン</span><b id="nTok" class="num">-</b></div>
+      <div class="ro" id="lnTok"><span id="nTokSub">トークン</span><b id="nTok" class="num">-</b></div>
     </div>
   </div>
 
   <div class="setup" id="setup" role="group" aria-label="試合の設定">
     <div class="grp wide"><label for="selRoom" title="719 のように1つ、555-560 のように範囲、555,568 のように並べて指定できる。複数なら「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る">ルーム</label><input id="selRoom" list="dlRooms" placeholder="719 / 555-560 / 555,568" autocomplete="off" spellcheck="false" /><datalist id="dlRooms"></datalist></div>
     <div class="grp wide"><label for="inMain">LLM</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selEffort" aria-label="LLM の effort（思考の深さ）" title="LLM の思考の深さ（effort）。次の試合から。準備・試合中・振り返りの LLM に効く"></select></div>
-    <div class="grp adv"><label for="inBudget" title="LLM の1回の返答を待つ上限。手は待たずに方策が打ち、上限を超えた返答は捨てて聞き直す">返答の上限</label><input id="inBudget" type="number" min="3" step="1" inputmode="numeric" /><span class="lb">秒</span></div>
-    <div class="grp adv"><label for="inMax">最大ターン</label><input id="inMax" type="number" min="1" step="1" placeholder="無制限" inputmode="numeric" /></div>
+    <div class="grp"><label for="inBudget" title="LLM の1回の返答を待つ上限。手は待たずに方策が打ち、上限を超えた返答は捨てて聞き直す">返答の上限</label><input id="inBudget" type="number" min="3" step="1" inputmode="numeric" /><span class="lb">秒</span></div>
+    <div class="grp"><label for="inMax">最大ターン</label><input id="inMax" type="number" min="1" step="1" placeholder="無制限" inputmode="numeric" /></div>
     <div class="grp"><label class="chk" title="試合が終わったら自動で次の試合を始める"><input type="checkbox" id="chkAuto" />自動で次へ</label></div>
     <span class="hint" id="modelHint"></span>
     <datalist id="dlModels"></datalist>
@@ -664,19 +703,6 @@ body.view-lab #labFlow { display: flex; }
 <div class="alerts" id="alerts"></div>
 
 <div class="work">
-  <!-- 左: 試合一覧 -->
-  <aside class="col rail" aria-labelledby="hRuns">
-    <div class="sec-h">
-      <h2 id="hRuns">試合</h2>
-      <div class="end">
-        <div class="seg" role="group" aria-label="表示する試合">
-          <button type="button" id="rfRoom" aria-pressed="true">このルーム</button>
-          <button type="button" id="rfAll" aria-pressed="false">全部</button>
-        </div>
-      </div>
-    </div>
-    <div class="runs" id="runs"></div>
-  </aside>
 
   <!-- 中央: 推移と履歴 -->
   <main class="col center" id="center">
@@ -684,33 +710,6 @@ body.view-lab #labFlow { display: flex; }
       <div class="sec-h"><h2 id="hMap">マップ</h2><div class="end faint" id="mapSrc"></div></div>
       <div class="mapbox" id="mapbox"><canvas id="map" width="10" height="10" role="img" aria-label="盤面"></canvas><div class="maptip" id="maptip" hidden></div><div class="mapinfo" id="mapinfo"></div></div>
     </section>
-    <section class="chart-wrap" aria-labelledby="chartTitle">
-      <div class="sec-h">
-        <h2 id="chartTitle">スコア推移</h2>
-        <div class="seg" role="group" aria-label="グラフの種類">
-          <button type="button" id="cmTurns" aria-pressed="true">ターンごと</button>
-          <button type="button" id="cmRuns" aria-pressed="false">試合ごと</button>
-        </div>
-        <div class="end"><span class="hint" id="chartHint"></span></div>
-      </div>
-      <div class="legend" id="legend"></div>
-      <div class="chart" id="chart"></div>
-    </section>
-
-    <section class="run-head" id="runHead" aria-live="off"></section>
-    <div class="tabs" role="tablist" aria-label="選んだ試合の記録">
-      <button type="button" role="tab" id="tabTurns" aria-selected="true" aria-controls="tblWrap">ターン履歴</button>
-      <button type="button" role="tab" id="tabReport" aria-selected="false" aria-controls="tblWrap" tabindex="-1">診断と進化レポート</button>
-      <div class="tools" id="tblTools">
-        <div class="seg" role="group" aria-label="ターンの絞り込み（色: main=青・solver=黄土）">
-          <button type="button" data-tf="all" aria-pressed="true">全て</button>
-          <button type="button" data-tf="main" aria-pressed="false"><span class="key"><i class="m"></i>LLM</span></button>
-          <button type="button" data-tf="solver" aria-pressed="false"><span class="key"><i class="s"></i>方策</span></button>
-          <button type="button" data-tf="event" aria-pressed="false">イベント</button>
-        </div>
-      </div>
-    </div>
-    <div class="tbl-wrap" id="tblWrap" role="tabpanel" tabindex="0" aria-label="ターン履歴"></div>
   </main>
 
   <!-- 右: いまの試合（判断・マップ・エージェント） -->
@@ -744,6 +743,61 @@ body.view-lab #labFlow { display: flex; }
 </div>
 
 <!-- 学習: 地図を作る → 並べた地図で学習 → 統計。地図は全部同時に再生する（シミュレータだけ。CHaser サーバには触れない） -->
+<div class="stats" id="stats" hidden>
+  <div class="lab-tabs st-tabs" role="group" aria-label="統計の表示">
+    <button type="button" data-st="rooms" aria-pressed="true">ルームと試合</button>
+    <button type="button" data-st="rec" aria-pressed="false">試合の記録</button>
+    <button type="button" data-st="train" aria-pressed="false">学習の推移</button>
+    <button type="button" data-st="models" aria-pressed="false">モデルの特性</button>
+  </div>
+  <div class="st-pane" id="stRooms"></div>
+  <div class="st-pane st-rec" id="stRec" hidden>
+    <aside class="col rail" aria-labelledby="hRuns">
+      <div class="sec-h">
+        <h2 id="hRuns">試合</h2>
+        <div class="end">
+          <div class="seg" role="group" aria-label="表示する試合">
+            <button type="button" id="rfRoom" aria-pressed="true">このルーム</button>
+            <button type="button" id="rfAll" aria-pressed="false">全部</button>
+          </div>
+        </div>
+      </div>
+      <div class="runs" id="runs"></div>
+    </aside>
+    <div class="st-main">
+      <section class="chart-wrap" aria-labelledby="chartTitle">
+        <div class="sec-h">
+          <h2 id="chartTitle">スコア推移</h2>
+          <div class="seg" role="group" aria-label="グラフの種類">
+            <button type="button" id="cmTurns" aria-pressed="true">ターンごと</button>
+            <button type="button" id="cmRuns" aria-pressed="false">試合ごと</button>
+          </div>
+          <div class="end"><span class="hint" id="chartHint"></span></div>
+        </div>
+        <div class="legend" id="legend"></div>
+        <div class="chart" id="chart"></div>
+      </section>
+  
+      <section class="run-head" id="runHead" aria-live="off"></section>
+      <div class="tabs" role="tablist" aria-label="選んだ試合の記録">
+        <button type="button" role="tab" id="tabTurns" aria-selected="true" aria-controls="tblWrap">ターン履歴</button>
+        <button type="button" role="tab" id="tabReport" aria-selected="false" aria-controls="tblWrap" tabindex="-1">診断と進化レポート</button>
+        <div class="tools" id="tblTools">
+          <div class="seg" role="group" aria-label="ターンの絞り込み（色: main=青・solver=黄土）">
+            <button type="button" data-tf="all" aria-pressed="true">全て</button>
+            <button type="button" data-tf="main" aria-pressed="false"><span class="key"><i class="m"></i>LLM</span></button>
+            <button type="button" data-tf="solver" aria-pressed="false"><span class="key"><i class="s"></i>方策</span></button>
+            <button type="button" data-tf="event" aria-pressed="false">イベント</button>
+          </div>
+        </div>
+      </div>
+      <div class="tbl-wrap" id="tblWrap" role="tabpanel" tabindex="0" aria-label="ターン履歴"></div>
+    </div>
+  </div>
+  <div class="st-pane" id="stTrain" hidden></div>
+  <div class="st-pane" id="stModels" hidden></div>
+</div>
+
 <div class="lab" id="lab" hidden>
   <div class="lab-bar">
     <div class="grp"><label for="lmN">地図</label><input id="lmN" type="number" min="1" max="48" value="12" inputmode="numeric" /><span class="lb">枚</span></div>
@@ -754,6 +808,8 @@ body.view-lab #labFlow { display: flex; }
     <div class="grp"><label for="ltMin">時間</label><input id="ltMin" type="number" min="0.5" step="0.5" value="5" inputmode="decimal" /><span class="lb">分</span></div>
     <button class="btn primary" id="ltStart" type="button">この地図で学習</button>
     <button class="btn danger" id="ltStop" type="button" hidden>止める</button>
+    <span class="sep" aria-hidden="true"></span>
+    <div class="grp" role="group" aria-label="学習の LLM"><label class="chk" title="学習が終わるたびに、学習の LLM（試合中の LLM とは別）が結果を読み、評価関数・地図の作り方・学習のやり方を直す（.env の LAB_COACH）"><input type="checkbox" id="lcOn" />学習の LLM</label><input id="lcModel" list="dlModels" placeholder="試合の LLM と同じ" autocomplete="off" spellcheck="false" aria-label="学習の LLM のモデル" title="学習の LLM のモデル（空なら試合の LLM と同じ。.env の LAB_COACH_MODEL）" /><select id="lcEffort" aria-label="学習の LLM の思考の深さ" title="学習の LLM の思考の深さ（effort。.env の LAB_COACH_EFFORT）"></select></div>
     <label class="chk" title="試合をしていない間、毎回新しい地図で学習を続ける。試合が始まると止まる（.env の TRAIN_IDLE に保存）"><input type="checkbox" id="ltIdle" />試合をしていない間も学習を続ける</label>
   </div>
   <div class="lab-status" id="labStatus" aria-live="polite"></div>
@@ -1514,9 +1570,9 @@ function renderDecide() {
   const fr = (p.nearestFrontiers || []).slice(0, 3).map((t) => `<li><span>未探索 (${t.x},${t.y}) 距離${t.distance}</span><span class="mono">${esc(t.recommendedCmd2)}</span></li>`).join("");
   const chip = (t, n) => `<span class="cmd ${srcOf(t, n) || "none"}">${esc(t["cmd" + n] || "-")}</span>`;
   el.innerHTML = `
-    <div class="now"><div class="big ${src}">${esc(p.command)}</div><div><span class="badge ${badge.cls}">${esc(badge.text)}</span><div class="faint adv" style="font-size:var(--t-s);margin-top:4px">確信度 ${Math.round((p.confidence ?? 0) * 100)}%</div></div></div>
+    <div class="now"><div class="big ${src}">${esc(p.command)}</div><div><span class="badge ${badge.cls}">${esc(badge.text)}</span></div></div>
     <p class="why">${esc(p.reason || "")}</p>${why}${planLine}
-    <div style="margin-top:12px;font-size:var(--t-s)" class="dim adv">LLM 応答（${hasLat ? "このフェーズ" : "直前ターン"}） <b style="color:var(--ink)" class="mono">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
+    <div style="margin-top:12px;font-size:var(--t-s)" class="dim">LLM 応答（${hasLat ? "このフェーズ" : "直前ターン"}） <b style="color:var(--ink)" class="mono">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
     <div class="meter ${lat >= budget ? "over" : ""}" role="meter" aria-label="思考予算の使用" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(ratio * 100)}"><i style="width:${ratio * 100}%"></i></div>
     ${last ? `<div class="prev"><span>直前 T${last.turn}</span>${chip(last, 1)}${chip(last, 2)}<span class="mono">${fmt(last.estimatedScoreAfter)}点</span></div>` : ""}
     ${cands || fr ? `<details class="cand"><summary>候補ルート</summary><ul>${cands}${fr}</ul></details>` : ""}`;
@@ -1999,5 +2055,6 @@ function connect() {
 })();
 </script>
 <script src="/lab.js"></script>
+<script src="/stats.js"></script>
 </body>
 </html>
