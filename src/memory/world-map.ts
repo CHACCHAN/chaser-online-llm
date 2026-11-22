@@ -78,7 +78,12 @@ export interface TileRecord {
   lastSeenTurn: number;
   visitedCount: number;
   fromGlobalMap?: boolean;
+  /** フィールドの外（端で観測の要素が減って分かった所、または Webマップの外）。通れない壁として扱う */
+  offField?: boolean;
 }
+
+/** フィールドの外のマスを表す値（岩盤と同じく通れない。場外へ出ると -500） */
+export const OFF_FIELD_VALUE = 10;
 
 export interface CandidateEvaluation {
   command: string;
@@ -342,6 +347,8 @@ function parseCoordKey(key: string): [number, number] {
 
 export class WorldMap {
   private segments: Map<string, TileRecord>[] = [new Map()];
+  /** 区画ごとの、フィールドの外と分かったマス（segments と同じ並び） */
+  private offFieldSegs: Map<string, TileRecord>[] = [new Map()];
   private segmentIndex = 0;
   private x = 0;
   private y = 0;
@@ -425,14 +432,69 @@ export class WorldMap {
   }
 
   public getTile(x: number, y: number): TileRecord | undefined {
-    return this.currentMap.get(coordKey(x, y));
+    return this.tileByKey(coordKey(x, y));
   }
 
-  /** 今の区画の分かっているマスをすべて回る（経路探索用。座標は今の区画のローカル座標） */
+  /** マスの記録。無ければ、フィールドの外と分かっていれば壁の記録を返す */
+  private tileByKey(key: string): TileRecord | undefined {
+    const rec = this.currentMap.get(key);
+    if (rec) return rec;
+    const off = this.offFieldSegs[this.segmentIndex]?.get(key);
+    if (off) return off;
+    if (this.globalGrid && this.globalOffset) {
+      const [x, y] = parseCoordKey(key);
+      const gx = x + this.globalOffset[0];
+      const gy = y + this.globalOffset[1];
+      const h = this.globalGrid.length;
+      const w = this.globalGrid[0]?.length ?? 0;
+      if (gx < 0 || gy < 0 || gx >= w || gy >= h) return { value: OFF_FIELD_VALUE, firstSeenTurn: this.globalGridTurn, lastSeenTurn: this.globalGridTurn, visitedCount: 0, offField: true };
+    }
+    return undefined;
+  }
+
+  /** フィールドの外と分かったマスを記録する（端の観測で要素が減った所） */
+  private markOffField(x: number, y: number, turn: number): void {
+    const key = coordKey(x, y);
+    if (this.currentMap.has(key)) return;
+    const m = this.offFieldSegs[this.segmentIndex]!;
+    const ex = m.get(key);
+    m.set(key, { value: OFF_FIELD_VALUE, firstSeenTurn: ex?.firstSeenTurn ?? turn, lastSeenTurn: turn, visitedCount: 0, offField: true });
+  }
+
+  /**
+   * 今の区画の分かっているマスをすべて回る（経路探索用。座標は今の区画のローカル座標）。
+   * フィールドの外と分かったマス（端の観測・Webマップの外周1マス）も通れない壁として回る（外へ探索しに行かないように）
+   */
   public forEachKnownTile(cb: (x: number, y: number, rec: TileRecord) => void): void {
     for (const [k, rec] of this.currentMap) {
       const i = k.indexOf(",");
       cb(Number(k.slice(0, i)), Number(k.slice(i + 1)), rec);
+    }
+    const seen = new Set<string>();
+    for (const [k, rec] of this.offFieldSegs[this.segmentIndex] ?? []) {
+      if (this.currentMap.has(k)) continue;
+      seen.add(k);
+      const [x, y] = parseCoordKey(k);
+      cb(x, y, rec);
+    }
+    if (this.globalGrid && this.globalOffset) {
+      const h = this.globalGrid.length;
+      const w = this.globalGrid[0]?.length ?? 0;
+      const [ox, oy] = this.globalOffset;
+      const ring = (gx: number, gy: number) => {
+        const k = coordKey(gx - ox, gy - oy);
+        if (seen.has(k) || this.currentMap.has(k)) return;
+        seen.add(k);
+        cb(gx - ox, gy - oy, { value: OFF_FIELD_VALUE, firstSeenTurn: this.globalGridTurn, lastSeenTurn: this.globalGridTurn, visitedCount: 0, offField: true });
+      };
+      for (let gx = -1; gx <= w; gx++) {
+        ring(gx, -1);
+        ring(gx, h);
+      }
+      for (let gy = 0; gy < h; gy++) {
+        ring(-1, gy);
+        ring(w, gy);
+      }
     }
   }
 
@@ -821,6 +883,83 @@ export class WorldMap {
     });
   }
 
+  /**
+   * 端の 3×3 観測（要素が減ったもの）を 9 マスの並びに戻す。抜けたマス（フィールドの外）は undefined、その位置を off に返す。
+   * 抜けるのは上か下の1行と、左か右の1列（公式: 返り値の要素が減ったらフィールドの端）。どれが抜けたかは
+   * 1) Webマップの位置合わせが済んでいればフィールドの大きさから、2) 中心（自機の番号）の位置から、3) 分かっているマスとの食い違いが一番少ないもの、の順で決める。
+   * 決められなければ null（使わない）。中心がフィールドの外（場外へ出た）の観測は扱わない
+   */
+  private expandEdgeValues(
+    values: number[],
+    spec: CommandSpec,
+    landing: [number, number],
+    prev: [number, number],
+    isCmd1: boolean,
+  ): { values: number[]; off: number[] } | null {
+    const cands: { values: number[]; off: number[] }[] = [];
+    for (const mr of [-1, 0, 2]) {
+      for (const mc of [-1, 0, 2]) {
+        if (mr === -1 && mc === -1) continue;
+        if ((mr === -1 ? 3 : 2) * (mc === -1 ? 3 : 2) !== values.length) continue;
+        const full: (number | undefined)[] = new Array(9).fill(undefined);
+        const off: number[] = [];
+        let k = 0;
+        for (let r = 0; r < 3; r++) {
+          for (let c = 0; c < 3; c++) {
+            if (r === mr || c === mc) off.push(r * 3 + c);
+            else full[r * 3 + c] = values[k++];
+          }
+        }
+        cands.push({ values: full as number[], off });
+      }
+    }
+    if (cands.length === 0) return null;
+    const centered = spec.obsOffset[0] === 0 && spec.obsOffset[1] === 0;
+    const sameOff = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+    // 1) フィールドの大きさが分かっていれば、抜けるはずのマスが決まる（動けた時の着地点・動けなかった時の元の位置）
+    if (this.globalGrid && this.globalOffset) {
+      const h = this.globalGrid.length;
+      const w = this.globalGrid[0]?.length ?? 0;
+      const expected = ([x, y]: [number, number]) => {
+        const off: number[] = [];
+        const cx = x + spec.obsOffset[0] + this.globalOffset![0];
+        const cy = y + spec.obsOffset[1] + this.globalOffset![1];
+        for (let i = 0; i < 9; i++) {
+          const gx = cx + (i % 3) - 1;
+          const gy = cy + Math.floor(i / 3) - 1;
+          if (gx < 0 || gy < 0 || gx >= w || gy >= h) off.push(i);
+        }
+        return off;
+      };
+      const hits = [landing, prev].map(expected).map((e) => cands.filter((c) => sameOff(c.off, e))).filter((m) => m.length === 1);
+      if (hits.length > 0) return hits[0]![0]!;
+    }
+
+    // 2) 中心が自機の番号になる並べ方が1つだけなら、それ
+    if (centered) {
+      const withSelf = cands.filter((c) => c.values[4] !== undefined && c.values[4] >= 1000 && c.values[4] === this.selfTileId);
+      if (withSelf.length === 1) return withSelf[0]!;
+      if (withSelf.length > 1) cands.splice(0, cands.length, ...withSelf);
+    }
+
+    // 3) 分かっているマスとの食い違いが一番少ないものが1つだけなら、それ
+    let best: { values: number[]; off: number[] } | null = null;
+    let bestScore = Infinity;
+    let tie = false;
+    for (const c of cands) {
+      const score = Math.min(this.countMismatches(landing[0], landing[1], c.values, isCmd1), this.countMismatches(prev[0], prev[1], c.values, isCmd1));
+      if (score < bestScore) {
+        best = c;
+        bestScore = score;
+        tie = false;
+      } else if (score === bestScore) {
+        tie = true;
+      }
+    }
+    return best && !tie && bestScore === 0 ? best : null;
+  }
+
   private countMismatches(
     centerX: number,
     centerY: number,
@@ -847,6 +986,7 @@ export class WorldMap {
   private startNewSegment(warpTileValue: number | null, fromX: number, fromY: number, turn: number): void {
     const prevSegment = this.segmentIndex;
     this.segments.push(new Map());
+    this.offFieldSegs.push(new Map());
     this.segmentIndex = this.segments.length - 1;
     this.x = 0;
     this.y = 0;
@@ -911,6 +1051,20 @@ export class WorldMap {
     let nextX = prevX + spec.move[0];
     let nextY = prevY + spec.move[1];
     const hasMove = spec.move[0] !== 0 || spec.move[1] !== 0;
+
+    // 端の観測（フィールドの外のマスは返ってこないので要素が 9 より少ない）を 3×3 の正しい位置に並べ直す。
+    // 並べ方が決められなければ今までどおり使わない（以前は端の観測を全部捨てていたので、端で踏んだマスが
+    // 「まだアイテムがある」ままになり、取りに行っては戻るのを繰り返していた）
+    let offCells: number[] = [];
+    if (values && spec.obsShape === "3x3" && values.length > 0 && values.length < 9) {
+      const exp = this.expandEdgeValues(values, spec, [nextX, nextY], [prevX, prevY], phase === "CMD1");
+      if (exp) {
+        values = exp.values;
+        offCells = exp.off;
+      } else {
+        values = null;
+      }
+    }
 
     const preKnownLanding = this.getTile(nextX, nextY)?.value ?? null;
     const preLandingVisited = (this.getTile(nextX, nextY)?.visitedCount ?? 0) > 0;
@@ -1004,6 +1158,8 @@ export class WorldMap {
           }
         }
 
+        for (const i of offCells) this.markOffField(cx + (i % 3) - 1, cy + Math.floor(i / 3) - 1, turn);
+
         // 移動後の観測の中心が自機ではなくワープの番号なら、ワープを踏んだ。観測は入口のまわりで、このあと着地先へ飛ぶ
         // （実測: CMD1 の中心が自機以外になるのはワープの番号の時だけ。room719 06-47 で 70 回。気づかずに次の手を古い地図で選び、罠に4回着地した）
         const center = values[4];
@@ -1017,7 +1173,7 @@ export class WorldMap {
         }
 
         if (spec.obsOffset[0] === 0 && spec.obsOffset[1] === 0) {
-          this.lastGridValues = values.slice(0, 9);
+          this.lastGridValues = values.slice(0, 9).map((v) => (v === undefined ? OFF_FIELD_VALUE : v));
           // Web マップに自機の位置が載るなら、ワープ後の位置は次の Web マップ（ワープ直後にすぐ取り直す）で決める。
           // 3×3 の見た目だけで「前に来た区画」「Web マップのこの位置」と決めると、穴ばかりの所で別の場所に一致してずれていた
           const webPositions = this.globalGrid !== null && this.webPlayerPosKnown;
@@ -1067,7 +1223,7 @@ export class WorldMap {
         const nKey = coordKey(nx, ny);
         const first = cur.first ?? dir;
         if (nKey === targetKey) return { dir: first, distance: cur.steps + 1 };
-        const rec = this.currentMap.get(nKey);
+        const rec = this.tileByKey(nKey);
         if (!rec) continue;
         const info = getTileInfo(rec.value);
         if (!info.passable || info.hazard) continue;
@@ -1111,7 +1267,7 @@ export class WorldMap {
           parent.set(nKey, curKey);
           return build(nKey);
         }
-        const rec = this.currentMap.get(nKey);
+        const rec = this.tileByKey(nKey);
         if (!rec) continue;
         const info = getTileInfo(rec.value);
         if (!info.passable || info.hazard) continue;
@@ -1182,7 +1338,7 @@ export class WorldMap {
         const ny = cur.y + dy;
         const nKey = coordKey(nx, ny);
         const firstStep = cur.firstStep ?? dir;
-        const rec = this.currentMap.get(nKey);
+        const rec = this.tileByKey(nKey);
 
         if (!rec) {
           if (!seenFrontiers.has(nKey)) {
@@ -1440,7 +1596,7 @@ export class WorldMap {
         else if (enemyAt.has(k)) row += enemyAt.get(k);
         else if (opts.planTarget && opts.planTarget[0] === x && opts.planTarget[1] === y) row += "P";
         else {
-          const rec = this.currentMap.get(k);
+          const rec = this.tileByKey(k);
           row += !rec ? "?" : rec.value >= 1000 ? "E" : getTileInfo(rec.value).symbol;
         }
       }

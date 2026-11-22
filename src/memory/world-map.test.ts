@@ -155,3 +155,40 @@ describe("ワープを踏んだ直後", () => {
     expect(map.getPosition()).toEqual([-1, 0]);
   });
 });
+
+describe("フィールドの端の観測（要素が減る）", () => {
+  test("左の列が無い観測を正しい位置に並べ、踏んだマスを穴にし、外を壁として覚える", () => {
+    const map = new WorldMap();
+    // 左端に立っている: 返り値は [中,右] ×3 行（本番の記録: "12,12,1000,12,12,12"）
+    map.applyObservation("CMD1", "gr", [3, 0, 1000, 5, 0, 7], 1);
+    expect(map.getTile(0, -1)?.value).toBe(3);
+    expect(map.getTile(1, 0)?.value).toBe(5);
+    expect(map.getTile(1, 1)?.value).toBe(7);
+    expect(map.getTile(-1, 0)?.offField).toBe(true);
+    expect(getTileInfo(map.getTile(-1, 0)!.value).passable).toBe(false);
+    // 上へ歩いてアイテム(3)を拾う。着地したマスは穴(0)になる
+    map.applyObservation("CMD2", "wu", [0, 0, 1000, 0, 0, 5], 1);
+    expect(map.getPosition()).toEqual([0, -1]);
+    expect(map.getTile(0, -1)?.value).toBe(0);
+    expect(map.getTile(0, -1)?.visitedCount).toBe(1);
+    // 外のマスは経路探索で回るが、位置合わせに使う「分かっているマスの数」には入らない
+    let off = 0;
+    map.forEachKnownTile((_x, _y, rec) => { if (rec.offField) off += 1; });
+    expect(off).toBe(4); // x=-1 の y=-2..1
+  });
+
+  test("隅（4要素）・上の行が無い（6要素）も中心の自機の位置で決める", () => {
+    const map = new WorldMap();
+    // 右上の隅: [左,中] ×2 行、中心は index 1
+    map.applyObservation("CMD1", "gr", [4, 1000, 9, 0], 1);
+    expect(map.getTile(-1, 0)?.value).toBe(4);
+    expect(map.getTile(-1, 1)?.value).toBe(9);
+    expect(map.getTile(0, 1)?.value).toBe(0);
+    expect(map.getTile(1, 0)?.offField).toBe(true);
+    expect(map.getTile(0, -1)?.offField).toBe(true);
+    // 中心が自機でなく決められない観測は使わない
+    const m2 = new WorldMap();
+    m2.applyObservation("CMD1", "gr", [12, 12, 12], 1);
+    expect(m2.knownTileCount()).toBe(0);
+  });
+});
