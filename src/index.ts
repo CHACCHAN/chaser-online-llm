@@ -3,7 +3,7 @@ import { Client, loginWithRetry } from "./client";
 import { loadAgentConfig } from "./config";
 import { recoverInterruptedEvolution, runPostMatchEvolution, runPostMatchTraining } from "./evolve";
 import { waitAwareClientConfig } from "./client/wait-status";
-import { boolSetting, numSetting } from "./settings";
+import { boolSetting, getSetting, numSetting } from "./settings";
 import { getRoomProfile, knownTotalTurns, loadRoomProfiles } from "./memory/knowledge-store";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { summarizeMatchPlan } from "./agent/match-plan";
@@ -17,7 +17,8 @@ import { lab } from "./sim/lab";
 
 async function main() {
   const config = loadAgentConfig();
-  const server = startWebUiServer(config.port);
+  // 待ち受けるアドレス: WEBUI_BIND（既定 127.0.0.1）。docker の中ではホストの ports で範囲を決めるので全部で待ち受ける（compose.yaml の WEBUI_IN_CONTAINER）
+  const server = startWebUiServer(config.port, Bun.env.WEBUI_IN_CONTAINER === "1" ? "0.0.0.0" : getSetting("WEBUI_BIND") || "127.0.0.1");
   // 試合をしていない間の学習（TRAIN_IDLE / WebUI の「学習」）は今のルームに似せた地図も使う
   lab.roomForIdle = () => config.room;
   lab.startIdleLoop();

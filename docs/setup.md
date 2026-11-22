@@ -21,7 +21,7 @@ docker compose down                  # 止める
 
 - イメージは `.devcontainer/Dockerfile`（Bun・git・ripgrep など実行に要るものだけ）、起動の定義は `compose.yaml`。プロジェクトは `/app` にマウントするので、エージェントが書き換えたソルバー・`knowledge/`・`var/`（試合の記録）はそのまま手元に残る。依存は名前付きボリューム `node_modules` に入り、起動のたびに `bun install --frozen-lockfile` する（`.devcontainer/chaser-entrypoint.sh`）。
 - コンテナは root ではなく UID 1000 で動く（Claude Code は root では動かさない）。手元の UID が違う時は `UID=$(id -u) GID=$(id -g) docker compose up -d --build`。
-- WebUI には認証が無く `.env`（鍵）も編集できるので、既定では `127.0.0.1` だけで開く。他のマシンから開く時は `compose.yaml` の `ports` を変える（その時は自分で守ること）。
+- WebUI には認証が無く `.env`（鍵）も編集できるので、既定では `127.0.0.1` だけで開く。公開範囲は `.env` の `WEBUI_BIND`（`127.0.0.1` = このマシンだけ・`0.0.0.0` = どこからでも・LAN の IP）。docker compose ではホスト側の `ports` に、`bun run start` では待ち受けるアドレスになる。変えたら `docker compose up -d`（`bun run start` は再起動）。広げた時は自分で守ること（ファイアウォール・VPN など）。
 - サブスクリプションでつなぐ時のログイン: `docker compose exec chaser bun run claude-login`（または `.env` の `LLM_OAUTH_TOKEN`）。
 - ホストのローカル LLM につなぐ時、コンテナからは `localhost` ではなく `http://host.docker.internal:<port>` を `LLM_API_URL` にする（Linux では `compose.yaml` に `extra_hosts: ["host.docker.internal:host-gateway"]` を足す）。
 - devcontainer の中から `docker compose up` すると、マウントの元がホストのパスとして解釈されて動かないことがある（docker-outside-of-docker のため）。devcontainer では `bun run start` を使う。

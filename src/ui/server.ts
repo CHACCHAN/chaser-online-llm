@@ -70,9 +70,10 @@ function listRecentRuns(limit = 20) {
   return items;
 }
 
-export function startWebUiServer(port: number) {
+export function startWebUiServer(port: number, hostname = "127.0.0.1") {
   const server = Bun.serve({
     port,
+    hostname,
     idleTimeout: 255,
     async fetch(req) {
       const url = new URL(req.url);

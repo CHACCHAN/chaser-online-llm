@@ -289,6 +289,13 @@ export const SETTINGS = {
 
   // --- その他 ---
   PORT: { label: "WebUI のポート", group: "other", description: "WebUI のポート", defaultValue: "3456", advanced: true },
+  WEBUI_BIND: {
+    label: "WebUI を開く範囲",
+    group: "other",
+    description: "WebUI を待ち受けるアドレス。127.0.0.1 = このマシンだけ（既定）/ 0.0.0.0 = どこからでも（WebUI には認証が無く .env の鍵も編集できるので、ファイアウォール・VPN などで自分で守ること）/ 特定の LAN の IP。docker compose ではホスト側の公開範囲（compose.yaml の ports）になる。変えたら再起動（docker なら docker compose up -d）",
+    defaultValue: "127.0.0.1",
+    advanced: true,
+  },
 } as const satisfies Record<string, SettingDef>;
 
 export type SettingKey = keyof typeof SETTINGS;
@@ -304,7 +311,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "main", title: "LLM（試合中）", keys: ["AGENT_USE_MAIN", "AGENT_CALL_MODE", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
   { id: "post", title: "試合後（進化・レビュー）", keys: ["AGENT_EVOLVE", "AGENT_EVOLVE_MIN_TURNS", "AGENT_POST_MATCH_TIMEOUT_MIN", "AGENT_REVIEW", "AGENT_REVIEW_TIMEOUT_SEC", "AGENT_REVIEW_KEEP"] },
-  { id: "other", title: "その他", keys: ["PORT"] },
+  { id: "other", title: "その他", keys: ["PORT", "WEBUI_BIND"] },
   /** .env に残っている、使われなくなった設定（OBSOLETE_SETTINGS） */
   { id: "obsolete", title: "使われなくなった項目", keys: [] },
 ];

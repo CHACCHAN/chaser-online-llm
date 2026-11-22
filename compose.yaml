@@ -1,5 +1,5 @@
 # docker compose up -d --build で WebUI（ダッシュボード）をサービスとして起動する。
-# 設定はプロジェクトの .env（PORT もここから読む）。試合はブラウザから「準備」→「開始」。
+# 設定はプロジェクトの .env（PORT・WEBUI_BIND もここから読む）。試合はブラウザから「準備」→「開始」。
 # 実行ユーザーをホストに合わせる時: UID=$(id -u) GID=$(id -g) docker compose up -d --build
 services:
   chaser:
@@ -12,14 +12,18 @@ services:
     image: chaser-online-llm
     init: true
     restart: unless-stopped
-    # WebUI には認証が無く、.env（鍵）も編集できるので、既定ではこのマシンからだけ開ける
+    # WebUI には認証が無く、.env（鍵）も編集できるので、既定ではこのマシンからだけ開ける。
+    # 公開範囲は .env の WEBUI_BIND（127.0.0.1 = このマシンだけ / 0.0.0.0 = どこからでも / LAN の IP）
     ports:
-      - "127.0.0.1:${PORT:-3456}:${PORT:-3456}"
+      - "${WEBUI_BIND:-127.0.0.1}:${PORT:-3456}:${PORT:-3456}"
+    environment:
+      # コンテナの中では全部で待ち受ける（公開範囲は上の ports で決まる）
+      WEBUI_IN_CONTAINER: "1"
     volumes:
       - .:/app
       - node_modules:/app/node_modules
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:${PORT:-3456}/api/state", "-o", "/dev/null"]
+      test: [ "CMD", "curl", "-fsS", "http://localhost:${PORT:-3456}/api/state", "-o", "/dev/null" ]
       interval: 30s
       timeout: 5s
       start_period: 60s
