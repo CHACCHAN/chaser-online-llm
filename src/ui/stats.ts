@@ -3,6 +3,7 @@ import path from "node:path";
 import { loadRoomProfiles } from "../memory/knowledge-store";
 import { isRunDirName, POLICY_TRAIN_LOG_PATH, RUNS_DIR } from "../paths";
 import { TRIGGER_DEFS } from "../agent/triggers";
+import { aggregateReviews, loadRunReview, type TriggerReview } from "../agent/trigger-review";
 import { lab } from "../sim/lab";
 
 /**
@@ -84,7 +85,7 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 
 /** turns.jsonl から LLM が動かした手を数える（前の構成では LLM が手を決めた＝source main、今は LLM の目標で方策が動いた＝理由が「指定の目標」。大きいので、ファイルが変わった時だけ読み直す） */
 const phaseCache = new Map<string, { key: string; directed: number; phases: number }>();
-function countDirected(runDir: string): { directed: number; phases: number } {
+function countDirected(runDir: string, startModel: string | null = null): { directed: number; phases: number } {
   const file = path.join(runDir, "turns.jsonl");
   if (!existsSync(file)) return { directed: 0, phases: 0 };
   const st = statSync(file);
@@ -96,7 +97,9 @@ function countDirected(runDir: string): { directed: number; phases: number } {
   for (const line of readFileSync(file, "utf-8").split("\n")) {
     if (!line) continue;
     try {
-      const o = JSON.parse(line) as { cmd1?: string | null; cmd2?: string | null; cmd1Reason?: string; cmd2Reason?: string; cmd1Source?: string; cmd2Source?: string; usedHarness?: boolean };
+      const o = JSON.parse(line) as { cmd1?: string | null; cmd2?: string | null; cmd1Reason?: string; cmd2Reason?: string; cmd1Source?: string; cmd2Source?: string; usedHarness?: boolean; model?: string };
+      // LLM が切り替えたモデルで打った手も、LLM が動かした手に数える
+      const switched = typeof o.model === "string" && startModel !== null && o.model !== startModel;
       for (const [c, r, src] of [
         [o.cmd1, o.cmd1Reason, o.cmd1Source],
         [o.cmd2, o.cmd2Reason, o.cmd2Source],
@@ -104,7 +107,7 @@ function countDirected(runDir: string): { directed: number; phases: number } {
         if (!c) continue;
         phases += 1;
         const main = src ? src === "main" : o.usedHarness === true;
-        if (main || (typeof r === "string" && r.includes("指定の目標"))) directed += 1;
+        if (main || switched || (typeof r === "string" && r.includes("指定の目標"))) directed += 1;
       }
     } catch {
       // 壊れた行は飛ばす
@@ -137,7 +140,7 @@ export function listRunStats(limit = 500): RunStat[] {
       const score = official ?? estimated;
       const usage = s.agent?.usage ?? {};
       const total = usage.total ?? usage.main ?? {};
-      const dp = countDirected(dir);
+      const dp = countDirected(dir, typeof s.policyModel === "string" ? s.policyModel : null);
       out.push({
         runId: s.runId ?? name,
         room: num(s.room),
@@ -238,6 +241,34 @@ export function trainStats(limit = 500): TrainStat[] {
   return out.slice(-limit).reverse();
 }
 
+/** きっかけの評価を試合ごとに読む（ファイルが変わった時だけ読み直す） */
+const reviewCache = new Map<string, { key: string; review: TriggerReview | null }>();
+function cachedReview(runId: string): TriggerReview | null {
+  const dir = path.join(RUNS_DIR, runId);
+  const f = existsSync(path.join(dir, "trigger-review.json")) ? path.join(dir, "trigger-review.json") : path.join(dir, "turns.jsonl");
+  if (!existsSync(f)) return null;
+  const st = statSync(f);
+  const key = `${f}:${st.size}:${st.mtimeMs}`;
+  const hit = reviewCache.get(runId);
+  if (hit?.key === key) return hit.review;
+  const review = loadRunReview(dir);
+  reviewCache.set(runId, { key, review });
+  return review;
+}
+
+/** きっかけの評価をルームごと（と全体 = room null）にまとめる */
+export function triggerReviewStats(runs: RunStat[]) {
+  const withReview = runs.filter((r) => r.triggers).map((r) => ({ room: r.room, review: cachedReview(r.runId) })).filter((x): x is { room: number | null; review: TriggerReview } => x.review !== null);
+  const rooms = [...new Set(withReview.map((x) => x.room).filter((r): r is number => r !== null))];
+  return {
+    all: { runs: withReview.length, triggers: aggregateReviews(withReview.map((x) => x.review)) },
+    rooms: Object.fromEntries(rooms.map((room) => {
+      const rs = withReview.filter((x) => x.room === room).map((x) => x.review);
+      return [String(room), { runs: rs.length, triggers: aggregateReviews(rs) }];
+    })),
+  };
+}
+
 export function statsOverview() {
   const runs = listRunStats();
   const m = lab.models();
@@ -245,6 +276,7 @@ export function statsOverview() {
     rooms: roomStats(runs),
     runs,
     training: trainStats(),
+    triggerReview: triggerReviewStats(runs),
     triggerDefs: TRIGGER_DEFS.map((d) => ({ id: d.id, label: d.label, source: d.source, doc: d.doc })),
     models: { play: m.play, list: m.models.map((x) => ({ id: x.id, name: x.name, trait: x.trait, trained: x.trained, updatedAt: x.updatedAt, profile: x.profile, tags: x.tags })) },
   };

@@ -13,6 +13,7 @@ import { addUsage, emptyUsage, totalTokens, type UsageTotals } from "./usage";
 import { checkOfficialVersion, type OfficialVersionCheck } from "../perception/official-check";
 import { defaultMatchPlan, type MatchPlan, matchPlanChoicesText, parseMatchPlan } from "./match-plan";
 import type { FiredTrigger } from "./triggers";
+import { roomTriggerHistoryText } from "./trigger-review";
 
 /** 試合中の LLM に見せるモデルの情報（きっかけで呼んだ時） */
 export interface ModelContext {
@@ -775,6 +776,8 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
       "",
       "## 試合の設定で選べるもの（返答の JSON の model・triggers・guide）",
       matchPlanChoicesText(),
+      "",
+      roomTriggerHistoryText(room) || "## このルームのきっかけの成績\n(まだない。きっかけを記録した試合が無い。既定から始め、試合後の評価を次に使う)",
     ].join("\n"),
     timeoutSec * 1000,
   );

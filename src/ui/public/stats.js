@@ -57,7 +57,7 @@
       tile("試合", fmt(runs.length), `${d.rooms.length} ルーム・5ターン以上 ${real.length} 試合`),
       tile("一番の得点", best ? fmt(best.highScore) : "-", best ? `ルーム ${best.room}` : ""),
       tile("LLM の費用（試合中）", usd(cost), llmRuns.length ? `${llmRuns.length} 試合・1試合 ${usd(cost / llmRuns.length)}・${fmt(llmRuns.reduce((s, r) => s + r.llm.calls, 0))} 回` : "LLM を使った試合なし"),
-      tile("LLM が動かした手", pct(dir, ph), ph ? `${fmt(dir)} / ${fmt(ph)} 手（LLM を使った試合。LLM が手を決めた・LLM の目標で方策が動いた）` : ""),
+      tile("LLM が動かした手", pct(dir, ph), ph ? `${fmt(dir)} / ${fmt(ph)} 手（LLM を使った試合。LLM が手を決めた・LLM の目標で方策が動いた・LLM が切り替えたモデルで打った）` : ""),
       tile("学習", `${acc} / ${d.training.length}`, "採用 / 回数（確かめ用の地図ではっきり良くなった時だけ採用）"),
       (() => {
         const tr = runs.filter((r) => r.triggers), tt = tr.reduce((s, r) => s + r.turns, 0);
@@ -90,11 +90,22 @@
       <td class="n">${r.llm.calls ? pct(r.llm.directedPhases, r.llm.phases) : "-"}</td>
       <td class="n" title="${r.triggers ? esc(Object.entries(r.triggers.counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${trigName(k)} ${v}`).join("\n") || "鳴らなかった") : "記録を始める前の試合"}">${r.triggers ? fmt(Object.values(r.triggers.counts).reduce((a, b) => a + b, 0)) : "-"}</td></tr>`).join("");
 
+    // きっかけの評価（試合後の trigger-review.json をまとめたもの。選んだルームがあればそのルームだけ）
+    const tv = T.room !== null ? d.triggerReview?.rooms?.[String(T.room)] : d.triggerReview?.all;
+    const modelName = (id) => d.models.list.find((m) => m.id === id)?.name ?? id;
+    const after = (a, base) => a.n ? `<span class="${base !== null && a.perTurn !== null && a.perTurn < base ? "neg" : ""}">${n1(a.perTurn)}</span> <span class="dim">(${a.n}${a.hitAfter ? `・当て${a.hitAfter}` : ""})</span>` : "-";
+    const trigRows = (tv?.triggers || []).map((a) => `<tr title="${esc(T.data.triggerDefs.find((x) => x.id === a.id)?.doc || "")}">
+      <td>${esc(a.label)}</td><td class="n">${fmt(a.runs)}</td><td class="n">${fmt(a.fired)} <span class="dim">(${a.turns ? n1((a.fired / a.turns) * 100) : "-"})</span></td><td class="n">${fmt(a.called)}</td>
+      <td class="n">${fmt(a.plan)}</td><td class="n">${fmt(a.cont)}</td><td>${a.switched ? Object.entries(a.switchTo).map(([k, v]) => `${esc(modelName(k))} ${v}`).join("・") : "-"}</td><td class="n">${fmt(a.noReply)}</td>
+      <td class="n">${after(a.afterCalled, a.matchPerTurn)}</td><td class="n">${after(a.afterNotCalled, a.matchPerTurn)}</td><td class="n">${n1(a.matchPerTurn)}</td></tr>`).join("");
+    const trigSection = `<section><div class="st-h"><h2>きっかけの評価${T.room !== null ? `（ルーム ${T.room}）` : ""}</h2><span class="dim">試合後に、きっかけごとに鳴った回数・LLM を呼んだ回数・LLM の選択と、その後 10 ターンの推定得点/ターン（括弧は回数・当てられた回数）を数える。試合平均より低いものは赤。次の試合の準備の LLM がこれを見て、使うきっかけ・しきい値・目安を選ぶ</span></div>
+        <div class="stbl-wrap"><table class="stbl"><thead><tr><th>きっかけ</th><th class="n">試合</th><th class="n">鳴った (100ターンあたり)</th><th class="n">呼んだ</th><th class="n">目標</th><th class="n">そのまま</th><th>モデル切替</th><th class="n">返答なし</th><th class="n">呼んだ後</th><th class="n">呼ばなかった後</th><th class="n">試合平均</th></tr></thead><tbody>${trigRows || `<tr><td colspan="11" class="dim">きっかけを記録した試合がまだありません</td></tr>`}</tbody></table></div></section>`;
+
     $("#stRooms").innerHTML = `<div class="tiles">${tiles}</div>
       <section><div class="st-h"><h2>ルーム</h2><span class="dim">行を押すと、そのルームの試合だけを下に出す。1ターンの得点は5ターン以上の試合から（公式があれば公式、なければ推定）</span></div>
         <div class="stbl-wrap"><table class="stbl"><thead><tr><th>ルーム</th><th class="n">試合</th><th class="n">最高</th><th class="n">1ターン 最高</th><th class="n">1ターン 平均</th><th class="n">全ターン</th><th>大きさ</th><th>Webマップ</th><th class="n">当てられた</th><th class="n">LLM 費用</th><th>終わり方</th></tr></thead><tbody>${roomRows || `<tr><td colspan="11" class="dim">まだ試合がありません</td></tr>`}</tbody></table></div></section>
-      <section><div class="st-h"><h2>試合${T.room !== null ? `（ルーム ${T.room}）` : ""}</h2><span class="dim">得点は公式（薄い字は推定）。「ずれ」は公式 − 推定。「LLM が動かした」は、LLM が手を決めた（前の構成）か、LLM の目標で方策が動いた（今の構成）手の割合</span>${T.room !== null ? `<button class="btn quiet" type="button" id="stAllRooms">全部のルーム</button>` : ""}</div>
-        <div class="stbl-wrap"><table class="stbl"><thead><tr><th>開始</th><th>ルーム</th><th class="n">ターン</th><th class="n">得点</th><th class="n">1ターン</th><th class="n">当てられた</th><th class="n">ずれ</th><th>終わり方</th><th>方策</th><th>LLM</th><th class="n">呼んだ回数</th><th class="n">費用</th><th class="n">LLM が動かした</th><th class="n" title="試合中の LLM を呼ぶきっかけが鳴った回数。マウスを載せると内訳">きっかけ</th></tr></thead><tbody>${runRows || `<tr><td colspan="14" class="dim">試合がありません</td></tr>`}</tbody></table></div></section>`;
+      <section><div class="st-h"><h2>試合${T.room !== null ? `（ルーム ${T.room}）` : ""}</h2><span class="dim">得点は公式（薄い字は推定）。「ずれ」は公式 − 推定。「LLM が動かした」は、LLM が手を決めた（前の構成）か、LLM の目標で方策が動いた・LLM が切り替えたモデルで打った（今の構成）手の割合</span>${T.room !== null ? `<button class="btn quiet" type="button" id="stAllRooms">全部のルーム</button>` : ""}</div>
+        <div class="stbl-wrap"><table class="stbl"><thead><tr><th>開始</th><th>ルーム</th><th class="n">ターン</th><th class="n">得点</th><th class="n">1ターン</th><th class="n">当てられた</th><th class="n">ずれ</th><th>終わり方</th><th>方策</th><th>LLM</th><th class="n">呼んだ回数</th><th class="n">費用</th><th class="n">LLM が動かした</th><th class="n" title="試合中の LLM を呼ぶきっかけが鳴った回数。マウスを載せると内訳">きっかけ</th></tr></thead><tbody>${runRows || `<tr><td colspan="14" class="dim">試合がありません</td></tr>`}</tbody></table></div></section>${trigSection}`;
     $$("#stRooms tr[data-room]").forEach((tr) => tr.addEventListener("click", () => { const r = Number(tr.dataset.room); T.room = T.room === r ? null : r; renderRooms(); }));
     $("#stAllRooms")?.addEventListener("click", () => { T.room = null; renderRooms(); });
     $$("#stRooms tr[data-run]").forEach((tr) => tr.addEventListener("click", () => {

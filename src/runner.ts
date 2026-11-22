@@ -19,6 +19,7 @@ import * as defaultEvaluator from "./solver/evaluator";
 import type { EvaluatorModule } from "./solver/planner";
 import { type FiredTrigger, loadAllModels, TriggerMonitor, votersFrom } from "./agent/triggers";
 import { summarizeMatchPlan } from "./agent/match-plan";
+import { type LlmReply, renderTriggerReview, reviewRun } from "./agent/trigger-review";
 import { getStyle, loadModelParams, playModelId } from "./solver/models";
 import { makePlannerPolicy, type PolicyFn } from "./solver/policy";
 import { TRIGGER_DEFS } from "./agent/triggers";
@@ -56,6 +57,8 @@ export interface TurnRecord {
   calledBy?: Partial<Record<"CMD1" | "CMD2", string[]>>;
   /** このターンの終わりに使っていたモデル（試合中に切り替えた時だけ） */
   model?: string;
+  /** このターンの間に届いた試合中の LLM の返答（聞いたターン・きっかけ・目標・モデル。返答なしは action null） */
+  llmReplies?: LlmReply[];
   /** 最後に取れた Webマップの `turn=` とその時のハーネスのターン（Webマップのターン表示の意味を確かめるため） */
   webMapTurn?: { ourTurn: number; webTurn: number | null } | null;
   /** このターンに踏んだタイル（番号 → 回数）。タイルの得点の実測に使う */
@@ -307,6 +310,8 @@ export async function runAgentMatch(
   /** LLM（裏で作戦を考える）: 届いた返答（次に書くターンの記録に入れる） */
   const asyncMainActions: string[] = [];
   const asyncMainLatency: number[] = [];
+  /** 届いた返答（構造化。試合後のきっかけの評価に使う） */
+  const asyncReplies: LlmReply[] = [];
   const commandCounts: Record<string, number> = {};
   let gameOverReason: string | null = null;
 
@@ -413,9 +418,19 @@ export async function runAgentMatch(
             (res, error) => {
               if (!res) {
                 asyncMainActions.push(`${askedAt}:error(${(error ?? "").slice(0, 60)})`);
+                asyncReplies.push({ asked: turn, phase, by, action: null });
                 return;
               }
               if (res.model) switchModel(res.model, turn, phase, by);
+              asyncReplies.push({
+                asked: turn,
+                phase,
+                by,
+                action: res.source === "main" ? res.action : null,
+                ...(res.model ? { model: res.model } : {}),
+                ...(res.action === "plan" && mainAgent.currentPlan ? { target: mainAgent.currentPlan.target } : {}),
+                ms: res.durationMs,
+              });
               asyncMainActions.push(`${askedAt}${by.length ? `[${by.join(",")}]` : ""}:${res.source === "main" ? res.action : `solver(${res.note})`}${res.planStatus ? `(${res.planStatus})` : ""}${res.model ? `(model→${res.model})` : ""}`);
               if (res.durationMs !== null) asyncMainLatency.push(res.durationMs);
               reloadTilesKnowledge();
@@ -583,6 +598,7 @@ export async function runAgentMatch(
         mainLatencyMs: [...mainLatencyMs, ...asyncMainLatency.splice(0)],
         solverFallbackNotes,
         mainActions: [...mainActions, ...asyncMainActions.splice(0)],
+        ...(asyncReplies.length > 0 ? { llmReplies: asyncReplies.splice(0) } : {}),
         ...(mainAgent
           ? { agentTokens: mainAgent.usage().totalTokens - tokensAtTurnStart, mainInputTokens: mainAgent.usage().lastCallInputTokens }
           : {}),
@@ -662,6 +678,9 @@ export async function runAgentMatch(
   await webMap.drain();
   // LLM が考え中なら少し待つ（返答のメモを記録に残す）
   await mainAgent?.settleBackground(5000);
+  // 試合の終わった後に届いた返答は、最後のターンの記録に入れる（きっかけの評価に数える。turns.jsonl は書き終えている）
+  const lastLog = turnLogs[turnLogs.length - 1];
+  if (lastLog && asyncReplies.length > 0) lastLog.llmReplies = [...(lastLog.llmReplies ?? []), ...asyncReplies.splice(0)];
   // 試合中に届いた公式のアイテム得点から、タイルの本当の得点を測って knowledge/tiles.json に残す（振り返りの前に）
   let tileMeasurement: MeasureResult | undefined;
   try {
@@ -719,6 +738,14 @@ export async function runAgentMatch(
   };
 
   const diagnosis = analyzeMatchRun(summary, turnLogs, officialResult);
+  // きっかけの評価（次の準備が読む）。診断の最後にも付ける（試合後の振り返り・画面）
+  try {
+    const review = reviewRun(turnLogs, summary as unknown as Record<string, unknown>);
+    await Bun.write(path.join(runDir, "trigger-review.json"), JSON.stringify(review, null, 2));
+    diagnosis.markdownReport = `${diagnosis.markdownReport.trimEnd()}\n\n${renderTriggerReview(review)}\n`;
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, "きっかけの評価を作れなかった");
+  }
   summary.diagnosis = diagnosis;
 
   const updatedProfile = getRoomProfile(config.room);

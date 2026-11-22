@@ -192,6 +192,8 @@ test("準備フェーズ（開始より前）: 読むだけのツールで調べ
   expect(p.options.tools).toBe("Read,Glob,Grep");
   expect(p.text).toContain("このルームの過去の試合");
   expect(p.text).toContain("ユーザー定義の作戦方針");
+  expect(p.text).toContain("このルームのきっかけの成績");
+  expect(p.text).toContain("選べるモデル");
 
   const agent = new MainAgent({}, 5000);
   await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0 }, { memo: prep.memo, usage: prep.usage });
