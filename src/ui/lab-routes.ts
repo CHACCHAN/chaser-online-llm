@@ -1,4 +1,5 @@
 import { lab, roomChoices } from "../sim/lab";
+import { loadStyles } from "../solver/models";
 import { setProjectEnvValue } from "./env-store";
 
 /**
@@ -14,6 +15,8 @@ const clampNum = (v: unknown, min: number, max: number, fallback: number) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
+/** 知っているモデルの id なら { model }、そうでなければ {}（既定のモデルを使う） */
+const modelOf = (v: unknown): { model?: string } => (typeof v === "string" && loadStyles().some((s) => s.id === v) ? { model: v } : {});
 const busyRes = () => Response.json({ ok: false, error: "ほかの仕事が動いています（止めてから始めてください）" }, { status: 409 });
 const othersBusy = () => lab.busy && lab.state().job?.trigger !== "idle";
 
@@ -34,7 +37,7 @@ export async function handleLabRequest(req: Request, url: URL): Promise<Response
   // 地図を作って今の方策で打たせる（すぐ返る。終わりは SSE の "lab" で分かる）
   if (url.pathname === "/api/lab/maps" && req.method === "POST") {
     if (othersBusy()) return busyRes();
-    void lab.makeMaps({ n: Math.round(clampNum(body.n, 1, 48, 12)), room: roomOf(body.room) });
+    void lab.makeMaps({ n: Math.round(clampNum(body.n, 1, 48, 12)), room: roomOf(body.room), ...modelOf(body.model) });
     return Response.json({ ok: true });
   }
 
@@ -42,8 +45,26 @@ export async function handleLabRequest(req: Request, url: URL): Promise<Response
   if (url.pathname === "/api/lab/train" && req.method === "POST") {
     if (othersBusy()) return busyRes();
     if (!lab.state().set) return Response.json({ ok: false, error: "先に「地図を作る」を押してください" }, { status: 400 });
-    void lab.train({ room: null, minutes: clampNum(body.minutes, 0.5, 240, 5), trigger: "manual", onSet: true });
+    void lab.train({ room: null, minutes: clampNum(body.minutes, 0.5, 240, 5), trigger: "manual", onSet: true, ...modelOf(body.model) });
     return Response.json({ ok: true });
+  }
+
+  // モデル（特性ごと）とパラメータ
+  if (url.pathname === "/api/lab/models" && req.method === "GET") return Response.json({ ok: true, ...lab.models() });
+
+  // 全部のモデルの特性を測る
+  if (url.pathname === "/api/lab/measure" && req.method === "POST") {
+    if (othersBusy()) return busyRes();
+    void lab.measure();
+    return Response.json({ ok: true });
+  }
+
+  // 試合で使うモデル（.env の POLICY_MODEL に保存。次の試合から）
+  if (url.pathname === "/api/lab/play-model" && req.method === "POST") {
+    const m = modelOf(body.model);
+    if (!m.model) return Response.json({ ok: false, error: "知らないモデルです" }, { status: 400 });
+    setProjectEnvValue("POLICY_MODEL", m.model);
+    return Response.json({ ok: true, ...lab.models() });
   }
 
   if (url.pathname === "/api/lab/stop" && req.method === "POST") {

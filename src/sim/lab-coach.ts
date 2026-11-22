@@ -156,6 +156,7 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
   const lines: string[] = [
     `# 学習の結果（${input.trigger}${input.room !== null ? `・ルーム ${input.room} に似せた地図` : "・いろいろな地図"}）`,
     "",
+    `- モデル: ${t.modelName}（${t.model}。knowledge/styles.json。標準以外は点/ターンではなく、そのモデルの目的の値/ターン）`,
     `- ${t.generations} 世代・${t.episodes} 試合・${Math.round(t.ms / 1000)} 秒`,
     `- 学習に使っていない地図 ${c.n} 枚で: 学習前 ${c.a} → 学習後 ${c.b} 点/ターン（差 ${c.diff}±${c.se}、勝ち ${c.wins}/${c.n}、罠 ${c.hazardsA}→${c.hazardsB}）→ ${t.accepted ? "保存した" : "保存しない（はっきり良くなっていない）"}`,
     `- 学習のやり方（knowledge/train-config.json）: ${JSON.stringify(loadTrainConfig().config)}`,
@@ -197,8 +198,8 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
   if (log) {
     const recent = log.trim().split("\n").slice(-8).map((l) => {
       try {
-        const o = JSON.parse(l) as { at: string; trigger: string | null; generations: number; accepted: boolean; comparison: { a: number; b: number; diff: number; se: number } };
-        return `- ${o.at.slice(5, 16)} ${o.trigger ?? "-"}: ${o.generations} 世代、${o.comparison.a}→${o.comparison.b}（差 ${o.comparison.diff}±${o.comparison.se}）${o.accepted ? " 保存" : ""}`;
+        const o = JSON.parse(l) as { at: string; trigger: string | null; model?: string; generations: number; accepted: boolean; comparison: { a: number; b: number; diff: number; se: number } };
+        return `- ${o.at.slice(5, 16)} ${o.trigger ?? "-"} ${o.model ?? "standard"}: ${o.generations} 世代、${o.comparison.a}→${o.comparison.b}（差 ${o.comparison.diff}±${o.comparison.se}）${o.accepted ? " 保存" : ""}`;
       } catch {
         return null;
       }

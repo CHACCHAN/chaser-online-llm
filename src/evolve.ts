@@ -193,10 +193,11 @@ export async function runPostMatchTraining(summary: RunSummary): Promise<void> {
       uiBus.pushClaudeEvent({ context: "evolution", kind: "system", title: "方策の学習（シミュレータ）", content: "「学習」画面の仕事が動いているので、試合後の学習は行いませんでした" });
       return;
     }
-    const r = await lab.train({ room: summary.room, minutes, trigger: "post-match" });
+    // 試合で使ったモデルを育てる
+    const r = await lab.train({ room: summary.room, minutes, trigger: "post-match", ...(summary.policyModel ? { model: summary.policyModel } : {}) });
     if (!r) return;
     const c = r.comparison;
-    const text = `${r.generations} 世代・${r.episodes} 試合。学習に使っていない地図で ${c.a} → ${c.b} 点/ターン（差 ${c.diff}±${c.se}、勝ち ${c.wins}/${c.n}）→ ${r.accepted ? "保存した（次の試合から使う）" : "見送り（はっきり良くなっていない）"}`;
+    const text = `${r.modelName}: ${r.generations} 世代・${r.episodes} 試合。学習に使っていない地図で ${c.a} → ${c.b} 点/ターン（差 ${c.diff}±${c.se}、勝ち ${c.wins}/${c.n}）→ ${r.accepted ? "保存した（次の試合から使う）" : "見送り（はっきり良くなっていない）"}`;
     uiBus.pushClaudeEvent({ context: "evolution", kind: "system", title: "方策の学習（シミュレータ）", content: text });
     const report = path.join(summary.runDir, "evolution-report.md");
     const prev = existsSync(report) ? readFileSync(report, "utf-8") : `# Post-Match Evolution Report (${summary.runId})\n`;

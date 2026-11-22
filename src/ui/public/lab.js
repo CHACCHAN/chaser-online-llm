@@ -4,7 +4,7 @@
    API は /api/lab/…（シミュレータだけを使い、CHaser サーバには触れない）。状態の変化は SSE の "lab" で届く。
    ===================================================================== */
 (() => {
-  const L = { view: load("view") === "lab" ? "lab" : "match", lab: null, data: null, which: "before", t: 0, playing: false, timer: 0, cards: [] };
+  const L = { view: load("view") === "lab" ? "lab" : "match", lab: null, data: null, which: "before", t: 0, playing: false, timer: 0, cards: [], tab: load("labTab") === "models" ? "models" : "maps", models: null };
   const num = (v) => (v === null || v === undefined || Number.isNaN(Number(v)) ? "-" : (Math.round(Number(v) * 10) / 10).toLocaleString("ja-JP"));
   const sign = (v) => (v > 0 ? "+" : "") + num(v);
 
@@ -23,7 +23,7 @@
     $("#lab").hidden = v !== "lab";
     $("#viewMatch").setAttribute("aria-pressed", String(v === "match"));
     $("#viewLab").setAttribute("aria-pressed", String(v === "lab"));
-    if (v === "lab") { refresh(); loadSet(); loadRooms(); } else { stopPlay(); if (typeof mark === "function") mark("map"); }
+    if (v === "lab") { refresh(); loadSet(); loadRooms(); loadModels(); setTab(L.tab); } else { stopPlay(); if (typeof mark === "function") mark("map"); }
   }
   $$(".views [data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 
@@ -60,8 +60,69 @@
     renderState();
     // 仕事が終わった・地図の組が変わったら、地図と記録を読み直す
     const setChanged = (prev?.set?.id ?? null) !== (s.set?.id ?? null);
-    if ((prev?.job && !s.job) || setChanged) loadSet();
+    if ((prev?.job && !s.job) || setChanged) { loadSet(); loadModels(); }
   };
+
+  /* ---------- モデル（特性ごと）とパラメータ ---------- */
+  function setTab(t) {
+    L.tab = t; save("labTab", t);
+    $$(".lab-tabs [data-lt]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lt === t)));
+    $("#labModels").hidden = t !== "models";
+    $("#labGrid").hidden = t !== "maps";
+    $("#labPlay").hidden = t !== "maps" || !runsNow();
+    if (t === "models") { stopPlay(); renderModels(); }
+  }
+  $$(".lab-tabs [data-lt]").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.lt)));
+
+  async function loadModels() {
+    try {
+      L.models = await jget("/api/lab/models");
+      const sel = $("#lmModel"), keep = load("labModel") ?? L.models.play;
+      sel.innerHTML = L.models.models.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}（${esc(m.trait || m.id)}）${m.id === L.models.play ? "・試合で使う" : ""}</option>`).join("");
+      sel.value = L.models.models.some((m) => m.id === keep) ? keep : L.models.play;
+      renderModels();
+    } catch {}
+  }
+  const modelName = (id) => L.models?.models.find((m) => m.id === id)?.name ?? id;
+
+  function renderModels() {
+    const box = $("#labModels"), d = L.models;
+    if (!d || L.tab !== "models") return;
+    const busy = !!L.lab?.job && L.lab.job.trigger !== "idle";
+    const when = (iso) => (iso ? new Date(iso).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+    const stat = (label, v, title) => `<div title="${esc(title)}"><span>${esc(label)}</span><b>${v}</b></div>`;
+    const cards = d.models.map((m) => {
+      const p = m.profile, lt = m.lastTrain, isPlay = m.id === d.play;
+      const goal = Object.entries(m.objective || {}).filter(([, w]) => w).map(([k, w]) => `${({ item: "アイテム", put: "当てた", putDamage: "当てられた", hazard: "罠1回" })[k] || k}${k === "hazard" ? ` ${w}` : ` ×${1 + w}`}`).join("・");
+      return `<div class="model${isPlay ? " play" : ""}">
+        <div class="mt"><b>${esc(m.name)}</b><span class="chip trait">${esc(m.trait || m.id)}</span>${isPlay ? `<span class="badge b-continue">試合で使う</span>` : ""}</div>
+        <div class="desc">${esc(m.description)}</div>
+        <div class="dim" title="学習で何を目的にするか（knowledge/styles.json の objective・fixed）">目的: 自分の得点${goal ? `＋${esc(goal)}` : ""}${m.fixed ? `／固定: ${esc(Object.entries(m.fixed).map(([k, v]) => `${k}=${v}`).join(", "))}` : ""}</div>
+        ${m.tags?.length ? `<div class="chips">${m.tags.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>` : ""}
+        ${p ? `<div class="mstats">${stat("点/ターン", num(p.perTurn), "1ターンあたりの得点")}${stat("回収/ターン", num(p.itemPerTurn), "1ターンあたりのアイテム得点")}${stat("勝ち", `${Math.round(p.winRate * 100)}%`, "相手に勝った地図の割合")}${stat("当てた/100T", num(p.hitsPer100), "100ターンあたりに相手に当てた回数（攻撃性）")}${stat("当てられた/100T", num(p.hitByPer100), "100ターンあたりに当てられた回数")}${stat("罠/100T", num(p.hazardsPer100), "100ターンあたりに罠を踏んだ回数")}</div>` : `<div class="dim">特性はまだ測っていません</div>`}
+        <div class="foot"><span>${m.trained ? `学習 ${esc(when(m.updatedAt))}` : "まだ学習していない（バランスから始まる）"}${lt ? `・最後の学習 ${num(lt.a)}→${num(lt.b)} ${lt.accepted ? "採用" : "見送り"}` : ""}</span>${isPlay ? "" : `<button class="btn quiet" type="button" data-play="${esc(m.id)}">試合で使う</button>`}</div>
+      </div>`;
+    }).join("");
+    // パラメータの表: 行 = パラメータ、列 = モデル（値と範囲の中の位置。最後の学習での変化）
+    const pos = (v, q) => (q.max > q.min ? Math.min(100, Math.max(0, ((v - q.min) / (q.max - q.min)) * 100)) : 0);
+    const fmtv = (v, q) => (q.integer ? String(Math.round(v)) : Math.abs(v) >= 100 ? num(v) : (Math.round(v * 1000) / 1000).toString());
+    const head = `<tr><th>パラメータ</th><th>範囲（初め）</th>${d.models.map((m) => `<th>${esc(m.name)}</th>`).join("")}</tr>`;
+    const rows = d.params.map((q) => `<tr><td class="pn"><code>${esc(q.name)}</code><div class="doc">${esc(q.doc)}</div></td><td class="rg">${fmtv(q.min, q)}〜${fmtv(q.max, q)}<br />（${fmtv(q.init, q)}）</td>${d.models.map((m) => {
+      const v = m.params[q.name], fixed = m.fixed && q.name in m.fixed, lt = m.lastTrain, prev = lt?.accepted && lt.before ? lt.before[q.name] : undefined;
+      const diff = prev !== undefined && Math.abs(v - prev) > (q.max - q.min) * 0.005 ? `<span class="d ${v > prev ? "up" : "down"}" title="最後に採用した学習での変化">${v > prev ? "↑" : "↓"} ${fmtv(prev, q)}→</span>` : "";
+      return `<td><div class="pv${fixed ? " fixed" : ""}"><b>${fmtv(v, q)}</b><div class="bar" title="範囲の中の位置（薄い印は初めの値）"><i class="init" style="left:calc(${pos(q.init, q)}% - 1px)"></i><i style="left:calc(${pos(v, q)}% - 1px)"></i></div>${diff}</div></td>`;
+    }).join("")}</tr>`).join("");
+    box.innerHTML = `<div class="mhead"><span>試合で使うモデル: <b>${esc(modelName(d.play))}</b>（次の試合から。試合後の学習もこのモデルを育てる）</span><button class="btn" type="button" id="lmMeasure" ${busy ? "disabled" : ""} title="全部のモデルを同じ地図・同じ相手（拾う・狙う・バランスの自分）で打たせて、特性を比べる">特性を測る</button><span class="dim">特性の札はモデルどうしを比べて付けます。学習で採用されると自動で測り直します</span></div>
+      <div class="mgrid">${cards}</div>
+      <div><div class="mhead" style="margin-bottom:8px"><b>学習するパラメータ</b><span class="dim">評価関数 src/solver/evaluator.ts の PARAM_SPACE。値は学習で決まり、各モデルの var/policy/…json に保存される。↑↓ は最後に採用した学習での変化</span></div>
+      <div class="ptable-wrap"><table class="ptable"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
+    $("#lmMeasure").addEventListener("click", async () => {
+      try { await post("/api/lab/measure"); } catch (err) { $("#labStatus").innerHTML = `<div class="down">${esc(err.message)}</div>`; }
+    });
+    $$("[data-play]", box).forEach((b) => b.addEventListener("click", async () => {
+      try { L.models = await post("/api/lab/play-model", { model: b.dataset.play }); loadModels(); } catch (err) { $("#labStatus").innerHTML = `<div class="down">${esc(err.message)}</div>`; }
+    }));
+  }
 
   function renderDot() {
     const job = L.lab?.job;
@@ -71,7 +132,7 @@
   /* ---------- 流れ（ヘッダ）・状態・統計 ---------- */
   function renderFlowLab() {
     const st = L.lab, job = st?.job, set = st?.set;
-    const cur = job ? (job.kind === "maps" ? "maps" : job.coach?.state === "running" ? "coach" : "train") : set?.after != null ? "stats" : set ? "train" : "maps";
+    const cur = job ? (job.kind === "maps" ? "maps" : job.kind === "measure" ? "stats" : job.coach?.state === "running" ? "coach" : "train") : set?.after != null ? "stats" : set ? "train" : "maps";
     $("#labFlowCoach").hidden = !st?.coachEnabled;
     const order = ["maps", "train", "coach", "stats"], ci = order.indexOf(cur);
     $$("#labFlow li").forEach((li) => {
@@ -93,7 +154,7 @@
     const parts = [];
     if (job) {
       const sec = (Date.now() - new Date(job.startedAt)) / 1000;
-      const what = job.trigger === "idle" ? "空き時間の学習（毎回新しい地図）" : job.trigger === "post-match" ? "試合後の学習" : job.kind === "maps" ? "地図を打たせています" : "学習中";
+      const what = (job.kind === "measure" ? "モデルの特性を測っています" : job.trigger === "idle" ? "空き時間の学習（毎回新しい地図）" : job.trigger === "post-match" ? "試合後の学習" : job.kind === "maps" ? "地図を打たせています" : "学習中") + (job.kind !== "measure" && job.modelName ? `・${job.modelName}` : "");
       const gens = job.generations || [];
       const g = gens[gens.length - 1];
       parts.push(`<div class="stats"><span><b style="font-size:var(--t-m)">${esc(what)}</b></span><span class="dim">${Math.floor(sec / 60)}分${Math.round(sec % 60)}秒${job.minutes ? ` / ${num(job.minutes)}分` : ""}</span>${g ? `<span class="dim">${gens.length} 世代・${fmt(g.episodes)} 試合・候補の最良 ${num(g.best)} 点/ターン</span>` : ""}</div>`);
@@ -154,12 +215,15 @@
   $("#lmMake").addEventListener("click", async () => {
     stopPlay();
     save("labRoom", $("#lmRoom").value);
-    try { await post("/api/lab/maps", { n: Number($("#lmN").value) || 12, room: $("#lmRoom").value === "" ? null : Number($("#lmRoom").value) }); }
+    save("labModel", $("#lmModel").value);
+    setTab("maps");
+    try { await post("/api/lab/maps", { n: Number($("#lmN").value) || 12, room: $("#lmRoom").value === "" ? null : Number($("#lmRoom").value), model: $("#lmModel").value }); }
     catch (err) { $("#labStatus").innerHTML = `<div class="down">${esc(err.message)}</div>`; }
   });
   $("#ltStart").addEventListener("click", async () => {
     stopPlay();
-    try { await post("/api/lab/train", { minutes: Number($("#ltMin").value) || 5 }); }
+    save("labModel", $("#lmModel").value);
+    try { await post("/api/lab/train", { minutes: Number($("#ltMin").value) || 5, model: $("#lmModel").value }); }
     catch (err) { $("#labStatus").innerHTML = `<div class="down">${esc(err.message)}</div>`; }
   });
   $("#ltStop").addEventListener("click", () => post("/api/lab/stop").catch(() => {}));
@@ -181,7 +245,7 @@
     grid.innerHTML = d.set.maps.map((m, i) => `<div class="mcard"><div class="cap" id="cap${i}"></div><canvas data-i="${i}" aria-label="地図 ${i + 1}"></canvas></div>`).join("");
     L.cards = d.set.maps.map((m, i) => ({ m, cv: $(`canvas[data-i="${i}"]`, grid), cap: $(`#cap${i}`, grid), off: null, g: null, at: -1, cell: 0 }));
     const runs = runsNow();
-    $("#labPlay").hidden = !runs;
+    $("#labPlay").hidden = !runs || L.tab !== "maps";
     L.t = 0;
     $("#lpSlider").max = String(Math.max(0, maxFrames() - 1));
     drawAll(true);

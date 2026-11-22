@@ -46,6 +46,7 @@ async function main() {
       "max-turns": { type: "string" },
       minutes: { type: "string" },
       policy: { type: "string" },
+      model: { type: "string" },
       evaluator: { type: "string" },
       "dry-run": { type: "boolean" },
       workers: { type: "string" },
@@ -216,9 +217,9 @@ async function main() {
       "  tile-scores  --run-dir <dir>  Tile scores measured from the official item score on the Web map (read only)",
       "  cells        --room <n> [--near x,y] [--radius r] [--abs]  Known warps and cell notes (coords = snapshot pos frame unless --abs)",
       "  cell-note    --room <n> --x <x> --y <y> --note <text> [--abs]  Add a note to a cell (empty --note clears)",
-      "  sim          [--room <n>] [--n 8] [--seed s] [--max-turns t]  シミュレータで試合をして成績を出す",
-      "  bench        [--room <n>] [--n 24] [--evaluator <file>]  シミュレータで比べる（--evaluator: 今の evaluator.ts とそのファイル。無し: 既定のパラメータと学習したパラメータ）",
-      "  train        [--room <n>] [--minutes 5] [--dry-run]  方策のパラメータを学習する（はっきり良くなった時だけ var/policy/params.json に保存）",
+      "  sim          [--room <n>] [--n 8] [--seed s] [--max-turns t] [--model id]  シミュレータで試合をして成績を出す（--model: knowledge/styles.json のモデル。既定は試合で使うモデル）",
+      "  bench        [--room <n>] [--n 24] [--evaluator <file>] [--model id]  シミュレータで比べる（--evaluator: 今の evaluator.ts とそのファイル。無し: 既定のパラメータと学習したパラメータ）",
+      "  train        [--room <n>] [--minutes 5] [--dry-run] [--model id]  そのモデルのパラメータを、そのモデルの目的で学習する（はっきり良くなった時だけ保存）",
     ].join("\n"),
   );
 }
@@ -226,7 +227,8 @@ async function main() {
 async function simCommands(sub: "sim" | "bench" | "train", v: Record<string, string | boolean | undefined>): Promise<void> {
   const { SimPool } = await import("./sim/pool");
   const { comparePolicies, evaluatePolicy, makeEvalSet, perTurn, trainPolicy } = await import("./sim/train");
-  const { loadPolicyParams } = await import("./solver/policy");
+  const { loadModelParams, playModelId } = await import("./solver/models");
+  const model = typeof v.model === "string" ? v.model : playModelId();
   const room = typeof v.room === "string" ? Number(v.room) : null;
   const maxTurns = typeof v["max-turns"] === "string" ? Number(v["max-turns"]) : 200;
   const pool = new SimPool(typeof v.workers === "string" ? Number(v.workers) : undefined);
@@ -234,7 +236,7 @@ async function simCommands(sub: "sim" | "bench" | "train", v: Record<string, str
     if (sub === "sim") {
       const n = Number(v.n ?? 8);
       const set = makeEvalSet(Number(v.seed ?? 1), n, room, maxTurns);
-      const policy = { kind: "planner", params: loadPolicyParams() } as const;
+      const policy = { kind: "planner", params: loadModelParams(model) } as const;
       const rs = await evaluatePolicy(pool, policy, set);
       for (const [i, r] of rs.entries()) console.log(`seed ${set.seeds[i]} ${r.scenario} web=${r.webMap} T=${r.totalTurns} 得点 ${r.score}（${perTurn(r).toFixed(1)}/ターン）罠 ${r.hazardHits} 相手 ${r.opponentKinds.map((k, j) => `${k}:${r.opponents[j]}`).join(",") || "-"} 当てた ${r.put} 当てられた ${r.putDamage}${r.won === null ? "" : r.won ? " 勝ち" : " 負け"} ${r.msPerPhase}ms/手`);
       const vs = rs.filter((r) => r.won !== null);
@@ -244,18 +246,18 @@ async function simCommands(sub: "sim" | "bench" | "train", v: Record<string, str
     if (sub === "bench") {
       const n = Number(v.n ?? 24);
       const set = makeEvalSet(Number(v.seed ?? 500_000), n, room, maxTurns);
-      const params = loadPolicyParams();
+      const params = loadModelParams(model);
       const { defaultParams } = await import("./solver/evaluator");
       const a = typeof v.evaluator === "string" ? ({ kind: "planner", params } as const) : ({ kind: "planner", params: defaultParams() } as const);
       const b = typeof v.evaluator === "string" ? ({ kind: "planner", params, evaluatorPath: path.resolve(v.evaluator) } as const) : ({ kind: "planner", params } as const);
       const c = await comparePolicies(pool, a, b, set);
-      const label = typeof v.evaluator === "string" ? ["今の evaluator.ts", v.evaluator] : ["既定のパラメータ", "学習したパラメータ（var/policy/params.json）"];
+      const label = typeof v.evaluator === "string" ? ["今の evaluator.ts", v.evaluator] : ["既定のパラメータ", `学習したパラメータ（モデル ${model}）`];
       console.log(JSON.stringify({ policyA: label[0], policyB: label[1], ...c }, null, 2));
       return;
     }
     const minutes = Number(v.minutes ?? 5);
-    const r = await trainPolicy({ pool, room, budgetMs: minutes * 60_000, maxTurns, dryRun: v["dry-run"] === true, trigger: "cli", log: (m) => console.log(m) });
-    console.log(JSON.stringify({ accepted: r.accepted, generations: r.generations, episodes: r.episodes, comparison: r.comparison, after: r.after }, null, 2));
+    const r = await trainPolicy({ pool, room, budgetMs: minutes * 60_000, maxTurns, dryRun: v["dry-run"] === true, trigger: "cli", model, log: (m) => console.log(m) });
+    console.log(JSON.stringify({ model: r.model, accepted: r.accepted, generations: r.generations, episodes: r.episodes, comparison: r.comparison, after: r.after }, null, 2));
   } finally {
     pool.close();
   }

@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { POLICY_TRAIN_LOG_PATH } from "../paths";
 import { clampParams, PARAM_SPACE, type ParamName, type Params, type ParamSpec } from "../solver/evaluator";
-import { loadPolicyParams, loadPolicyParamsFile, savePolicyParams } from "../solver/policy";
+import { applyFixed, getStyle, loadModelParams, loadModelParamsFile, saveModelParams, STANDARD_MODEL, type StyleDef } from "../solver/models";
 import type { EpisodeResult } from "./episode";
 import type { EpisodeJob, SimPool } from "./pool";
 import { addToLeague, loadOpponentPlan, type OpponentPlan } from "./opponents";
@@ -47,6 +47,13 @@ function sampleSet(set: EvalSet, n: number, rng: () => number, maxTurns: number 
 
 export const perTurn = (r: EpisodeResult) => r.score / Math.max(1, r.totalTurns);
 
+/** モデルの学習の目的（1ターンあたり）: 自分の得点 + Σ 重み × 値（knowledge/styles.json の objective）。標準は perTurn と同じ */
+export function objectiveOf(style: StyleDef | null | undefined): (r: EpisodeResult) => number {
+  const o = style?.objective ?? {};
+  if (!Object.values(o).some((w) => w)) return perTurn;
+  return (r) => (r.score + (o.item ?? 0) * r.item + (o.put ?? 0) * (r.put ?? 0) + (o.putDamage ?? 0) * (r.putDamage ?? 0) + (o.hazard ?? 0) * r.hazardHits) / Math.max(1, r.totalTurns);
+}
+
 export async function evaluatePolicy(pool: SimPool, policy: PolicySpec, set: EvalSet, opponents?: OpponentPlan): Promise<EpisodeResult[]> {
   return pool.runAll(set.seeds.map((seed, i) => ({ seed, room: set.rooms[i] ?? null, maxTurns: set.maxTurns, policy, ...(opponents ? { opponents } : {}) })));
 }
@@ -67,13 +74,13 @@ export interface Comparison {
   hazardsB: number;
 }
 
-export function compareResults(ra: EpisodeResult[], rb: EpisodeResult[]): Comparison {
-  const d = ra.map((r, i) => perTurn(rb[i]!) - perTurn(r));
+export function compareResults(ra: EpisodeResult[], rb: EpisodeResult[], fit: (r: EpisodeResult) => number = perTurn): Comparison {
+  const d = ra.map((r, i) => fit(rb[i]!) - fit(r));
   const m = mean(d);
   const sd = Math.sqrt(mean(d.map((x) => (x - m) ** 2)) * (d.length / Math.max(1, d.length - 1)));
   return {
-    a: Math.round(mean(ra.map(perTurn)) * 10) / 10,
-    b: Math.round(mean(rb.map(perTurn)) * 10) / 10,
+    a: Math.round(mean(ra.map(fit)) * 10) / 10,
+    b: Math.round(mean(rb.map(fit)) * 10) / 10,
     diff: Math.round(m * 10) / 10,
     se: Math.round((sd / Math.sqrt(Math.max(1, d.length))) * 10) / 10,
     wins: d.filter((x) => x > 0).length,
@@ -83,10 +90,17 @@ export function compareResults(ra: EpisodeResult[], rb: EpisodeResult[]): Compar
   };
 }
 
-export async function comparePolicies(pool: SimPool, a: PolicySpec, b: PolicySpec, set: EvalSet, opponents: OpponentPlan = loadOpponentPlan()): Promise<Comparison> {
+export async function comparePolicies(
+  pool: SimPool,
+  a: PolicySpec,
+  b: PolicySpec,
+  set: EvalSet,
+  opponents: OpponentPlan = loadOpponentPlan(),
+  fit: (r: EpisodeResult) => number = perTurn,
+): Promise<Comparison> {
   // 比べる両方が同じ相手と戦う（相手の決め方を1回だけ読む）
   const [ra, rb] = await Promise.all([evaluatePolicy(pool, a, set, opponents), evaluatePolicy(pool, b, set, opponents)]);
-  return compareResults(ra, rb);
+  return compareResults(ra, rb, fit);
 }
 
 /** b が a よりはっきり良いか（差が標準誤差の z 倍より大きく、罠を踏む回数が増えていない） */
@@ -115,6 +129,8 @@ export interface TrainOptions {
   dryRun?: boolean;
   /** 記録用: 何がきっかけの学習か（manual / idle / post-match / cli） */
   trigger?: string;
+  /** 学習するモデル（knowledge/styles.json の id。既定は標準 standard） */
+  model?: string;
   /** この地図の組で学習する（毎世代ここから batch 枚を選ぶ）。無ければ毎世代新しい地図を作る */
   trainSet?: EvalSet;
   log?: (msg: string) => void;
@@ -134,6 +150,9 @@ export interface GenerationStat {
 }
 
 export interface TrainResult {
+  /** 学習したモデル */
+  model: string;
+  modelName: string;
   generations: number;
   episodes: number;
   before: Params;
@@ -152,9 +171,14 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
   const valN = Math.max(4, opts.validation ?? cfg.validation);
   const maxTurns = opts.maxTurns === undefined ? 200 : opts.maxTurns;
   const rng = makeRng(opts.seed ?? Date.now());
-  const before = loadPolicyParams();
+  const style = getStyle(opts.model ?? STANDARD_MODEL);
+  const fit = objectiveOf(style);
+  const fixed = (p: Params) => applyFixed(p, style);
+  // 標準以外のモデルは目的が得点と違う（例: ハンターは当てた得点を2倍に数える）
+  const unit = style.id === STANDARD_MODEL ? "点/ターン" : `（${style.name}の目的）/ターン`;
+  const before = loadModelParams(style.id);
   // 相手（自己対戦の「自分」は学習を始めた時のパラメータ＝before と、前に採用したもの）。学習の間は変えない
-  const opponents = loadOpponentPlan();
+  const opponents = loadOpponentPlan(style.id);
   let m = toUnit(before);
   let sigma = cfg.sigmaStart;
   const d = m.length;
@@ -179,36 +203,36 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
       const e = Array.from({ length: d }, () => gaussian(rng));
       eps.push(e, e.map((x) => -x));
     }
-    const cands = eps.map((e) => fromUnit(m.map((v, i) => v + sigma * e[i]!)));
+    const cands = eps.map((e) => fixed(fromUnit(m.map((v, i) => v + sigma * e[i]!))));
     const results = await Promise.all(cands.map((params) => evaluatePolicy(opts.pool, { kind: "planner", params }, set, opponents)));
     episodes += popSize * batch;
-    const fit = results.map((rs) => mean(rs.map(perTurn)));
-    const order = fit.map((f, i) => [f, i] as const).sort((a, b) => b[0] - a[0]);
+    const fitness = results.map((rs) => mean(rs.map(fit)));
+    const order = fitness.map((f, i) => [f, i] as const).sort((a, b) => b[0] - a[0]);
     const next = m.map((v, j) => v + sigma * order.slice(0, mu).reduce((s, [, i], r) => s + (w[r]! / wsum) * eps[i]![j]!, 0));
     m = next.map((v) => Math.min(1, Math.max(0, v)));
     // 探す幅は時間とともに狭める（最初は広く、最後は細かく）
     sigma = cfg.sigmaStart - (cfg.sigmaStart - cfg.sigmaEnd) * Math.min(1, (Date.now() - t0) / Math.max(1, opts.budgetMs));
     genMs = Date.now() - g0;
     gen += 1;
-    opts.onGeneration?.({ gen, best: Math.round(order[0]![0] * 10) / 10, mean: Math.round(mean(fit) * 10) / 10, sigma, ms: genMs, episodes });
-    log(`世代${gen}: 最良 ${order[0]![0].toFixed(1)} / 平均 ${mean(fit).toFixed(1)} 点/ターン（σ=${sigma.toFixed(3)}、${(genMs / 1000).toFixed(1)}秒）`);
+    opts.onGeneration?.({ gen, best: Math.round(order[0]![0] * 10) / 10, mean: Math.round(mean(fitness) * 10) / 10, sigma, ms: genMs, episodes });
+    log(`世代${gen}: 最良 ${order[0]![0].toFixed(1)} / 平均 ${mean(fitness).toFixed(1)} ${unit}（σ=${sigma.toFixed(3)}、${(genMs / 1000).toFixed(1)}秒）`);
   }
 
-  const after = fromUnit(m);
+  const after = fixed(fromUnit(m));
   let comparison: Comparison = { a: 0, b: 0, diff: 0, se: 0, wins: 0, n: 0, hazardsA: 0, hazardsB: 0 };
   // 1世代も回らなかった（すぐ止めた）時は確かめない
   if (gen > 0) {
     const val = makeEvalSet(900_000 + Math.floor(rng() * 1e6), valN, opts.room, maxTurns);
-    comparison = await comparePolicies(opts.pool, { kind: "planner", params: before }, { kind: "planner", params: after }, val, opponents);
+    comparison = await comparePolicies(opts.pool, { kind: "planner", params: before }, { kind: "planner", params: after }, val, opponents, fit);
     episodes += valN * 2;
   }
   const accepted = gen > 0 && clearlyBetter(comparison);
-  if (gen > 0) log(`検証（学習に使っていない ${valN} 地図）: 前 ${comparison.a} → 後 ${comparison.b} 点/ターン（差 ${comparison.diff}±${comparison.se}、勝ち ${comparison.wins}/${comparison.n}）→ ${accepted ? "採用" : "見送り"}`);
+  if (gen > 0) log(`検証（学習に使っていない ${valN} 地図）: ${style.name}: 前 ${comparison.a} → 後 ${comparison.b} ${unit}（差 ${comparison.diff}±${comparison.se}、勝ち ${comparison.wins}/${comparison.n}）→ ${accepted ? "採用" : "見送り"}`);
   if (accepted && !opts.dryRun) {
-    const prev = loadPolicyParamsFile();
+    const prev = loadModelParamsFile(style.id);
     // 自己対戦: 置き換わる前のパラメータを相手の控え（リーグ）に残す。次からの学習で「前の自分」として戦う
-    addToLeague(before, `${new Date().toISOString().slice(0, 16)} まで使っていたパラメータ（${prev?.source ?? "default"}）`, cfg.leagueSize);
-    savePolicyParams(after, "train", {
+    addToLeague(before, `${style.name}: ${new Date().toISOString().slice(0, 16)} まで使っていたパラメータ（${prev?.source ?? "default"}）`, cfg.leagueSize);
+    saveModelParams(style.id, after, "train", {
       perTurn: comparison.b,
       previousPerTurn: comparison.a,
       room: opts.room ?? "all",
@@ -216,12 +240,12 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
       previousSource: prev?.source ?? "default",
     });
   }
-  const result: TrainResult = { generations: gen, episodes, before, after, comparison, accepted, ms: Date.now() - t0 };
+  const result: TrainResult = { model: style.id, modelName: style.name, generations: gen, episodes, before, after, comparison, accepted, ms: Date.now() - t0 };
   try {
     mkdirSync(path.dirname(POLICY_TRAIN_LOG_PATH), { recursive: true });
     appendFileSync(
       POLICY_TRAIN_LOG_PATH,
-      `${JSON.stringify({ at: new Date().toISOString(), room: opts.room, generations: gen, episodes, accepted, dryRun: !!opts.dryRun, trigger: opts.trigger ?? null, ms: Date.now() - t0, comparison, after })}\n`,
+      `${JSON.stringify({ at: new Date().toISOString(), room: opts.room, generations: gen, episodes, accepted, dryRun: !!opts.dryRun, trigger: opts.trigger ?? null, model: style.id, ms: Date.now() - t0, comparison, before, after })}\n`,
     );
   } catch {
     // 記録に失敗しても学習の結果は返す

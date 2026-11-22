@@ -11,7 +11,8 @@ import {
 } from "../memory/world-map";
 import type { TurnRecord } from "../runner";
 import type { EvaluatorModule } from "../solver/planner";
-import { loadPolicyParams, makePlannerPolicy } from "../solver/policy";
+import { loadModelParams, playModelId } from "../solver/models";
+import { makePlannerPolicy } from "../solver/policy";
 import type { SolverDecision } from "../solver/types";
 
 export interface ReplayVerificationResult {
@@ -41,7 +42,7 @@ function landsOnHazard(wm: WorldMap, command: string): boolean {
 
 /** 評価関数のモジュールから、試合と同じ方策（planner ＋ 学習したパラメータ）を作る。作戦目標・全ターン数は復元しない */
 function policyOf(ev: EvaluatorModule): DecideFn {
-  const policy = makePlannerPolicy(loadPolicyParams(), ev);
+  const policy = makePlannerPolicy(loadModelParams(playModelId()), ev);
   return (wm, phase, turn) => policy(wm, phase, turn, { totalTurns: null });
 }
 

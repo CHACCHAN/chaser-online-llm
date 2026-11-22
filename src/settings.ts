@@ -224,6 +224,12 @@ export const SETTINGS = {
     defaultValue: "3",
     advanced: true,
   },
+  POLICY_MODEL: {
+    label: "試合で使うモデル",
+    group: "other",
+    description: "試合中の手を出す方策のモデル（knowledge/styles.json の id。standard＝バランス、hunter＝ハンター（攻撃型）、collector＝コレクター（回収型）、guardian＝ガーディアン（慎重型）など）。試合後の学習もこのモデルを育てる。「学習」画面の「モデル」からも選べる",
+    defaultValue: "standard",
+  },
   TRAIN_AFTER_MATCH_MIN: {
     label: "試合後の学習の時間（分）",
     group: "other",
@@ -287,7 +293,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
   { id: "model", title: "LLM のつなぎ方・モデル", keys: ["LLM_AUTH_MODE", "LLM_API_URL", "LLM_API_KEY", "LLM_API_HEADERS", "LLM_OAUTH_TOKEN", "LLM_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_CONTEXT_WINDOW", "LLM_AUTO_COMPACT", "LLM_AUTO_COMPACT_PCT", "LLM_MAX_OUTPUT_TOKENS", "LLM_MODELS_TIMEOUT_SEC"] },
-  { id: "learn", title: "方策・学習", keys: ["TRAIN_AFTER_MATCH_MIN", "TRAIN_IDLE", "TRAIN_IDLE_CHUNK_MIN", "SIM_MAX_TURNS", "SIM_WORKERS"] },
+  { id: "learn", title: "方策・学習", keys: ["POLICY_MODEL", "TRAIN_AFTER_MATCH_MIN", "TRAIN_IDLE", "TRAIN_IDLE_CHUNK_MIN", "SIM_MAX_TURNS", "SIM_WORKERS"] },
   { id: "coach", title: "学習の LLM", keys: ["LAB_COACH", "LAB_COACH_MODEL", "LAB_COACH_EFFORT", "LAB_COACH_TIMEOUT_MIN"] },
   { id: "main", title: "LLM（試合中）", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },

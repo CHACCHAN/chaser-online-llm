@@ -1,10 +1,12 @@
 import { numSetting, boolSetting, getSetting } from "../settings";
 import type { Params } from "../solver/evaluator";
-import { loadPolicyParams } from "../solver/policy";
+import { PARAM_SPACE, type ParamSpec } from "../solver/evaluator";
+import { getStyle, loadModelParams, loadModelParamsFile, loadStyles, playModelId, STANDARD_MODEL, type StyleDef } from "../solver/models";
+import { loadModelProfiles, measureModels, traitTags, type ModelProfile } from "./model-traits";
 import { logger } from "../tools";
 import type { EpisodeResult } from "./episode";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { SIM_MAPS_DIR, SIM_PROFILES_PATH } from "../paths";
+import { POLICY_TRAIN_LOG_PATH, SIM_MAPS_DIR, SIM_PROFILES_PATH } from "../paths";
 import { loadRoomProfiles } from "../memory/knowledge-store";
 import { loadProfile, loadRealMaps, makeScenario } from "./mapgen";
 import { SimPool } from "./pool";
@@ -30,7 +32,10 @@ export type LabTrigger = "manual" | "idle" | "post-match";
 export interface LabJob {
   id: number;
   /** maps = 地図の組を今の方策で打たせる、train = 学習 */
-  kind: "maps" | "train";
+  kind: "maps" | "train" | "measure";
+  /** 打たせる・学習するモデル（knowledge/styles.json の id） */
+  model: string;
+  modelName: string;
   trigger: LabTrigger;
   room: number | null;
   startedAt: string;
@@ -51,6 +56,8 @@ export interface MapSetInfo {
   room: number | null;
   createdAt: string;
   maps: { seed: number; room: number | null; name: string; width: number; height: number; webMap: boolean; turns: number }[];
+  /** 打たせたモデル */
+  model: string;
   /** 学習前・学習後の 1ターンあたりの得点の平均（打たせ終わったら） */
   before: number | null;
   after: number | null;
@@ -135,6 +142,8 @@ export class LearningLab {
   coachDeps: CoachDeps | null = null;
   /** 試合をしていない間の学習で使うルーム（今の設定のルーム） */
   roomForIdle: () => number | null = () => null;
+  /** 空き時間の学習は、モデルを順番に育てる */
+  private idleTurn = 0;
 
   onChange(fn: (s: LabState) => void): () => void {
     this.listeners.add(fn);
@@ -201,7 +210,8 @@ export class LearningLab {
   }
 
   private begin(partial: Pick<LabJob, "kind" | "trigger" | "room"> & Partial<LabJob>): LabJob {
-    const job: LabJob = { id: this.nextId++, startedAt: new Date().toISOString(), finishedAt: null, minutes: null, generations: [], message: "", stopped: false, error: null, coach: null, ...partial };
+    const style = getStyle(partial.model ?? playModelId());
+    const job: LabJob = { id: this.nextId++, model: style.id, modelName: style.name, startedAt: new Date().toISOString(), finishedAt: null, minutes: null, generations: [], message: "", stopped: false, error: null, coach: null, ...partial };
     this.job = job;
     this.stopFlag = false;
     this.pool = new SimPool(workerCount());
@@ -233,7 +243,7 @@ export class LearningLab {
   }
 
   /** 地図の組を作り、今の方策で全部打たせる（学習前の記録）。ほかの仕事が動いていれば false */
-  async makeMaps(opts: { n: number; room: number | null }): Promise<boolean> {
+  async makeMaps(opts: { n: number; room: number | null; model?: string }): Promise<boolean> {
     const c = this.claim();
     if (!(c === true || (c !== false && (await c)))) return false;
     const base = Math.floor(Math.random() * 1e8);
@@ -242,11 +252,12 @@ export class LearningLab {
       const scn = makeScenario(makeRng(seed), { room: opts.room });
       return { seed, room: opts.room, name: scn.name, width: scn.grid[0]?.length ?? 0, height: scn.grid.length, webMap: scn.webMap, turns: Math.min(scn.totalTurns, maxTurns()) };
     });
-    this.set = { id: this.nextId, room: opts.room, createdAt: new Date().toISOString(), maps, before: null, after: null, validation: null, accepted: null };
+    const model = getStyle(opts.model ?? playModelId());
+    this.set = { id: this.nextId, room: opts.room, createdAt: new Date().toISOString(), maps, model: model.id, before: null, after: null, validation: null, accepted: null };
     this.runsBefore = null;
     this.runsAfter = null;
-    const job = this.begin({ kind: "maps", trigger: "manual", room: opts.room, message: `${opts.n} 枚の地図を今の方策で打たせています` });
-    const work = this.playSet(loadPolicyParams());
+    const job = this.begin({ kind: "maps", trigger: "manual", room: opts.room, model: model.id, message: `${opts.n} 枚の地図を${model.name}で打たせています` });
+    const work = this.playSet(loadModelParams(model.id));
     this.running = work;
     try {
       this.runsBefore = await work;
@@ -262,7 +273,7 @@ export class LearningLab {
   }
 
   /** 方策のパラメータを学習する。onSet なら画面の地図の組で学習し、学習後も同じ地図を打たせる */
-  async train(opts: { room: number | null; minutes: number; dryRun?: boolean; trigger: LabTrigger; onSet?: boolean }): Promise<TrainResult | null> {
+  async train(opts: { room: number | null; minutes: number; dryRun?: boolean; trigger: LabTrigger; onSet?: boolean; model?: string }): Promise<TrainResult | null> {
     if (opts.trigger === "idle") {
       if (this.job) return null;
     } else {
@@ -271,7 +282,9 @@ export class LearningLab {
     }
     const useSet = opts.onSet === true && this.evalSet !== null;
     const room = useSet ? this.set!.room : opts.room;
-    const job = this.begin({ kind: "train", trigger: opts.trigger, room, minutes: opts.minutes, message: useSet ? `並べた ${this.evalSet!.seeds.length} 枚の地図で学習を始めます` : "学習を始めます" });
+    const model = getStyle(opts.model ?? (useSet ? this.set!.model : playModelId()));
+    // 並べた地図を別のモデルで打たせていたら、学習するモデルで打たせ直す（学習前の記録）
+    const job = this.begin({ kind: "train", trigger: opts.trigger, room, minutes: opts.minutes, model: model.id, message: useSet ? `${model.name}を、並べた ${this.evalSet!.seeds.length} 枚の地図で学習します` : `${model.name}の学習を始めます` });
     const work = (async () => {
       const r = await trainPolicy({
         pool: this.pool!,
@@ -280,6 +293,7 @@ export class LearningLab {
         maxTurns: maxTurns(),
         dryRun: opts.dryRun,
         trigger: opts.trigger,
+        model: model.id,
         ...(useSet ? { trainSet: this.evalSet! } : {}),
         shouldStop: () => this.stopFlag,
         onGeneration: (g) => {
@@ -302,6 +316,13 @@ export class LearningLab {
         this.set!.after = mean(after.map(perTurnOf));
         this.set!.validation = r.comparison;
         this.set!.accepted = r.accepted && !opts.dryRun;
+        this.set!.model = model.id;
+      }
+      // 採用したら、全部のモデルの特性を同じ地図・同じ相手で測り直す（特性の札はモデルどうしの比べ合い）
+      if (r.accepted && !opts.dryRun && !this.stopFlag) {
+        job.message = "モデルの特性を測っています（全部のモデルを同じ地図・同じ相手で）";
+        this.emit(true);
+        await measureModels(this.pool!).catch((err) => logger.warn({ err: err instanceof Error ? err.message : String(err) }, "特性を測れなかった"));
       }
       // 学習の LLM: 結果を読んで学習環境（評価関数・地図の作り方・学習のやり方）を直す。
       // 試合中は動かさない（試合後の学習は、次の試合の前なので動かす）。試すだけ・止めた時も動かさない
@@ -311,7 +332,7 @@ export class LearningLab {
         job.coach = { state: "running", startedAt: new Date().toISOString(), result: null };
         this.emit(true);
         // 地図ごとの成績: 並べた地図があればそれ、無ければ今の方策でこのルームの地図を打たせる
-        const runs = useSet ? this.runsAfter! : await this.pool!.runAll(Array.from({ length: 12 }, (_, i) => ({ seed: 6_000_000 + Math.floor(Math.random() * 1e6) + i, room, maxTurns: maxTurns(), trace: true, policy: { kind: "planner" as const, params: loadPolicyParams() } })));
+        const runs = useSet ? this.runsAfter! : await this.pool!.runAll(Array.from({ length: 12 }, (_, i) => ({ seed: 6_000_000 + Math.floor(Math.random() * 1e6) + i, room, maxTurns: maxTurns(), trace: true, policy: { kind: "planner" as const, params: loadModelParams(model.id) } })));
         const result = await runLabCoach(
           { trigger: opts.trigger, room, train: r, runs, runsBefore: useSet ? this.runsBefore : null },
           { ...(this.coachDeps ?? {}), shouldStop: () => this.stopFlag || inMatch() },
@@ -328,7 +349,7 @@ export class LearningLab {
       job.message =
         r.generations === 0
           ? "1世代も回る前に止めました"
-          : `${r.generations} 世代・${r.episodes} 試合。学習に使っていない地図で ${r.comparison.a} → ${r.comparison.b} 点/ターン → ${r.accepted ? (opts.dryRun ? "良くなった（試すだけなので保存しない）" : "保存した（次の試合から使う）") : "見送り（はっきり良くなっていない）"}`;
+          : `${model.name}: ${r.generations} 世代・${r.episodes} 試合。学習に使っていない地図で ${r.comparison.a} → ${r.comparison.b}${model.id === STANDARD_MODEL ? " 点/ターン" : "（目的の値）/ターン"} → ${r.accepted ? (opts.dryRun ? "良くなった（試すだけなので保存しない）" : "保存した（次の試合から使う）") : "見送り（はっきり良くなっていない）"}`;
       return r;
     } catch (err) {
       job.error = err instanceof Error ? err.message.split("\n")[0]! : String(err);
@@ -378,8 +399,92 @@ export class LearningLab {
 
   private tickIdle(): void {
     if (!this.idleOn() || this.matchActive || this.job) return;
-    void this.train({ room: this.roomForIdle(), minutes: numSetting("TRAIN_IDLE_CHUNK_MIN", { min: 1 }), trigger: "idle" });
+    // モデルを順番に育てる（試合で使うモデルは2回に1回、残りはほかのモデルを順に）
+    const styles = loadStyles();
+    const play = playModelId();
+    const others = styles.filter((s) => s.id !== play);
+    const turn = this.idleTurn++;
+    const model = turn % 2 === 0 || others.length === 0 ? play : others[Math.floor(turn / 2) % others.length]!.id;
+    void this.train({ room: this.roomForIdle(), minutes: numSetting("TRAIN_IDLE_CHUNK_MIN", { min: 1 }), trigger: "idle", model });
   }
+
+  /** 全部のモデルの特性を測る（同じ地図・同じ相手） */
+  async measure(): Promise<boolean> {
+    const c = this.claim();
+    if (!(c === true || (c !== false && (await c)))) return false;
+    const job = this.begin({ kind: "measure", trigger: "manual", room: null, model: STANDARD_MODEL, message: "全部のモデルを同じ地図・同じ相手で打たせて、特性を測っています" });
+    const work = measureModels(this.pool!);
+    this.running = work;
+    try {
+      await work;
+      job.message = "特性を測りました";
+    } catch (err) {
+      job.error = err instanceof Error ? err.message.split("\n")[0]! : String(err);
+      job.message = this.stopFlag ? "止めました" : `失敗: ${job.error}`;
+    } finally {
+      this.finish(job);
+    }
+    return true;
+  }
+
+  /** モデル（特性ごと）とパラメータの一覧（「学習」画面の「モデル」） */
+  models(): ModelsInfo {
+    const styles = loadStyles();
+    const profiles = loadModelProfiles();
+    const lastTrain = lastTrainByModel();
+    return {
+      play: playModelId(),
+      params: (Object.entries(PARAM_SPACE) as [string, ParamSpec][]).map(([name, s]) => ({ name, doc: s.doc, min: s.min, max: s.max, init: s.init, integer: !!s.integer })),
+      models: styles.map((s) => {
+        const file = loadModelParamsFile(s.id);
+        return {
+          ...s,
+          params: loadModelParams(s.id),
+          trained: !!file && (s.id === STANDARD_MODEL || file.source === "train"),
+          updatedAt: file?.updatedAt ?? null,
+          profile: profiles[s.id] ?? null,
+          tags: traitTags(s.id, profiles),
+          lastTrain: lastTrain[s.id] ?? null,
+        };
+      }),
+    };
+  }
+}
+
+export interface ModelsInfo {
+  /** 試合で使うモデル */
+  play: string;
+  /** 学習するパラメータ（名前・説明・範囲・初めの値） */
+  params: { name: string; doc: string; min: number; max: number; init: number; integer: boolean }[];
+  models: (StyleDef & {
+    params: Record<string, number>;
+    trained: boolean;
+    updatedAt: string | null;
+    profile: ModelProfile | null;
+    tags: string[];
+    /** 最後の学習（学習前→後のパラメータ、採用したか） */
+    lastTrain: { at: string; accepted: boolean; trigger: string | null; before: Record<string, number> | null; after: Record<string, number>; a: number; b: number } | null;
+  })[];
+}
+
+/** train-log.jsonl から、モデルごとの最後の学習（model の無い古い記録は標準のモデル） */
+function lastTrainByModel(): Record<string, ModelsInfo["models"][number]["lastTrain"]> {
+  const out: Record<string, ModelsInfo["models"][number]["lastTrain"]> = {};
+  try {
+    if (!existsSync(POLICY_TRAIN_LOG_PATH)) return out;
+    for (const line of readFileSync(POLICY_TRAIN_LOG_PATH, "utf-8").trim().split("\n")) {
+      try {
+        const o = JSON.parse(line) as { at: string; accepted: boolean; dryRun?: boolean; trigger: string | null; model?: string; generations: number; before?: Record<string, number>; after: Record<string, number>; comparison: { a: number; b: number } };
+        if (!o.generations || o.dryRun) continue;
+        out[o.model ?? STANDARD_MODEL] = { at: o.at, accepted: o.accepted, trigger: o.trigger, before: o.before ?? null, after: o.after, a: o.comparison.a, b: o.comparison.b };
+      } catch {
+        // 壊れた行は飛ばす
+      }
+    }
+  } catch {
+    // 読めなければ空
+  }
+  return out;
 }
 
 export const lab = new LearningLab();

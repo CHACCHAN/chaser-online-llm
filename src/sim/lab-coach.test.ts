@@ -33,7 +33,7 @@ function sandbox() {
 }
 
 const fakeTrain: TrainResult = {
-  generations: 3, episodes: 100, before: {} as TrainResult["before"], after: {} as TrainResult["after"], accepted: false, ms: 1000,
+  model: "standard", modelName: "バランス", generations: 3, episodes: 100, before: {} as TrainResult["before"], after: {} as TrainResult["after"], accepted: false, ms: 1000,
   comparison: { a: 300, b: 305, diff: 5, se: 4, wins: 12, n: 24, hazardsA: 0, hazardsB: 0 },
 };
 const run = (positions: [number, number][]): EpisodeResult => ({

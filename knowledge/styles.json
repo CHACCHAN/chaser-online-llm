@@ -1,0 +1,9 @@
+{
+  "_doc": "特性ごとのモデル（方策のパラメータを、目的を変えて別々に学習する。src/solver/models.ts）。id = 識別子（var/policy/models/<id>.json。standard は var/policy/params.json）、name = 名前、trait = 特性をひとことで、description = 説明。objective = 学習の目的に足す重み（自分の得点に、item＝アイテム得点・put＝当てた得点・putDamage＝当てられた得点（負の値）・hazard＝罠を踏んだ回数 に重みを掛けて足し、1ターンあたりにして比べる）。fixed = 学習で動かさないパラメータの値。試合で使うモデルは設定の POLICY_MODEL。学習の LLM が直してよい",
+  "styles": [
+    { "id": "standard", "name": "バランス", "trait": "標準", "description": "自分の得点だけを目的に学習する。今までの方策", "objective": {} },
+    { "id": "hunter", "name": "ハンター", "trait": "攻撃型", "description": "相手に当てた得点を2倍に数えて学習する。敵に寄って当てに行く", "objective": { "put": 1 } },
+    { "id": "collector", "name": "コレクター", "trait": "回収型", "description": "相手には当てず、アイテムの得点を1.5倍に数えて学習する。点を拾うことに集中する", "objective": { "item": 0.5 }, "fixed": { "attackGain": 0 } },
+    { "id": "guardian", "name": "ガーディアン", "trait": "慎重型", "description": "当てられた得点を2倍、罠1回を -500 に数えて学習する。敵と罠から離れる", "objective": { "putDamage": 1, "hazard": -500 } }
+  ]
+}

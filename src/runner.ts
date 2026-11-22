@@ -1,7 +1,7 @@
-import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { EVALUATOR_PATH, POLICY_PARAMS_PATH, RUNS_DIR } from "./paths";
+import { EVALUATOR_PATH, RUNS_DIR } from "./paths";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
 import { isResultForRun } from "./client/result";
 import type { AgentConfig } from "./config";
@@ -17,7 +17,8 @@ import { boolSetting, getSetting, numSetting } from "./settings";
 import { saveRealMap } from "./sim/mapgen";
 import * as defaultEvaluator from "./solver/evaluator";
 import type { EvaluatorModule } from "./solver/planner";
-import { loadPolicyParams, makePlannerPolicy } from "./solver/policy";
+import { loadModelParams, playModelId } from "./solver/models";
+import { makePlannerPolicy } from "./solver/policy";
 import type { AgentPlan, SolverDecision } from "./solver/types";
 import { type UiPredictionState, uiBus } from "./ui/event-bus";
 
@@ -68,6 +69,8 @@ export interface RunSummary {
   finishedAt: string;
   room: number;
   model: string | null;
+  /** 手を出した方策のモデル（knowledge/styles.json の id。設定 POLICY_MODEL） */
+  policyModel?: string;
   webMapDetected: boolean;
   webMapUrl: string | null;
   turns: number;
@@ -221,7 +224,9 @@ export async function runAgentMatch(
   uiBus.updateMap(worldMap.buildUiMapState(null));
 
   // 方策（経路探索 ＋ 評価関数 ＋ 学習したパラメータ）は試合開始時に1回だけ読み込む（試合中にファイルが変わっても、この試合は同じもので通す）
-  const planner = makePlannerPolicy(loadPolicyParams(), await loadEvaluator());
+  const policyModel = playModelId();
+  const matchParams = loadModelParams(policyModel);
+  const planner = makePlannerPolicy(matchParams, await loadEvaluator());
   /** 方策が例外を投げても試合は止めない（安全な手にして続ける。UI には最初の1回と以後100回ごとに知らせる） */
   let solverErrors = 0;
   const decideSolver = (wm: WorldMap, phase: "CMD1" | "CMD2", turn: number, plan: AgentPlan | null): SolverDecision => {
@@ -561,6 +566,7 @@ export async function runAgentMatch(
     finishedAt,
     room: config.room,
     model: agentSettings.model,
+    policyModel,
     webMapDetected: webMap.available,
     webMapUrl: webMap.sourceUrl,
     turns: turnLogs.length,
@@ -611,7 +617,7 @@ export async function runAgentMatch(
   // この試合で使った方策（試合後の改修・学習の前）を残す。verify で改修前と比べる時や、強かった試合の方策を見る時に使う
   try {
     if (existsSync(EVALUATOR_PATH)) copyFileSync(EVALUATOR_PATH, path.join(runDir, "evaluator-snapshot.ts"));
-    if (existsSync(POLICY_PARAMS_PATH)) copyFileSync(POLICY_PARAMS_PATH, path.join(runDir, "policy-params.json"));
+    writeFileSync(path.join(runDir, "policy-params.json"), `${JSON.stringify({ version: 1, model: policyModel, params: matchParams, updatedAt: new Date().toISOString(), source: "match" }, null, 2)}\n`);
   } catch (err) {
     logger.warn({ err: err instanceof Error ? err.message : String(err) }, "方策の控えを残せなかった");
   }

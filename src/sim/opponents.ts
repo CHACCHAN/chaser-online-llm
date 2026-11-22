@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import path from "node:path";
 import { POLICY_LEAGUE_PATH } from "../paths";
 import { clampParams, type Params } from "../solver/evaluator";
-import { loadPolicyParams } from "../solver/policy";
+import { loadModelParams, loadStyles, STANDARD_MODEL } from "../solver/models";
 import { makeRng, pickWeighted } from "./rng";
 import { loadTrainConfig } from "./train-config";
 
@@ -65,11 +65,17 @@ export function addToLeague(params: Params, note: string, max: number, file = PO
   renameSync(tmp, file);
 }
 
-/** 今の設定から相手の決め方を作る（今のパラメータ・リーグ・重み） */
-export function loadOpponentPlan(): OpponentPlan {
+/**
+ * 今の設定から相手の決め方を作る。「自分」の相手は、学習するモデルの今のパラメータ（current）と、
+ * リーグ（前に採用したパラメータ）・ほかの特性のモデル（ハンターなど）から選ぶ。
+ */
+export function loadOpponentPlan(modelId: string = STANDARD_MODEL): OpponentPlan {
   const cfg = loadTrainConfig().config;
   const league = loadLeague().members.map((m, i) => ({ params: m.params, label: `${i + 1}つ前` }));
-  return { mix: { greedy: cfg.oppGreedy, hunter: cfg.oppHunter, self: cfg.oppSelf }, current: loadPolicyParams(), league };
+  const others = loadStyles()
+    .filter((s) => s.id !== modelId)
+    .map((s) => ({ params: loadModelParams(s.id), label: s.name }));
+  return { mix: { greedy: cfg.oppGreedy, hunter: cfg.oppHunter, self: cfg.oppSelf }, current: loadModelParams(modelId), league: [...league, ...others] };
 }
 
 /** 地図（seed）ごとに相手を決める。self は半分が今のパラメータ、半分がリーグから（リーグが空なら今のもの） */

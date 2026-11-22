@@ -490,6 +490,41 @@ body.view-lab #labFlow { display: flex; }
 .mcard .cap { display: flex; gap: 8px; align-items: baseline; font-size: var(--t-xs); color: var(--ink2); flex-wrap: wrap; }
 .mcard .cap b { color: var(--ink); font-family: var(--mono); font-size: var(--t-s); }
 .mcard .cap .r { margin-left: auto; font-family: var(--mono); }
+.lab-tabs { display: flex; gap: 0; padding: 8px var(--s4) 0; border-bottom: 1px solid var(--line2); }
+.lab-tabs button { border: 0; background: none; padding: 6px 12px 8px; font: inherit; font-size: var(--t-s); color: var(--ink2); border-bottom: 2px solid transparent; cursor: pointer; }
+.lab-tabs button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+.lab-models { flex: 1; overflow: auto; padding: 14px var(--s4) 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; }
+.lab-models .mhead { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: var(--t-s); min-width: 0; }
+.lab-models .mhead > span { min-width: 0; overflow-wrap: anywhere; }
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 12px; }
+.model { border: 1px solid var(--line); border-radius: var(--r); background: var(--sunk); padding: 10px 12px; display: grid; gap: 6px; font-size: var(--t-s); min-width: 0; }
+.model.play { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.model .mt { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.model .mt b { font-size: var(--t-m); }
+.model .desc { color: var(--ink2); overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: var(--t-xs); padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink2); background: var(--panel); }
+.chip.trait { border-color: var(--ink2); color: var(--ink); }
+.mstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 8px; }
+.mstats div { display: grid; }
+.mstats span { font-size: var(--t-xs); color: var(--ink3); }
+.mstats b { font-family: var(--mono); font-size: var(--t-s); }
+.model .foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--ink3); font-size: var(--t-xs); }
+.model .foot .btn { margin-left: auto; }
+.ptable-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); }
+.ptable { border-collapse: collapse; width: 100%; font-size: var(--t-s); min-width: 640px; }
+.ptable th, .ptable td { padding: 6px 10px; border-bottom: 1px solid var(--line2); text-align: left; vertical-align: top; }
+.ptable thead th { background: var(--sunk); font-weight: 600; position: sticky; top: 0; }
+.ptable td.pn code { font-family: var(--mono); font-size: var(--t-s); }
+.ptable td.pn .doc { color: var(--ink2); font-size: var(--t-xs); margin-top: 2px; max-width: 360px; }
+.ptable td.rg { font-family: var(--mono); font-size: var(--t-xs); color: var(--ink3); white-space: nowrap; }
+.pv { display: grid; gap: 3px; min-width: 92px; }
+.pv b { font-family: var(--mono); font-weight: 500; }
+.pv .bar { height: 4px; background: var(--line2); border-radius: 2px; position: relative; }
+.pv .bar i { position: absolute; top: -2px; width: 3px; height: 8px; border-radius: 1px; background: var(--ink); }
+.pv .bar i.init { background: var(--ink3); opacity: .6; }
+.pv .d { font-size: var(--t-xs); font-family: var(--mono); }
+.pv.fixed b::after { content: " 固定"; font-family: inherit; font-size: var(--t-xs); color: var(--ink3); }
 
 @media (max-width: 1360px) {
   .ro { padding: 0 9px; min-width: 56px; }
@@ -713,6 +748,7 @@ body.view-lab #labFlow { display: flex; }
   <div class="lab-bar">
     <div class="grp"><label for="lmN">地図</label><input id="lmN" type="number" min="1" max="48" value="12" inputmode="numeric" /><span class="lb">枚</span></div>
     <div class="grp"><label for="lmRoom" title="どんな地図を作るか。ルームを選ぶと、そのルームで測った大きさ・ターン数に合わせ、保存した本物の地図があれば半分ほどそれを少し変えて使う">地図の種類</label><select id="lmRoom"><option value="">いろいろ（大きさ 15〜39・ランダム）</option></select></div>
+    <div class="grp"><label for="lmModel" title="地図を打たせる・学習するモデル（特性ごとに別々に学習する）">モデル</label><select id="lmModel"><option value="standard">バランス</option></select></div>
     <button class="btn" id="lmMake" type="button">地図を作る</button>
     <span class="sep" aria-hidden="true"></span>
     <div class="grp"><label for="ltMin">時間</label><input id="ltMin" type="number" min="0.5" step="0.5" value="5" inputmode="decimal" /><span class="lb">分</span></div>
@@ -721,6 +757,11 @@ body.view-lab #labFlow { display: flex; }
     <label class="chk" title="試合をしていない間、毎回新しい地図で学習を続ける。試合が始まると止まる（.env の TRAIN_IDLE に保存）"><input type="checkbox" id="ltIdle" />試合をしていない間も学習を続ける</label>
   </div>
   <div class="lab-status" id="labStatus" aria-live="polite"></div>
+  <div class="lab-tabs" role="group" aria-label="表示">
+    <button type="button" data-lt="maps" aria-pressed="true">地図</button>
+    <button type="button" data-lt="models" aria-pressed="false">モデルとパラメータ</button>
+  </div>
+  <div class="lab-models" id="labModels" hidden></div>
   <div class="lab-play" id="labPlay" hidden>
     <button class="btn" id="lpPlay" type="button">再生</button>
     <input type="range" id="lpSlider" min="0" value="0" aria-label="ターン" />

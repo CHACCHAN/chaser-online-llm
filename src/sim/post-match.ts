@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { EVALUATOR_PATH, POLICY_DIR, PROJECT_ROOT } from "../paths";
 import { getSetting, numSetting } from "../settings";
-import { loadPolicyParams } from "../solver/policy";
+import { loadModelParams, playModelId } from "../solver/models";
 import { SimPool } from "./pool";
 import { comparePolicies, evaluatePolicy, makeEvalSet, notWorse, perTurn, type Comparison } from "./train";
 
@@ -52,7 +52,7 @@ export async function gateEvaluatorChange(baselineCode: string, room: number | n
   writeImportable(baselineCode, EVALUATOR_BASELINE_PATH);
   const pool = new SimPool(workers());
   try {
-    const params = loadPolicyParams();
+    const params = loadModelParams(playModelId());
     const set = makeEvalSet(700_000, n, room, maxTurns());
     const c = await comparePolicies(
       pool,
@@ -82,7 +82,7 @@ export async function benchRoom(room: number, n = 16): Promise<RoomBench> {
   const pool = new SimPool(workers());
   try {
     const set = { seeds: Array.from({ length: n }, (_, i) => 800_000 + i), rooms: Array.from({ length: n }, () => room), maxTurns: maxTurns() };
-    const rs = await evaluatePolicy(pool, { kind: "planner", params: loadPolicyParams() }, set);
+    const rs = await evaluatePolicy(pool, { kind: "planner", params: loadModelParams(playModelId()) }, set);
     return {
       perTurn: Math.round((rs.reduce((s, r) => s + perTurn(r), 0) / rs.length) * 10) / 10,
       maps: rs.length,

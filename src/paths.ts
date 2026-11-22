@@ -50,6 +50,12 @@ export const LAB_COACH_LOG_PATH = path.join(VAR_DIR, "lab-coach", "log.jsonl");
 export const POLICY_DIR = path.join(VAR_DIR, "policy");
 export const POLICY_PARAMS_PATH = path.join(POLICY_DIR, "params.json");
 /** 学習の記録（1回ごとに1行） */
+/** 特性ごとのモデル（ハンター・コレクターなど）の定義 */
+export const POLICY_STYLES_PATH = path.join(KNOWLEDGE_DIR, "styles.json");
+/** 特性ごとのモデルのパラメータ（標準のモデルは params.json） */
+export const POLICY_MODELS_DIR = path.join(POLICY_DIR, "models");
+/** モデルごとに同じ地図・同じ相手で測った特性（攻撃・被弾・回収・勝ち） */
+export const POLICY_MODEL_PROFILES_PATH = path.join(POLICY_DIR, "model-profiles.json");
 /** 自己対戦の相手（前に採用したパラメータの控え） */
 export const POLICY_LEAGUE_PATH = path.join(POLICY_DIR, "league.json");
 export const POLICY_TRAIN_LOG_PATH = path.join(POLICY_DIR, "train-log.jsonl");
