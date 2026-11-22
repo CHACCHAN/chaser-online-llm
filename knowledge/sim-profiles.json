@@ -1,0 +1,27 @@
+{
+  "_doc": "シミュレータの地図の作り方（src/sim/mapgen.ts）。default を基本に、rooms.<番号> で上書きする。size・turns・webMap は var/room-profiles.json の実測があればそれを使う。fill はタイル番号ごとの重み、blobs は固まり、lines は帯（奈落の川・岩盤の壁）。realMapShare は本物の地図（var/maps/、試合中の Webマップから保存）を少し変えて使う割合。本物の地図と見比べて、似るように直してよい",
+  "default": {
+    "size": [15, 39],
+    "turns": [100, 400],
+    "players": [1, 3],
+    "webMap": 0.7,
+    "realMapShare": 0.5,
+    "fill": { "2": 30, "0": 10, "12": 5, "4": 4, "1": 3, "3": 2, "9": 2, "5": 1.2, "6": 1.5, "7": 1, "8": 1, "71": 0.5, "75": 0.5, "77": 0.8, "79": 0.8, "10": 1.5 },
+    "blobs": [
+      { "tiles": [12], "count": [0, 4], "radius": [1, 3], "density": 0.9 },
+      { "tiles": [4], "count": [1, 5], "radius": [1, 2], "density": 0.5 },
+      { "tiles": [71, 75, 77, 79], "count": [1, 4], "radius": [1, 2], "density": 0.6 },
+      { "tiles": [5, 6, 7, 8, 9, 1], "count": [1, 5], "radius": [1, 3], "density": 0.5 }
+    ],
+    "lines": [
+      { "tiles": [12], "count": [0, 3], "length": [5, 25], "width": [1, 3] },
+      { "tiles": [10], "count": [0, 2], "length": [3, 12], "width": [1, 1] }
+    ],
+    "warps": [0, 8],
+    "blackstars": 0.3
+  },
+  "rooms": {
+    "3": { "fill": { "0": 20, "12": 12, "3": 1, "2": 4 }, "players": [1, 1] },
+    "10": { "fill": { "0": 20, "12": 8, "2": 4, "3": 1 }, "players": [1, 1] }
+  }
+}

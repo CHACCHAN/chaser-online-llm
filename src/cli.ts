@@ -40,6 +40,14 @@ async function main() {
       y: { type: "string" },
       note: { type: "string" },
       abs: { type: "boolean" },
+      n: { type: "string" },
+      seed: { type: "string" },
+      "max-turns": { type: "string" },
+      minutes: { type: "string" },
+      policy: { type: "string" },
+      evaluator: { type: "string" },
+      "dry-run": { type: "boolean" },
+      workers: { type: "string" },
     },
     strict: false,
   });
@@ -192,6 +200,11 @@ async function main() {
     return;
   }
 
+  if (subcommand === "sim" || subcommand === "bench" || subcommand === "train") {
+    await simCommands(subcommand, values as Record<string, string | boolean | undefined>);
+    return;
+  }
+
   console.log(
     [
       "Usage: bun src/cli.ts <subcommand> [options]",
@@ -202,8 +215,47 @@ async function main() {
       "  tile-scores  --run-dir <dir>  Tile scores measured from the official item score on the Web map (read only)",
       "  cells        --room <n> [--near x,y] [--radius r] [--abs]  Known warps and cell notes (coords = snapshot pos frame unless --abs)",
       "  cell-note    --room <n> --x <x> --y <y> --note <text> [--abs]  Add a note to a cell (empty --note clears)",
+      "  sim          [--room <n>] [--n 8] [--seed s] [--policy planner|solver] [--max-turns t]  シミュレータで試合をして成績を出す",
+      "  bench        [--room <n>] [--n 24] [--evaluator <file>]  シミュレータで比べる（既定: solver と planner。--evaluator: 今の evaluator.ts とそのファイル）",
+      "  train        [--room <n>] [--minutes 5] [--dry-run]  方策のパラメータを学習する（はっきり良くなった時だけ var/policy/params.json に保存）",
     ].join("\n"),
   );
+}
+
+async function simCommands(sub: "sim" | "bench" | "train", v: Record<string, string | boolean | undefined>): Promise<void> {
+  const { SimPool } = await import("./sim/pool");
+  const { comparePolicies, evaluatePolicy, makeEvalSet, perTurn, trainPolicy } = await import("./sim/train");
+  const { loadPolicyParams } = await import("./solver/policy");
+  const room = typeof v.room === "string" ? Number(v.room) : null;
+  const maxTurns = typeof v["max-turns"] === "string" ? Number(v["max-turns"]) : 200;
+  const pool = new SimPool(typeof v.workers === "string" ? Number(v.workers) : undefined);
+  try {
+    if (sub === "sim") {
+      const n = Number(v.n ?? 8);
+      const set = makeEvalSet(Number(v.seed ?? 1), n, room, maxTurns);
+      const policy = v.policy === "solver" ? ({ kind: "solver" } as const) : ({ kind: "planner", params: loadPolicyParams() } as const);
+      const rs = await evaluatePolicy(pool, policy, set);
+      for (const [i, r] of rs.entries()) console.log(`seed ${set.seeds[i]} ${r.scenario} web=${r.webMap} T=${r.totalTurns} 得点 ${r.score}（${perTurn(r).toFixed(1)}/ターン）罠 ${r.hazardHits} 相手 ${r.opponents.join(",") || "-"} ${r.msPerPhase}ms/手`);
+      console.log(`平均 ${(rs.reduce((s, r) => s + perTurn(r), 0) / rs.length).toFixed(1)} 点/ターン`);
+      return;
+    }
+    if (sub === "bench") {
+      const n = Number(v.n ?? 24);
+      const set = makeEvalSet(Number(v.seed ?? 500_000), n, room, maxTurns);
+      const params = loadPolicyParams();
+      const a = typeof v.evaluator === "string" ? ({ kind: "planner", params } as const) : ({ kind: "solver" } as const);
+      const b = typeof v.evaluator === "string" ? ({ kind: "planner", params, evaluatorPath: path.resolve(v.evaluator) } as const) : ({ kind: "planner", params } as const);
+      const c = await comparePolicies(pool, a, b, set);
+      const label = typeof v.evaluator === "string" ? ["今の evaluator.ts", v.evaluator] : ["solver（active-solver.ts）", "planner（経路探索）"];
+      console.log(JSON.stringify({ policyA: label[0], policyB: label[1], ...c }, null, 2));
+      return;
+    }
+    const minutes = Number(v.minutes ?? 5);
+    const r = await trainPolicy({ pool, room, budgetMs: minutes * 60_000, maxTurns, dryRun: v["dry-run"] === true, log: (m) => console.log(m) });
+    console.log(JSON.stringify({ accepted: r.accepted, generations: r.generations, episodes: r.episodes, comparison: r.comparison, after: r.after }, null, 2));
+  } finally {
+    pool.close();
+  }
 }
 
 await main();

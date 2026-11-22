@@ -428,6 +428,19 @@ export class WorldMap {
     return this.currentMap.get(coordKey(x, y));
   }
 
+  /** 今の区画の分かっているマスをすべて回る（経路探索用。座標は今の区画のローカル座標） */
+  public forEachKnownTile(cb: (x: number, y: number, rec: TileRecord) => void): void {
+    for (const [k, rec] of this.currentMap) {
+      const i = k.indexOf(",");
+      cb(Number(k.slice(0, i)), Number(k.slice(i + 1)), rec);
+    }
+  }
+
+  /** 今の区画の分かっているマスの数 */
+  public knownTileCount(): number {
+    return this.currentMap.size;
+  }
+
   public getLastGrid(): number[] | null {
     return this.lastGridValues;
   }

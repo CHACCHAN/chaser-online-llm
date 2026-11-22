@@ -38,6 +38,17 @@ export const AGENT_TOOL_LOG_PATH = path.join(VAR_DIR, "agent-tool-log.jsonl");
 /** 保護ファイルを元に戻す前の中身の控え（src/evolution/edit-guard.ts） */
 export const EDIT_GUARD_BACKUP_DIR = path.join(VAR_DIR, "edit-guard-backup");
 export const ROOM_PROFILES_PATH = path.join(VAR_DIR, "room-profiles.json");
+/** シミュレータの地図の作り方（エージェントが本物と見比べて直してよい） */
+export const SIM_PROFILES_PATH = path.join(KNOWLEDGE_DIR, "sim-profiles.json");
+/** 本物の地図（試合中の Webマップの最初の1枚、var/maps/room<N>/<runId>.json）。シミュレータで使う */
+export const SIM_MAPS_DIR = path.join(VAR_DIR, "maps");
+/** 学習した方策のパラメータ（src/solver/evaluator.ts の PARAM_SPACE の値）と、その成績 */
+export const POLICY_DIR = path.join(VAR_DIR, "policy");
+export const POLICY_PARAMS_PATH = path.join(POLICY_DIR, "params.json");
+/** 学習の記録（1回ごとに1行） */
+export const POLICY_TRAIN_LOG_PATH = path.join(POLICY_DIR, "train-log.jsonl");
+/** 経路探索の評価関数（エージェントが試合後に改修してよい。シミュレータの成績で採否を決める） */
+export const EVALUATOR_PATH = path.join(PROJECT_ROOT, "src/solver/evaluator.ts");
 export const BEST_SOLVERS_DIR = path.join(VAR_DIR, "best-solvers");
 export const CLAUDE_HOME_DIR = path.join(VAR_DIR, "claude-home");
 /** 試合中の現在の状態（毎フェーズ更新。試合後に var/runs/<runId>/ へコピー） */
