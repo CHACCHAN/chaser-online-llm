@@ -17,6 +17,22 @@ bun run start          # Web ダッシュボードを起動
 
 ブラウザで `http://localhost:3456` を開き、ルームを選んで「開始」を押します。画面上の「設定」からは `.env` を直接編集して保存できます。
 
+### Docker（devcontainer を使わない場合）
+
+```bash
+cp .env.example .env                 # 先に .env を用意する（PORT もここから読む）
+docker compose up -d --build         # サービスとして起動（再起動しても自動で上がる）
+docker compose logs -f               # ログ
+docker compose down                  # 止める
+```
+
+- イメージは `.devcontainer/Dockerfile`（Bun・git・ripgrep など実行に要るものだけ）。プロジェクトは `/app` にマウントするので、エージェントが書き換えたソルバー・`knowledge/`・`var/`（試合の記録）はそのまま手元に残る。依存は名前付きボリューム `node_modules` に入り、起動のたびに `bun install --frozen-lockfile` する。
+- コンテナは root ではなく UID 1000 で動く（Claude Code は root では動かさない）。手元の UID が違う時は `UID=$(id -u) GID=$(id -g) docker compose up -d --build`。
+- WebUI には認証が無く `.env`（鍵）も編集できるので、既定では `127.0.0.1` だけで開く。他のマシンから開く時は `compose.yaml` の `ports` を変える（その時は自分で守ること）。
+- サブスクリプションでつなぐ時のログイン: `docker compose exec chaser bun run claude-login`（または `.env` の `LLM_OAUTH_TOKEN`）。
+- ホストのローカル LLM につなぐ時、コンテナからは `localhost` ではなく `http://host.docker.internal:<port>` を `LLM_API_URL` にする（Linux では `compose.yaml` に `extra_hosts: ["host.docker.internal:host-gateway"]` を足す）。
+- devcontainer の中から `docker compose up` すると、マウントの元がホストのパスとして解釈されて動かないことがある（docker-outside-of-docker のため）。devcontainer では `bun run start` を使う。
+
 ## 主なコマンド
 
 | コマンド | 内容 |

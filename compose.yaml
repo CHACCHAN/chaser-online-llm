@@ -1,0 +1,31 @@
+# docker compose up -d --build で WebUI（ダッシュボード）をサービスとして起動する。
+# 設定はプロジェクトの .env（PORT もここから読む）。試合はブラウザから「準備」→「開始」。
+# 実行ユーザーをホストに合わせる時: UID=$(id -u) GID=$(id -g) docker compose up -d --build
+services:
+  chaser:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        USER_UID: ${UID:-1000}
+        USER_GID: ${GID:-1000}
+    image: chaser-online-llm
+    init: true
+    restart: unless-stopped
+    # WebUI には認証が無く、.env（鍵）も編集できるので、既定ではこのマシンからだけ開ける
+    ports:
+      - "127.0.0.1:${PORT:-3456}:${PORT:-3456}"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:${PORT:-3456}/api/state", "-o", "/dev/null"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    # 停止の時に試合中の Claude Code を止める猶予
+    stop_grace_period: 30s
+
+volumes:
+  node_modules:
