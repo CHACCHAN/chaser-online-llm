@@ -19,6 +19,7 @@ import * as defaultEvaluator from "./solver/evaluator";
 import type { EvaluatorModule } from "./solver/planner";
 import { type FiredTrigger, loadAllModels, TriggerMonitor, votersFrom } from "./agent/triggers";
 import { summarizeMatchPlan } from "./agent/match-plan";
+import { formatActionLine } from "./agent/action-log";
 import { type LlmReply, renderTriggerReview, reviewRun } from "./agent/trigger-review";
 import { getStyle, loadModelParams, playModelId } from "./solver/models";
 import { makePlannerPolicy, type PolicyFn } from "./solver/policy";
@@ -256,6 +257,8 @@ export async function runAgentMatch(
   const policyModel = matchPlan?.model && models.some((m) => m.id === matchPlan.model) ? matchPlan.model : settingModel;
   const matchParams = loadModelParams(policyModel);
   let activeModel = policyModel;
+  const modelNames = Object.fromEntries(models.map((m) => [m.id, m.name]));
+  const modelNameOf = (id: string) => modelNames[id] ?? id;
   let planner: PolicyFn = models.find((m) => m.id === policyModel)?.policy ?? makePlannerPolicy(matchParams, evaluator);
   const modelSwitches: { turn: number; phase: string; from: string; to: string; by: string[] }[] = [];
   const switchModel = (to: string, turn: number, phase: string, by: string[]) => {
@@ -265,7 +268,7 @@ export async function runAgentMatch(
     activeModel = to;
     planner = m.policy;
     triggerMonitor.setVoters(votersFrom(models, to));
-    uiBus.patchState({ matchModel: { id: to, name: m.name, callMode: mainAgent ? callMode : null, switches: modelSwitches.length } });
+    uiBus.patchState({ matchModel: { id: to, name: m.name, callMode: mainAgent ? callMode : null, switches: modelSwitches.length, names: modelNames } });
   };
   // 試合中の LLM を呼ぶきっかけ（準備の LLM が選んだ設定）。ほかの特性のモデルにも同じ盤面で手を出させて比べる
   const triggerMonitor = new TriggerMonitor(votersFrom(models, policyModel), matchPlan?.triggers);
@@ -280,7 +283,7 @@ export async function runAgentMatch(
   const dropStalePending = (turn: number) => {
     pendingTriggers = pendingTriggers.filter((f) => f.id === "unknownTile" || f.id === "endgame" || turn - (pendingAt.get(f.id) ?? turn) <= PENDING_KEEP_TURNS);
   };
-  uiBus.patchState({ matchModel: { id: policyModel, name: getStyle(policyModel).name, callMode: mainAgent ? callMode : null, switches: 0 } });
+  uiBus.patchState({ matchModel: { id: policyModel, name: getStyle(policyModel).name, callMode: mainAgent ? callMode : null, switches: 0, names: modelNames } });
   if (mainAgent && matchPlan) {
     uiBus.pushClaudeEvent({
       context: "in_game",
@@ -645,6 +648,13 @@ export async function runAgentMatch(
 
       // 1行ずつ追記（毎ターン全件を書き直すと 1500 ターンで数百MBの書き込みになる）
       await appendFile(path.join(runDir, "turns.jsonl"), `${JSON.stringify(record)}\n`);
+      // 行動ログ（人が読む1ターン1行）
+      try {
+        const prevEst = turnLogs.length >= 2 ? turnLogs[turnLogs.length - 2]!.estimatedScoreAfter : 0;
+        await appendFile(path.join(runDir, "actions.log"), `${formatActionLine(record, prevEst, modelNameOf)}\n`);
+      } catch {
+        // 書けなくても試合は続ける
+      }
 
       logger.info(
         {

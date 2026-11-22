@@ -376,9 +376,6 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .maptip { position: absolute; pointer-events: none; background: var(--ink); color: var(--panel); font-size: var(--t-s); padding: 3px 7px; border-radius: var(--r); white-space: nowrap; z-index: 4; }
 
 /* エージェント（思考ログ・メモ）: タブで切替 */
-.agent { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 280px; }
-.agent .tabs { padding: 0 8px; }
-.ag-pane { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 .pane-tools { display: flex; align-items: center; gap: var(--s3); padding: 8px 14px; flex: none; flex-wrap: wrap; border-bottom: 1px solid var(--line2); }
 .pane-tools .end { margin-left: auto; }
 .scroll { flex: 1 1 0; min-height: 120px; overflow-y: auto; }
@@ -449,8 +446,29 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 .views { flex: none; }
 .views button { padding: 4px 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 .vdot { width: 7px; height: 7px; border-radius: 50%; background: var(--pos); animation: pulse 1.6s infinite; }
-/* 試合: 中央にマップ、右にいまの判断とエージェント */
-.work { grid-template-columns: minmax(0, 1fr) 400px; }
+/* 試合: 左にマップといまの判断、真ん中に思考ログと行動ログ、右にメモ */
+.work { grid-template-columns: minmax(0, 1fr) minmax(360px, 30vw) minmax(240px, 19vw); }
+.col.mid { border-left: 1px solid var(--line); background: var(--panel); display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+.col.mid .half { display: flex; flex-direction: column; min-height: 0; }
+.col.mid .half + .half { border-top: 1px solid var(--line); }
+.col.mid .sec-h h2 .cnt, .col.live .sec-h h2 .cnt { font-weight: 400; color: var(--ink3); font-size: var(--t-xs); margin-left: 4px; }
+.col.live { display: flex; flex-direction: column; }
+.col.live .scroll { flex: 1 1 0; }
+.act { border-bottom: 1px solid var(--line2); }
+.act summary { list-style: none; padding: 4px 14px; display: grid; grid-template-columns: 38px 92px 50px minmax(0, 1fr); gap: 8px; align-items: baseline; cursor: pointer; font-size: var(--t-s); }
+.act summary::-webkit-details-marker { display: none; }
+.act summary:hover { background: var(--hover); }
+.act .t { color: var(--ink3); font-family: var(--mono); font-size: var(--t-xs); }
+.act .c { font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
+.act .d { font-family: var(--mono); font-size: var(--t-xs); text-align: right; }
+.act .d.neg { color: var(--neg); } .act .d.pos { color: var(--pos); }
+.act .r { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink2); }
+.act .who { font-weight: 700; color: var(--solver); margin-right: 6px; } .act .who.llm { color: var(--main); }
+.act .x { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.act .x .ev { font-size: var(--t-xs); }
+.act .x .reply { font-size: var(--t-xs); color: var(--main); }
+.act dl { margin: 0; padding: 4px 14px 8px 64px; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 2px 10px; font-size: var(--t-xs); color: var(--ink2); }
+.act dt { color: var(--ink3); } .act dd { margin: 0; overflow-wrap: anywhere; }
 .col.center { overflow-y: auto; background: var(--panel); }
 .decide .meter, .decide .prev, .decide .cand { display: none !important; }
 /* 学習・統計の画面では試合の項目を出さない */
@@ -566,7 +584,7 @@ body.view-lab #labFlow { display: flex; }
   #inMain { width: 128px; }
 }
 @media (max-width: 1279px) {
-  .work { grid-template-columns: minmax(0, 1fr) 340px; }
+  .work { grid-template-columns: minmax(0, 1fr) 340px 240px; }
   .bar { gap: var(--s3); }
   .flow li { padding: 0 12px 0 19px; }
   .grp + .grp { padding-left: 0; border-left: 0; }
@@ -585,7 +603,6 @@ body.view-lab #labFlow { display: flex; }
   .strip { flex-wrap: wrap; }
   .status { flex-wrap: wrap; }
   .status-msg { white-space: normal; }
-  .ag-pane { flex: none; }
   .brand .bt { display: inline; }
   .flow { order: 5; flex-basis: 100%; }
   .flow li { flex: 1 1 0; justify-content: center; padding: 0 6px 0 14px; }
@@ -606,7 +623,8 @@ body.view-lab #labFlow { display: flex; }
   .lab-play { flex-wrap: wrap; }
   .lab-play input[type="range"] { order: 5; flex-basis: 100%; }
   .col.center { order: 1; overflow: visible; }
-  .col.live { order: 2; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .col.mid { order: 2; border-left: 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; }
+  .col.live { order: 3; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
   .col.rail { order: 3; border-right: 0; border-top: 1px solid var(--line); }
   .stats { overflow: visible; }
   .st-pane { overflow: visible; }
@@ -615,7 +633,6 @@ body.view-lab #labFlow { display: flex; }
   .st-main { overflow: visible; }
   .runs { max-height: 60vh; }
   .tbl-wrap { flex: none; max-height: 70vh; }
-  .agent { min-height: 0; }
   .scroll { flex: none; max-height: 60vh; }
 }
 @media (max-width: 640px) {
@@ -705,41 +722,50 @@ body.view-lab #labFlow { display: flex; }
 
 <div class="work">
 
-  <!-- 中央: 推移と履歴 -->
+  <!-- 左: マップといまの判断 -->
   <main class="col center" id="center">
     <section class="block" id="secMap" aria-labelledby="hMap">
       <div class="sec-h"><h2 id="hMap">マップ</h2><div class="end faint" id="mapSrc"></div></div>
       <div class="mapbox" id="mapbox"><canvas id="map" width="10" height="10" role="img" aria-label="盤面"></canvas><div class="maptip" id="maptip" hidden></div><div class="mapinfo" id="mapinfo"></div></div>
     </section>
-  </main>
-
-  <!-- 右: いまの試合（判断・マップ・エージェント） -->
-  <aside class="col live" aria-label="いまの試合">
     <section class="block" aria-labelledby="hDecide">
       <div class="sec-h"><h2 id="hDecide">いまの判断</h2><div class="end faint" id="decWhen"></div></div>
       <div class="decide" id="decide"></div>
     </section>
-    <section class="agent" aria-label="エージェント">
-      <div class="tabs" role="tablist" aria-label="エージェント">
-        <button type="button" role="tab" id="agLog" data-ag="log" aria-controls="paneLog" aria-selected="true" title="Claude Code の思考・ツール呼び出しログ">思考ログ <span class="cnt" id="logCount"></span></button>
-        <button type="button" role="tab" id="agMemo" data-ag="memo" aria-controls="paneMemo" aria-selected="false" tabindex="-1" title="LLM は毎フェーズ前の会話なしで呼ばれる。次のフェーズへ引き継ぐのはこのメモと直近の経過・現在の状況だけ">メモ <span class="cnt" id="memoLen"></span></button>
-      </div>
-      <div class="ag-pane" id="paneLog" role="tabpanel" aria-labelledby="agLog">
-        <div class="pane-tools">
+  </main>
+
+  <!-- 真ん中: 上に思考ログ、下に行動ログ -->
+  <section class="col mid" aria-label="ログ">
+    <section class="half" aria-labelledby="hLog">
+      <div class="sec-h"><h2 id="hLog" title="LLM（準備・試合中・振り返り）の思考・ツール呼び出し・システムの知らせ">思考ログ <span class="cnt" id="logCount"></span></h2>
+        <div class="end">
           <div class="seg" role="group" aria-label="ログの種別">
             <button type="button" data-lf="all" aria-pressed="true">全て</button>
             <button type="button" data-lf="in_game" aria-pressed="false">対戦</button>
             <button type="button" data-lf="evolution" aria-pressed="false">進化</button>
           </div>
-          <span class="hint end">行を押すと全文</span>
         </div>
-        <div class="scroll" id="log"></div>
       </div>
-      <div class="ag-pane" id="paneMemo" role="tabpanel" aria-labelledby="agMemo" hidden>
-        <div class="pane-tools"><span class="hint">次のフェーズへ引き継ぐメモ。LLM は毎回前の会話なしで呼ばれる</span></div>
-        <div class="scroll"><pre class="memo-body" id="memoBody"></pre></div>
-      </div>
+      <div class="scroll" id="log"></div>
     </section>
+    <section class="half" aria-labelledby="hAct">
+      <div class="sec-h"><h2 id="hAct" title="1ターン1行: 打った手（CMD1→CMD2）・推定得点の増減・誰が決めたか・理由・きっかけ・届いた LLM の返答。試合の記録フォルダの actions.log にも残る">行動ログ <span class="cnt" id="actCount"></span></h2>
+        <div class="end">
+          <div class="seg" role="group" aria-label="行動ログの絞り込み">
+            <button type="button" data-af="all" aria-pressed="true">全て</button>
+            <button type="button" data-af="llm" aria-pressed="false" title="きっかけが鳴った・LLM の返答が届いた・モデルを切り替えたターンだけ">LLM・きっかけ</button>
+          </div>
+        </div>
+      </div>
+      <div class="scroll" id="actlog"></div>
+    </section>
+  </section>
+
+  <!-- 右: メモだけ -->
+  <aside class="col live" aria-labelledby="hMemo">
+    <div class="sec-h"><h2 id="hMemo">メモ <span class="cnt" id="memoLen"></span></h2></div>
+    <div class="pane-tools"><span class="hint">次のフェーズへ引き継ぐメモ。LLM は毎回前の会話なしで呼ばれる</span></div>
+    <div class="scroll"><pre class="memo-body" id="memoBody"></pre></div>
   </aside>
 </div>
 
@@ -900,9 +926,9 @@ const S = {
   hiTurn: null, expanded: new Set(), models: [],
   imgs: new Map(), tileFiles: null, mapHit: null,
   planKeep: undefined, planOff: null,
-  agTab: "log", disconnected: false,
+  disconnected: false,
 };
-{ if (load("chaser.roomAll") === "1") S.roomAll = true; const a = load("chaser.agentTab"); if (a === "log" || a === "memo") S.agTab = a; }
+{ if (load("chaser.roomAll") === "1") S.roomAll = true; }
 
 /* ============ 再描画スケジューラ ============ */
 const dirty = new Set(); let raf = 0;
@@ -910,8 +936,8 @@ function mark(...ks) { ks.forEach((k) => dirty.add(k)); if (!raf) raf = requestA
 function flush() {
   raf = 0; const d = [...dirty]; dirty.clear();
   const R = { head: renderHead, settings: syncSettings, rail: renderRail, chart: renderChart, runhead: renderRunHead, table: renderMain,
-    decide: renderDecide, map: renderMap, log: renderLog };
-  for (const k of ["head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log"]) if (d.includes(k)) { try { R[k](); } catch (e) { console.error(k, e); } }
+    decide: renderDecide, map: renderMap, log: renderLog, act: renderActLog };
+  for (const k of ["head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log", "act"]) if (d.includes(k)) { try { R[k](); } catch (e) { console.error(k, e); } }
 }
 
 /* ============ ターン記録の正規化 ============ */
@@ -1619,14 +1645,45 @@ function renderUsage(u) {
   ].filter(Boolean).join("\n");
 }
 
-/* ============ エージェントのタブ ============ */
-function showAgTab(k) {
-  S.agTab = k; save("chaser.agentTab", k);
-  setTabs([[$("#agLog"), k === "log"], [$("#agMemo"), k === "memo"]]);
-  $("#paneLog").hidden = k !== "log"; $("#paneMemo").hidden = k !== "memo";
-  if (k === "log") { logSig = ""; mark("log"); }
+/* ============ 行動ログ（1ターン1行。src/agent/action-log.ts と同じ項目） ============ */
+let actSig = "";
+S.af = load("chaser.actFilter") === "llm" ? "llm" : "all";
+function renderActLog() {
+  const turns = S.liveTurns || [];
+  const names = S.st?.matchModel?.names || {};
+  const mname = (id) => names[id] || id;
+  const isLlm = (t) => (t.triggers && t.triggers.length) || (t.llmReplies && t.llmReplies.length) || t.cmd1Source === "main" || t.cmd2Source === "main";
+  const list = S.af === "llm" ? turns.filter(isLlm) : turns;
+  $("#actCount").textContent = turns.length ? (S.af === "llm" ? `${list.length} / ${turns.length}` : String(turns.length)) : "";
+  $$("[data-af]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.af === S.af)));
+  const last = turns[turns.length - 1];
+  const sig = S.af + "|" + turns.length + "|" + (last ? last.turn + ":" + (last.llmReplies?.length || 0) : "") + "|" + Object.keys(names).length;
+  if (sig === actSig) return; actSig = sig;
+  const box = $("#actlog");
+  const opened = new Set($$("details[open]", box).map((d) => d.dataset.t));
+  const prevEst = new Map(); turns.forEach((t, i) => prevEst.set(t.turn, i > 0 ? turns[i - 1].estimatedScoreAfter : 0));
+  const shown = list.slice(-400).reverse();   // 新しい順
+  box.innerHTML = shown.length ? shown.map((t) => {
+    const d = t.estimatedScoreAfter - (prevEst.get(t.turn) ?? 0);
+    const reason = t.cmd2Reason || t.cmd1Reason || "";
+    const src = t.cmd2Source || t.cmd1Source;
+    const who = src === "main" ? ["LLM", "llm"] : reason.includes("指定の目標") ? ["LLMの目標", "llm"] : ["方策", ""];
+    const chips = [
+      ...(t.triggers || []).map((f) => `<span class="ev trig" title="${esc(f.detail || "")}">${esc(f.label || f.id)}</span>`),
+      ...(t.llmReplies || []).map((r) => `<span class="reply">LLM（T${r.asked} ${esc(r.phase)}${r.by?.length ? `・${esc(r.by.join(","))}` : ""}）: ${r.action === null ? "返答なし" : r.action === "plan" ? `目標${r.target ? ` (${r.target.join(",")})` : ""}` : "そのまま"}${r.model ? `・モデル→${esc(mname(r.model))}` : ""}</span>`),
+      t.usedFallback ? `<span class="ev">安全手</span>` : "",
+      t.gameOverReason ? `<span class="ev">終了: ${esc(String(t.gameOverReason).slice(0, 40))}</span>` : "",
+    ].filter(Boolean).join("");
+    return `<details class="act" data-t="${t.turn}" ${opened.has(String(t.turn)) ? "open" : ""}><summary>
+      <span class="t">T${t.turn}</span><span class="c">${esc(t.cmd1 || "-")}→${esc(t.cmd2 || "-")}</span><span class="d ${d < 0 ? "neg" : d > 0 ? "pos" : ""}">${d >= 0 ? "+" : ""}${fmt(d)}</span>
+      <span class="r"><span class="who ${who[1]}">${who[0]}${t.model ? `・${esc(mname(t.model))}` : ""}</span>${esc(reason)}</span>
+      ${chips ? `<span class="x">${chips}</span>` : ""}</summary>
+      <dl><dt>CMD1</dt><dd>${esc(t.cmd1 || "-")} ${esc(t.cmd1Reason || "")}</dd><dt>CMD2</dt><dd>${esc(t.cmd2 || "-")} ${esc(t.cmd2Reason || "")}</dd>
+      <dt>推定得点</dt><dd>${fmt(t.estimatedScoreAfter)}</dd><dt>位置</dt><dd>(${(t.positionAfter || []).join(",")})</dd>
+      ${(t.triggers || []).length ? `<dt>きっかけ</dt><dd>${t.triggers.map((f) => `${esc(f.label || f.id)}: ${esc(f.detail || "")}`).join("<br>")}</dd>` : ""}</dl></details>`;
+  }).join("") : `<div class="empty">${turns.length ? "この絞り込みに当たるターンはありません。" : "試合が始まると、1ターンごとに打った手・得点の増減・誰が決めたか・理由がここに並びます（新しい順）。"}</div>`;
 }
-$$("[data-ag]").forEach((b) => b.addEventListener("click", () => showAgTab(b.dataset.ag)));
+$$("[data-af]").forEach((b) => b.addEventListener("click", () => { S.af = b.dataset.af; save("chaser.actFilter", S.af); actSig = ""; mark("act"); }));
 
 
 /* ============ マップ ============ */
@@ -1782,7 +1839,6 @@ function renderLog() {
   const list = (S.st?.claudeStream || []).filter((e) => S.lf === "all" || e.context === S.lf);
   $("#logCount").textContent = list.length ? String(list.length) : "";
   $$("[data-lf]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lf === S.lf)));
-  if (S.agTab !== "log") return;
   const sig = S.lf + "|" + list.length + "|" + (list[list.length - 1]?.id ?? 0); if (sig === logSig) return; logSig = sig;
   const box = $("#log"); const near = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
   const opened = new Set($$("details[open]", box).map((d) => d.dataset.id));
@@ -2018,14 +2074,14 @@ function applyState(st) {
     if (st.runId) fetch(`/api/runs/${encodeURIComponent(st.runId)}/turns`).then((r) => r.json()).then((d) => {
       if (st.runId !== S.liveRunId) return;
       const m = new Map((d.turns || []).map((t) => [t.turn, t])); S.liveTurns.forEach((t) => m.set(t.turn, t));
-      S.liveTurns = [...m.values()].sort((a, b) => a.turn - b.turn); mark("rail", "chart", "runhead", "table");
+      S.liveTurns = [...m.values()].sort((a, b) => a.turn - b.turn); mark("rail", "chart", "runhead", "table", "act");
     }).catch(() => {});
     if (prevRun !== null || S.runs.length) fetchRuns();
   } else if (S.liveTurns.length === 0 && st.recentTurns?.length) S.liveTurns = [...st.recentTurns];
   if (prevStatus !== undefined && (prevStatus !== st.status && (st.status === "idle" || st.status === "cooldown" || st.status === "evolving") || prevRunning && !st.running)) fetchRuns();
   if (!S.compareInit && S.runs.length) initCompare();
   trackPrediction(st.prediction);
-  mark("head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log");
+  mark("head", "settings", "rail", "chart", "runhead", "table", "decide", "map", "log", "act");
 }
 function initCompare() {
   S.compareInit = true;
@@ -2045,7 +2101,7 @@ function connect() {
     const t = JSON.parse(e.data); const i = S.liveTurns.findIndex((x) => x.turn === t.turn);
     if (i >= 0) S.liveTurns[i] = t; else S.liveTurns.push(t);
     if (S.st) S.st.turn = t.turn;
-    mark("head", "rail", "chart", "runhead", "decide", "table");
+    mark("head", "rail", "chart", "runhead", "decide", "table", "act");
   });
   es.addEventListener("lab", (e) => { if (window.labOnState) window.labOnState(JSON.parse(e.data)); });
   es.addEventListener("claude", (e) => {
@@ -2054,7 +2110,7 @@ function connect() {
   es.onerror = () => { S.disconnected = true; $("#statusLabel").textContent = "サーバに再接続中"; $("#dot").className = "dot warn"; mark("head"); };
 }
 (async function boot() {
-  showAgTab(S.agTab);
+  mark("log", "act");
   connect();
   await fetchRuns();
   try { const st = await jget("/api/state"); if (!S.st) applyState(st); } catch {}

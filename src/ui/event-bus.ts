@@ -109,7 +109,7 @@ export interface UiDashboardState {
   /** メインが次のフェーズへ引き継ぐメモ */
   agentMemo: string;
   /** 今の試合で使っている方策のモデル（試合中の LLM が切り替える）と、LLM を呼ぶ時 */
-  matchModel?: { id: string; name: string; callMode: "trigger" | "every" | null; switches: number } | null;
+  matchModel?: { id: string; name: string; callMode: "trigger" | "every" | null; switches: number; names?: Record<string, string> } | null;
   /** 準備フェーズの状態（「開始」はこれが ready の時だけ。準備不要の設定なら required=false） */
   prep: PrepUiState;
   recentTurns: TurnRecord[];
