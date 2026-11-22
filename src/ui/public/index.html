@@ -647,7 +647,7 @@ body.view-lab #labFlow { display: flex; }
 
   <div class="setup" id="setup" role="group" aria-label="試合の設定">
     <div class="grp wide"><label for="selRoom" title="719 のように1つ、555-560 のように範囲、555,568 のように並べて指定できる。複数なら「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る">ルーム</label><input id="selRoom" list="dlRooms" placeholder="719 / 555-560 / 555,568" autocomplete="off" spellcheck="false" /><datalist id="dlRooms"></datalist></div>
-    <div class="grp wide"><label for="inMain">LLM</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selEffort" class="adv" aria-label="LLM の effort（思考の深さ）" title="LLM の思考の深さ"></select></div>
+    <div class="grp wide"><label for="inMain">LLM</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selEffort" aria-label="LLM の effort（思考の深さ）" title="LLM の思考の深さ（effort）。次の試合から。準備・試合中・振り返りの LLM に効く"></select></div>
     <div class="grp adv"><label for="inBudget" title="LLM の1回の返答を待つ上限。手は待たずに方策が打ち、上限を超えた返答は捨てて聞き直す">返答の上限</label><input id="inBudget" type="number" min="3" step="1" inputmode="numeric" /><span class="lb">秒</span></div>
     <div class="grp adv"><label for="inMax">最大ターン</label><input id="inMax" type="number" min="1" step="1" placeholder="無制限" inputmode="numeric" /></div>
     <div class="grp"><label class="chk" title="試合が終わったら自動で次の試合を始める"><input type="checkbox" id="chkAuto" />自動で次へ</label></div>
@@ -1101,7 +1101,7 @@ function syncSettings(force) {
   const eff = S.efforts || ["low", "medium", "high", "xhigh", "max"];
   const es = $("#selEffort");
   if (document.activeElement !== es) {
-    es.innerHTML = `<option value="">既定</option>` + eff.map((e) => `<option>${esc(e)}</option>`).join("");
+    es.innerHTML = `<option value="">思考: 既定</option>` + eff.map((e) => `<option>${esc(e)}</option>`).join("");
     es.value = st.effort || "";
   }
   set($("#inMain"), st.model || "");
