@@ -92,7 +92,7 @@ export const SETTINGS = {
   },
   LLM_OAUTH_TOKEN: {
     group: "llm",
-    description: "subscription: `claude setup-token` で作ったトークン（空なら `bun run claude-login` でログインした情報を使う）",
+    description: "subscription: `claude setup-token` で作ったトークン（空なら、この画面の上の「Claude にログイン」か `bun run claude-login` でログインした情報を使う）",
     defaultValue: "",
     secret: true,
   },

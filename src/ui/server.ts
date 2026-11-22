@@ -3,6 +3,7 @@ import { SETTING_SECTIONS } from "../settings";
 import path from "node:path";
 import { ASSETS_DIR, PUBLIC_DIR, isRunDirName, RUNS_DIR } from "../paths";
 import { EFFORT_LEVELS, listGatewayModels } from "../agent/models";
+import { claudeLogin } from "../agent/claude-login";
 import { verifySolverWithReplay } from "../evolution/replay-verifier";
 import { loadRoomProfiles } from "../memory/knowledge-store";
 import { WorldMap } from "../memory/world-map";
@@ -89,8 +90,8 @@ export function startWebUiServer(port: number) {
       }
 
       if (url.pathname === "/api/models") {
-        const { models, error } = await listGatewayModels();
-        return Response.json({ ok: error === null, models, efforts: EFFORT_LEVELS, error });
+        const { models, error, loginRequired } = await listGatewayModels();
+        return Response.json({ ok: error === null, models, efforts: EFFORT_LEVELS, error, loginRequired: loginRequired === true });
       }
 
       if (url.pathname.startsWith("/api/runs/") && url.pathname.endsWith("/turns")) {
@@ -135,6 +136,24 @@ export function startWebUiServer(port: number) {
             writePolicy(name, body.text);
             return Response.json({ ok: true, name });
           }
+        }
+      }
+
+      // サブスクリプション: ハーネスの Claude Code（var/claude-home）のログイン状態と、WebUI からのログイン
+      if (url.pathname === "/api/claude-auth" && req.method === "GET") {
+        return Response.json({ ok: true, ...(await claudeLogin.status()) });
+      }
+      if (url.pathname === "/api/claude-auth" && req.method === "POST") {
+        try {
+          const body = (await req.json()) as { action?: string; code?: string };
+          if (body.action === "start") await claudeLogin.start();
+          else if (body.action === "code") await claudeLogin.submitCode(String(body.code ?? ""));
+          else if (body.action === "cancel") claudeLogin.cancel();
+          else if (body.action === "logout") await claudeLogin.logout();
+          else return Response.json({ ok: false, error: "action は start / code / cancel / logout" }, { status: 400 });
+          return Response.json({ ok: true, ...(await claudeLogin.status()) });
+        } catch (err) {
+          return Response.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
         }
       }
 

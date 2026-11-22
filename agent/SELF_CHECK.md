@@ -47,6 +47,7 @@
 - v3 (2026-11-20): 複数人ルーム (room 366) で他プレイヤー待ちが 120 秒で打ち切られ0ターン終了→その0ターン試合で振り返りが走りハーネス (runner.ts) まで改修、World 結果ページの別盤面を自機位置確定に使用、0点が最高記録に登録、を発見。待機上限の設定化と待機表示、短い試合の振り返り省略、振り返りの編集範囲ガード、World ページは自分が載っている時のみ使用、に修正
 - v4 (2026-11-20): 長いステージ (room 719, 190ターンで手動停止) で毎フェーズ会話全体を送り直すためトークン消費が加速、返答時間も 4.8→6.5 秒に増加。試合を止めずに裏で要約→要約入りの新メインへ入れ替え（`AGENT_COMPACT_AT_TOKENS`）、使用量の記録・表示と1試合の上限（`AGENT_MATCH_TOKEN_LIMIT`）を追加
 - v5 (2026-11-20): 開始時に Web マップが取れないと試合中ずっと使われない・取得待ちで次のターンが遅れる問題を修正。裏での取得、未取得時の定期再挑戦、取得開始時の位置を基準にした位置合わせ、一時的な失敗でルームの記録を「Webマップなし」に上書きしない、に変更
+- v52 (2026-11-22): WebUI から Claude（サブスクリプション）にログインできる。設定 › モデル・ゲートウェイ で subscription を選ぶと「Claude にログイン」→ ログインページの URL → コードを貼って送信（裏で claude auth login に渡す、src/agent/claude-login.ts、/api/claude-auth）。ログインしていない時はモデル欄に「ログインする」ボタン。偽の claude でのテストと、本物の claude で URL が出て取り消せることを確認（実際のログインは未確認）
 - v51 (2026-11-22): devcontainer なしでも動かせるよう .devcontainer/Dockerfile と compose.yaml を追加（docker compose up -d --build でサービスとして起動。プロジェクトは /app にマウント、node_modules は名前付きボリューム、UID 1000 の非 root、ポートは 127.0.0.1 だけ）。イメージのビルドと、git archive の中身での起動（WebUI が idle で応答・claude --version・git）を確認。ホストのパスでのマウントは devcontainer の中からは試せていない
 - v50 (2026-11-22): コンテキストの大きさ・自動コンパクト・出力の上限を設定できる（LLM_CONTEXT_WINDOW / LLM_AUTO_COMPACT / LLM_AUTO_COMPACT_PCT / LLM_MAX_OUTPUT_TOKENS → Claude Code の CLAUDE_CODE_AUTO_COMPACT_WINDOW 等）。ローカル LLM など小さいモデル向け
 - v49 (2026-11-22): LLM_API_KEY が空でもエラーにしない（鍵の無いローカル LLM）。{KEY} を使うヘッダは送らず、Claude Code にはダミーの鍵を渡す

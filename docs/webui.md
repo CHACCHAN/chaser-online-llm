@@ -31,6 +31,7 @@
 | `GET /api/runs/:id/turns` | その試合の `turns.jsonl` |
 | `GET /api/runs/:id/diagnosis` | `diagnosis.md` と `evolution-report.md` |
 | `POST /api/control` | 操作（下表） |
+| `GET /api/claude-auth` / `POST /api/claude-auth` | サブスクリプションのログイン状態（`loggedIn`・`tokenSet`・`login.state`）と、WebUI からのログイン（`action`: `start` で URL を出す / `code` で貼ったコードを送る / `cancel` / `logout`） |
 | `GET /api/env` / `POST /api/env` | `.env` の取得と保存。保存時は CHASER_ROOM と LLM_MODEL_NAME を実行中の設定にも反映 |
 | `POST /api/action/preview-map` | 指定ルームの Web マップを取得し、盤面に表示 |
 | `POST /api/action/verify-solver` | ソルバーのスモークテスト（リプレイ検証の結果を返す） |

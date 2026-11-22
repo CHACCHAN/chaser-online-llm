@@ -434,6 +434,16 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 .envrow .key-n { font-family: var(--mono); font-size: var(--t-s); overflow-wrap: anywhere; }
 .envrow.changed .key-n { color: var(--warn); font-weight: 600; }
 .envrow input, .envrow select { width: 100%; font-family: var(--mono); font-size: var(--t-s); background: var(--sunk); }
+.cauth { border: 1px solid var(--line); background: var(--sunk); padding: 12px 14px; margin: 0 0 14px; font-size: var(--t-s); line-height: 1.7; }
+.cauth .cauth-h { font-weight: 600; margin-bottom: 4px; }
+.cauth .ok { color: var(--pos); font-weight: 600; }
+.cauth .ng { color: var(--neg); }
+.cauth .warn { color: var(--warn); }
+.cauth ol { margin: 6px 0; padding-left: 1.4em; }
+.cauth ol li { margin: 6px 0; }
+.cauth .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.cauth input { flex: 1 1 220px; min-width: 0; font-family: var(--mono); font-size: var(--t-s); }
+.cauth a.open { font-weight: 600; }
 .envrow .d { font-size: var(--t-xs); color: var(--ink3); grid-column: 1 / -1; margin-top: -2px; line-height: 1.6; }
 .dlg-f { display: flex; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
 
@@ -674,6 +684,7 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
       </section>
       <section class="pane" data-pane="env" hidden>
         <h3 id="envTitle"></h3>
+        <div id="claudeAuth" class="cauth" hidden aria-live="polite"></div>
         <div id="envBody" class="dim">読み込み中…</div>
       </section>
     </div>
@@ -854,6 +865,13 @@ async function loadModels() {
     const eff = d.efforts || ["low", "medium", "high", "xhigh", "max"];
     S.efforts = eff; syncSettings(true);
     hint.textContent = d.error ? `モデル一覧を取得できません: ${d.error}` : "";
+    if (d.loginRequired) {
+      // サブスクリプションでログインしていない: 設定の「モデル・ゲートウェイ」でログインできる
+      hint.textContent = "Claude（サブスクリプション）にログインしていません ";
+      const b = document.createElement("button"); b.type = "button"; b.className = "btn quiet"; b.textContent = "ログインする";
+      b.addEventListener("click", () => { dlg.showModal(); loadEnv(); loadPolicies(); showPane("env:model"); });
+      hint.appendChild(b);
+    }
     hint.classList.toggle("err", !!d.error);
     ["#inMain", "#inSub"].forEach((q) => { $(q).placeholder = S.models.length ? `${S.models.length}件から検索` : "モデル名"; });
   } catch { hint.textContent = "モデル一覧を取得できません"; hint.classList.add("err"); }
@@ -1689,6 +1707,7 @@ $("#polCreate").addEventListener("click", async () => {
 });
 $("#dlgClose").addEventListener("click", () => { if (!confirmDiscard()) return; dlg.close(); });
 async function loadEnv() {
+  caSt = null; // ログインの状態も開き直すたびに確かめ直す
   try {
     const d = await jget("/api/env"); envRows = d.entries || []; envSections = d.sections || [];
     envSaved = new Map(envRows.map((e) => [e.key, e.value])); renderEnv(); renderNav(); updateDirty();
@@ -1713,10 +1732,75 @@ function renderEnv() {
   $("#envBody").innerHTML = rows.length === 0 ? `<p class="hint-p">項目はありません。</p>` : rows.map(([e, i]) => `<div class="envrow${isChanged(e) ? " changed" : ""}">${custom(e) ? `<input data-k="${i}" value="${esc(e.key)}" placeholder="KEY" aria-label="変数名" spellcheck="false" />` : `<label class="key-n" for="envv${i}">${esc(e.key)}</label>`}
       ${e.options ? `<select id="envv${i}" data-v="${i}">${[...new Set([...e.options, ...(e.value && !e.options.includes(e.value) ? [e.value] : [])])].map((o) => `<option value="${esc(o)}"${o === e.value ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>` : `<input id="envv${i}" data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" ${custom(e) ? `aria-label="値"` : ""} spellcheck="false" autocomplete="off" />`}${custom(e) ? `<button class="btn quiet" data-del="${i}" type="button" aria-label="この変数を削除">×</button>` : e.secret ? `<button class="btn quiet" data-sec="${i}" type="button" aria-label="${esc(e.key)} を表示">表示</button>` : "<span></span>"}
       ${e.description && !custom(e) ? `<div class="d">${esc(e.description)}</div>` : ""}</div>`).join("");
+  syncClaudeAuthBox();
 }
+/* ============ Claude アカウント（LLM_AUTH_MODE=subscription の時、ここからログインする） ============ */
+let caSt = null, caBusy = null;
+const authModeNow = () => envRows.find((e) => e.key === "LLM_AUTH_MODE")?.value || "api";
+function syncClaudeAuthBox() {
+  const box = $("#claudeAuth");
+  const show = dlgPane === "env:model" && authModeNow() === "subscription";
+  box.hidden = !show;
+  if (!show) return;
+  if (!caSt && !caBusy) refreshClaudeAuth(); else renderClaudeAuth();
+}
+async function refreshClaudeAuth() {
+  caBusy = "status"; renderClaudeAuth();
+  try { caSt = await jget("/api/claude-auth"); } catch { caSt = { ok: false, error: "ログインの状態を取得できません" }; }
+  caBusy = null; renderClaudeAuth();
+}
+async function claudeAuthAct(action, extra) {
+  caBusy = action; renderClaudeAuth();
+  try {
+    const r = await fetch("/api/claude-auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...(extra || {}) }) });
+    caSt = await r.json();
+  } catch { caSt = { ...(caSt || {}), ok: false, error: "通信エラー" }; }
+  caBusy = null; renderClaudeAuth();
+  if (caSt?.loggedIn !== undefined && (action === "code" || action === "logout")) loadModels();
+}
+function renderClaudeAuth() {
+  const box = $("#claudeAuth"); if (box.hidden) return;
+  const keep = $("#caCode")?.value || "";
+  const s = caSt, L = s?.login || {};
+  const busy = (a) => caBusy === a ? " busy" : "";
+  let h = `<div class="cauth-h">Claude アカウント（サブスクリプション）</div>`;
+  if (!s) h += `<div class="dim">ログインの状態を確認中…</div>`;
+  else {
+    if (s.ok === false && s.error) h += `<div class="ng">${esc(s.error)}</div>`;
+    if (s.tokenSet) h += `<div><span class="ok">LLM_OAUTH_TOKEN を使います</span>（ログインは不要）</div>`;
+    else if (s.loggedIn) h += `<div class="row"><span class="ok">ログイン済み</span>${s.authMethod ? `<span class="dim">${esc(s.authMethod)}</span>` : ""}<button class="btn quiet${busy("logout")}" data-ca="logout" type="button"><span class="spin"></span>ログアウト</button></div>`;
+    else if (s.loggedIn === null) h += `<div class="ng">ログインの状態を確かめられません</div>`;
+    else h += `<div>まだログインしていません。ハーネスの試合で使う Claude のアカウントでログインします（この Claude Code 用のログインで、開発用のログインとは別）。</div>`;
+    if (L.state === "waiting_code" || (L.state === "verifying")) {
+      h += `<ol>
+        <li><a class="open" href="${esc(L.url || "#")}" target="_blank" rel="noopener noreferrer">Claude のログインページを開く</a>（別のタブで開きます。ログインして「承認」すると、コードが表示されます）</li>
+        <li>表示されたコードを貼り付けて送信
+          <div class="row"><input id="caCode" placeholder="コードを貼り付け" autocomplete="off" spellcheck="false" aria-label="ログインのコード" value="${esc(keep)}" ${L.state === "verifying" ? "disabled" : ""}>
+          <button class="btn primary${busy("code")}" data-ca="code" type="button" ${L.state === "verifying" ? "disabled" : ""}><span class="spin"></span>送信</button>
+          <button class="btn quiet" data-ca="cancel" type="button">やめる</button></div></li>
+      </ol>`;
+    } else if (!s.tokenSet && !s.loggedIn) {
+      h += `<div class="row"><button class="btn primary${busy("start")}" data-ca="start" type="button"><span class="spin"></span>Claude にログイン</button></div>`;
+    }
+    if (L.state === "done") h += `<div class="ok">ログインしました</div>`;
+    if (L.state === "failed" && L.error) h += `<div class="ng">ログインできませんでした: ${esc(L.error)}</div>`;
+    if (L.error && L.state === "waiting_code") h += `<div class="ng">${esc(L.error)}</div>`;
+  }
+  if ((envSaved.get("LLM_AUTH_MODE") || "api") !== "subscription") h += `<div class="warn">「.env を保存」すると、次の準備・試合からこのアカウントを使います</div>`;
+  box.innerHTML = h;
+}
+$("#claudeAuth").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-ca]"); if (!b || caBusy) return;
+  const a = b.dataset.ca;
+  if (a === "code") { const c = ($("#caCode")?.value || "").trim(); if (!c) { $("#caCode")?.focus(); return; } claudeAuthAct("code", { code: c }); }
+  else if (a === "logout") { if (confirm("Claude からログアウトしますか？")) claudeAuthAct("logout"); }
+  else claudeAuthAct(a);
+});
+$("#claudeAuth").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "caCode") { e.preventDefault(); $('#claudeAuth [data-ca="code"]')?.click(); } });
 $("#envBody").addEventListener("input", (e) => {
   const t = e.target; const i = +(t.dataset.v ?? t.dataset.k);
   if (t.dataset.k) envRows[i].key = t.value; if (t.dataset.v) envRows[i].value = t.value;
+  if (envRows[i]?.key === "LLM_AUTH_MODE") syncClaudeAuthBox();
   t.closest(".envrow")?.classList.toggle("changed", isChanged(envRows[i])); updateDirty(); renderNav();
 });
 $("#envBody").addEventListener("click", (e) => {

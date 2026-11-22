@@ -11,7 +11,7 @@ export async function subscriptionLoginProblem(): Promise<string | null> {
     const out = await new Response(p.stdout).text();
     clearTimeout(timer);
     const st = JSON.parse(out) as { loggedIn?: boolean };
-    return st.loggedIn ? null : "サブスクリプションにログインしていない。LLM_OAUTH_TOKEN に `claude setup-token` のトークンを入れるか、`bun run claude-login` でログインする";
+    return st.loggedIn ? null : "Claude（サブスクリプション）にログインしていない。設定の「モデル・ゲートウェイ」からログインする（または LLM_OAUTH_TOKEN に `claude setup-token` のトークン）";
   } catch (err) {
     return `ログインの状態を確かめられない（${err instanceof Error ? err.message : String(err)}）`;
   }
@@ -21,17 +21,20 @@ export async function subscriptionLoginProblem(): Promise<string | null> {
  * モデルの一覧。api は LLM_API_URL の /models から取る（OpenAI 互換 / Anthropic 互換の両方に対応）。
  * subscription は Claude Code の別名（opus / sonnet / haiku）。ほかのモデル ID も入力すれば使える。
  */
-export async function listGatewayModels(): Promise<{ models: string[]; error: string | null }> {
+export async function listGatewayModels(): Promise<{ models: string[]; error: string | null; loginRequired?: boolean }> {
   const r = await listModelsInner();
   // コンテキストの大きさなどの書き方の誤りも、ここで知らせる（WebUI のモデル欄に出る）
   const limitErrors = llmLimitsEnv().errors;
-  return limitErrors.length > 0 ? { models: r.models, error: [r.error, ...limitErrors].filter(Boolean).join("。") } : r;
+  return limitErrors.length > 0 ? { ...r, error: [r.error, ...limitErrors].filter(Boolean).join("。") } : r;
 }
 
-async function listModelsInner(): Promise<{ models: string[]; error: string | null }> {
+async function listModelsInner(): Promise<{ models: string[]; error: string | null; loginRequired?: boolean }> {
   const auth = resolveLlmAuth();
   if (auth.problem) return { models: auth.mode === "subscription" ? [...SUBSCRIPTION_MODELS] : [], error: auth.problem };
-  if (auth.mode === "subscription") return { models: [...SUBSCRIPTION_MODELS], error: await subscriptionLoginProblem() };
+  if (auth.mode === "subscription") {
+    const problem = await subscriptionLoginProblem();
+    return { models: [...SUBSCRIPTION_MODELS], error: problem, ...(problem ? { loginRequired: true } : {}) };
+  }
   // 空なら Anthropic API に直接（Claude Code の既定と同じ）
   const raw = (Bun.env.LLM_API_URL ?? "").trim() || "https://api.anthropic.com";
   const base = raw.replace(/\/+$/, "");
