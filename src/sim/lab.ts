@@ -3,7 +3,10 @@ import type { Params } from "../solver/evaluator";
 import { loadPolicyParams } from "../solver/policy";
 import { logger } from "../tools";
 import type { EpisodeResult } from "./episode";
-import { makeScenario } from "./mapgen";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { SIM_MAPS_DIR, SIM_PROFILES_PATH } from "../paths";
+import { loadRoomProfiles } from "../memory/knowledge-store";
+import { loadProfile, loadRealMaps, makeScenario } from "./mapgen";
 import { SimPool } from "./pool";
 import { makeRng } from "./rng";
 import { trainPolicy, type Comparison, type EvalSet, type GenerationStat, type TrainResult } from "./train";
@@ -50,6 +53,37 @@ export interface MapSetInfo {
   validation: Comparison | null;
   /** 学習の結果を保存したか（学習していなければ null） */
   accepted: boolean | null;
+}
+
+/** 「ルーム」で選べるルーム（遊んだルーム・地図の作り方を書いたルーム・本物の地図があるルーム） */
+export interface RoomChoice {
+  room: number;
+  /** 似せる時の地図の大きさ（最小〜最大）とターン数 */
+  size: [number, number];
+  turns: [number, number];
+  /** 保存した本物の地図の枚数（Webマップから。試合で全体マップが取れた時に保存される） */
+  realMaps: number;
+  matchesPlayed: number;
+}
+
+export function roomChoices(): RoomChoice[] {
+  const rooms = new Set<number>();
+  for (const k of Object.keys(loadRoomProfiles().rooms)) rooms.add(Number(k));
+  try {
+    const sp = JSON.parse(readFileSync(SIM_PROFILES_PATH, "utf-8")) as { rooms?: Record<string, unknown> };
+    for (const k of Object.keys(sp.rooms ?? {})) rooms.add(Number(k));
+  } catch {
+    // 読めなければ足さない
+  }
+  if (existsSync(SIM_MAPS_DIR)) for (const d of readdirSync(SIM_MAPS_DIR)) if (/^room\d+$/.test(d)) rooms.add(Number(d.slice(4)));
+  const profiles = loadRoomProfiles().rooms;
+  return [...rooms]
+    .filter((r) => Number.isInteger(r) && r > 0)
+    .sort((a, b) => a - b)
+    .map((room) => {
+      const p = loadProfile(room);
+      return { room, size: p.size, turns: p.turns, realMaps: loadRealMaps(room).length, matchesPlayed: profiles[String(room)]?.matchesPlayed ?? 0 };
+    });
 }
 
 export interface LabState {
@@ -120,7 +154,7 @@ export class LearningLab {
   private idleReason(): string | null {
     if (!this.idleOn()) return null;
     if (this.matchActive) return "試合中なので止めています（試合が終わるとまた始めます）";
-    if (this.job && this.job.trigger !== "idle") return "ほかの仕事が終わったら始めます";
+    if (this.job && this.job.trigger !== "idle") return "空き時間の学習は、いまの仕事が終わったら始めます";
     return null;
   }
 

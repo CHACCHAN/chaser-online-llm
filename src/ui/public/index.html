@@ -463,6 +463,8 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 #labFlow { display: none; }
 body.view-lab #flow, body.view-lab .actions, body.view-lab .strip, body.view-lab .setup, body.view-lab #btnSetup { display: none !important; }
 body.view-lab #labFlow { display: flex; }
+body.view-lab .util { margin-left: auto; }
+#lmRoom { max-width: 320px; }
 
 /* ---------- 学習: 地図を並べて同時に再生 ---------- */
 .lab { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
@@ -715,7 +717,7 @@ body.view-lab #labFlow { display: flex; }
 <div class="lab" id="lab" hidden>
   <div class="lab-bar">
     <div class="grp"><label for="lmN">地図</label><input id="lmN" type="number" min="1" max="48" value="12" inputmode="numeric" /><span class="lb">枚</span></div>
-    <div class="grp"><label for="lmRoom" title="このルームに似せた地図を作る（大きさ・ターン数・保存した本物の地図）。空なら一般の地図">ルーム</label><input id="lmRoom" type="number" min="1" placeholder="一般" inputmode="numeric" /></div>
+    <div class="grp"><label for="lmRoom" title="どんな地図を作るか。ルームを選ぶと、そのルームで測った大きさ・ターン数に合わせ、保存した本物の地図があれば半分ほどそれを少し変えて使う">地図の種類</label><select id="lmRoom"><option value="">いろいろ（大きさ 15〜39・ランダム）</option></select></div>
     <button class="btn" id="lmMake" type="button">地図を作る</button>
     <span class="sep" aria-hidden="true"></span>
     <div class="grp"><label for="ltMin">時間</label><input id="ltMin" type="number" min="0.5" step="0.5" value="5" inputmode="decimal" /><span class="lb">分</span></div>

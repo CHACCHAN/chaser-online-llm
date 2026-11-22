@@ -23,13 +23,24 @@
     $("#lab").hidden = v !== "lab";
     $("#viewMatch").setAttribute("aria-pressed", String(v === "match"));
     $("#viewLab").setAttribute("aria-pressed", String(v === "lab"));
-    if (v === "lab") { refresh(); loadSet(); } else { stopPlay(); if (typeof mark === "function") mark("map"); }
+    if (v === "lab") { refresh(); loadSet(); loadRooms(); } else { stopPlay(); if (typeof mark === "function") mark("map"); }
   }
   $$(".views [data-view]").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
 
   async function refresh() {
     try { const r = await jget("/api/lab"); L.lab = r.lab; renderState(); } catch {}
   }
+  /** 「地図の種類」: いろいろ（ランダム）か、遊んだルームに似せるか */
+  async function loadRooms() {
+    try {
+      const r = await jget("/api/lab/rooms"), sel = $("#lmRoom"), keep = load("labRoom") ?? sel.value;
+      const rng = (a) => (a[0] === a[1] ? `${a[0]}` : `${a[0]}〜${a[1]}`), sz = (a) => (a[0] === a[1] ? `${a[0]}×${a[0]}` : `${a[0]}〜${a[1]}四方`);
+      sel.innerHTML = `<option value="">いろいろ（大きさ 15〜39・ランダム）</option>` + r.rooms.map((x) =>
+        `<option value="${x.room}">ルーム ${x.room} に似せる（${sz(x.size)}・${rng(x.turns)}ターン${x.realMaps ? `・本物の地図 ${x.realMaps} 枚` : ""}）</option>`).join("");
+      sel.value = [...sel.options].some((o) => o.value === String(keep)) ? String(keep) : "";
+    } catch {}
+  }
+
   async function loadSet() {
     try {
       const r = await jget("/api/lab/set");
@@ -106,7 +117,8 @@
 
   $("#lmMake").addEventListener("click", async () => {
     stopPlay();
-    try { await post("/api/lab/maps", { n: Number($("#lmN").value) || 12, room: $("#lmRoom").value.trim() === "" ? null : Number($("#lmRoom").value) }); }
+    save("labRoom", $("#lmRoom").value);
+    try { await post("/api/lab/maps", { n: Number($("#lmN").value) || 12, room: $("#lmRoom").value === "" ? null : Number($("#lmRoom").value) }); }
     catch (err) { $("#labStatus").innerHTML = `<div class="down">${esc(err.message)}</div>`; }
   });
   $("#ltStart").addEventListener("click", async () => {
@@ -179,11 +191,11 @@
     ctx.drawImage(c.off, 0, 0);
     if (!run) { c.cap.innerHTML = `<span>${esc(label(c.m))}</span><span class="r faint">打たせています…</span>`; return; }
     const tr = run.trace, fr = tr.frames[f], me = tr.players.findIndex((p) => p.self), cell = c.cell;
-    // 自分の軌跡（直近 40 ターン。ワープは線を切る）
+    // 自分の軌跡（直近 40 ターン。桂馬の動きはつなぎ、ワープ（3マス以上の跳び）は線を切る）
     const pts = tr.frames.slice(Math.max(0, f - 40), f + 1).map((q) => q.pos[me]);
     if (pts.length > 1) {
       ctx.strokeStyle = MAPC.trail; ctx.lineWidth = Math.max(1.5, cell * 0.3); ctx.lineJoin = "round"; ctx.globalAlpha = 0.8; ctx.beginPath();
-      pts.forEach((p, k) => { const a = p[0] * cell + cell / 2, b = p[1] * cell + cell / 2, q = pts[k - 1]; if (k && Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) <= 2) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
+      pts.forEach((p, k) => { const a = p[0] * cell + cell / 2, b = p[1] * cell + cell / 2, q = pts[k - 1]; if (k && Math.max(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1])) <= 2) ctx.lineTo(a, b); else ctx.moveTo(a, b); });
       ctx.stroke(); ctx.globalAlpha = 1;
     }
     tr.players.forEach((p, k) => {

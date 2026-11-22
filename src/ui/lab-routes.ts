@@ -1,4 +1,4 @@
-import { lab } from "../sim/lab";
+import { lab, roomChoices } from "../sim/lab";
 import { setProjectEnvValue } from "./env-store";
 
 /**
@@ -24,6 +24,9 @@ export async function handleLabRequest(req: Request, url: URL): Promise<Response
 
   // 状態（仕事・地図の組の概要・空き時間の学習）
   if (url.pathname === "/api/lab" && req.method === "GET") return Response.json({ ok: true, lab: lab.state() });
+
+  // 「ルーム」で選べるルーム
+  if (url.pathname === "/api/lab/rooms" && req.method === "GET") return Response.json({ ok: true, rooms: roomChoices() });
 
   // 並べる地図（地図・学習前と学習後の再生用の記録）
   if (url.pathname === "/api/lab/set" && req.method === "GET") return Response.json({ ok: true, ...lab.mapSet() });
