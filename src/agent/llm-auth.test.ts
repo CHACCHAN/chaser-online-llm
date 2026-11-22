@@ -57,3 +57,24 @@ describe("LLM_AUTH_MODE=subscription", () => {
     expect(resolveLlmAuth({ mode: "subscription", oauthToken: "" }).claudeEnv).toEqual({});
   });
 });
+
+describe("コンテキストの大きさ・自動コンパクト", async () => {
+  const { llmLimitsEnv, parseTokenCount } = await import("./claude-env");
+  test("トークン数の書き方", () => {
+    expect(parseTokenCount("32768")).toBe(32768);
+    expect(parseTokenCount("128k")).toBe(128000);
+    expect(parseTokenCount("1M")).toBe(1_000_000);
+    expect(parseTokenCount("abc")).toBeNull();
+  });
+  test("設定を Claude Code の環境変数にする。不正な値は渡さずエラーにする", () => {
+    const vals: Record<string, string> = { LLM_CONTEXT_WINDOW: "32k", LLM_AUTO_COMPACT_PCT: "70", LLM_MAX_OUTPUT_TOKENS: "4096" };
+    expect(llmLimitsEnv((k) => vals[k], true)).toEqual({
+      env: { CLAUDE_CODE_AUTO_COMPACT_WINDOW: "32000", CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "70", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "4096" },
+      errors: [],
+    });
+    expect(llmLimitsEnv(() => undefined, false)).toEqual({ env: { DISABLE_AUTO_COMPACT: "1" }, errors: [] });
+    const bad = llmLimitsEnv((k) => ({ LLM_CONTEXT_WINDOW: "big", LLM_AUTO_COMPACT_PCT: "150" })[k as string], true);
+    expect(bad.env).toEqual({});
+    expect(bad.errors.length).toBe(2);
+  });
+});

@@ -1,5 +1,5 @@
 import { numSetting } from "../settings";
-import { CLAUDE_BINARY, buildClaudeEnv } from "./claude-env";
+import { CLAUDE_BINARY, buildClaudeEnv, llmLimitsEnv } from "./claude-env";
 import { resolveLlmAuth, SUBSCRIPTION_MODELS } from "./llm-auth";
 
 /** サブスクリプション: ハーネスの Claude Code（var/claude-home）がログイン済みか。トークンを入れていれば確かめない */
@@ -22,6 +22,13 @@ export async function subscriptionLoginProblem(): Promise<string | null> {
  * subscription は Claude Code の別名（opus / sonnet / haiku）。ほかのモデル ID も入力すれば使える。
  */
 export async function listGatewayModels(): Promise<{ models: string[]; error: string | null }> {
+  const r = await listModelsInner();
+  // コンテキストの大きさなどの書き方の誤りも、ここで知らせる（WebUI のモデル欄に出る）
+  const limitErrors = llmLimitsEnv().errors;
+  return limitErrors.length > 0 ? { models: r.models, error: [r.error, ...limitErrors].filter(Boolean).join("。") } : r;
+}
+
+async function listModelsInner(): Promise<{ models: string[]; error: string | null }> {
   const auth = resolveLlmAuth();
   if (auth.problem) return { models: auth.mode === "subscription" ? [...SUBSCRIPTION_MODELS] : [], error: auth.problem };
   if (auth.mode === "subscription") return { models: [...SUBSCRIPTION_MODELS], error: await subscriptionLoginProblem() };

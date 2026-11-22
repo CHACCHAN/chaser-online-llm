@@ -96,6 +96,27 @@ export const SETTINGS = {
     defaultValue: "",
     secret: true,
   },
+  LLM_CONTEXT_WINDOW: {
+    group: "llm",
+    description:
+      "モデルのコンテキストの大きさ（トークン。例 32768・128k）。自動コンパクトはこれを上限として会話を要約する（CLAUDE_CODE_AUTO_COMPACT_WINDOW）。空なら Claude Code の既定（知っているモデルはその大きさ、知らないモデルは Claude Code が仮定する大きさ）。ローカル LLM など小さいモデルで設定する",
+    defaultValue: "",
+  },
+  LLM_AUTO_COMPACT: {
+    group: "llm",
+    description: "会話がコンテキストに近づいたら自動で要約する（Claude Code の自動コンパクト。準備・サブ・振り返りの長い会話に効く。試合中のメインは毎フェーズ新しい会話なので関係しない）",
+    defaultValue: "true",
+  },
+  LLM_AUTO_COMPACT_PCT: {
+    group: "llm",
+    description: "自動コンパクトを始める使用率（%、1〜100。空なら Claude Code の既定。CLAUDE_AUTOCOMPACT_PCT_OVERRIDE）",
+    defaultValue: "",
+  },
+  LLM_MAX_OUTPUT_TOKENS: {
+    group: "llm",
+    description: "1回の応答の最大トークン（空なら Claude Code の既定。CLAUDE_CODE_MAX_OUTPUT_TOKENS）。出力の上限が小さいモデルで設定する",
+    defaultValue: "",
+  },
   LLM_MODEL_NAME: { group: "llm", description: "メインエージェントのモデル（api はゲートウェイの /models から、subscription は opus / sonnet / haiku など）", defaultValue: "" },
   LLM_SUB_MODEL_NAME: { group: "llm", description: "サブエージェントのモデル（空ならメインと同じ）", defaultValue: "" },
   LLM_MODEL_EFFORT: { group: "llm", description: "メインの effort: low | medium | high | xhigh | max", defaultValue: "medium" },
@@ -170,7 +191,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "server", title: "サーバ接続", keys: ["HOST_URL", "CHASER_USER", "CHASER_PASS", "CHASER_ROOM", "CHASER_HTTP_TIMEOUT_SEC", "CHASER_RETRY_MS"] },
   { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
-  { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_AUTH_MODE", "LLM_API_URL", "LLM_API_KEY", "LLM_API_HEADERS", "LLM_OAUTH_TOKEN", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },
+  { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_AUTH_MODE", "LLM_API_URL", "LLM_API_KEY", "LLM_API_HEADERS", "LLM_OAUTH_TOKEN", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_CONTEXT_WINDOW", "LLM_AUTO_COMPACT", "LLM_AUTO_COMPACT_PCT", "LLM_MAX_OUTPUT_TOKENS", "LLM_MODELS_TIMEOUT_SEC"] },
   { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
   { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_CONCURRENCY", "AGENT_SUB_TASK_TIMEOUT_MIN"] },

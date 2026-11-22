@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CLAUDE_HOME_DIR, PROJECT_ROOT } from "../paths";
+import { boolSetting, getSetting } from "../settings";
 import { applyLlmAuthEnv, resolveLlmAuth } from "./llm-auth";
 
 export const CLAUDE_BINARY = path.join(PROJECT_ROOT, "node_modules/.bin/claude");
@@ -14,6 +15,43 @@ export interface ClaudeModelSettings {
   effort?: string;
   /** サブエージェントの effort。未指定ならメインと同じ */
   subEffort?: string;
+}
+
+/** "32768" / "128k" / "1m" をトークン数にする。読めなければ null */
+export function parseTokenCount(raw: string): number | null {
+  const m = /^(\d+(?:\.\d+)?)\s*([km]?)$/i.exec(raw.trim());
+  if (!m) return null;
+  const n = Math.round(Number(m[1]) * (m[2]?.toLowerCase() === "k" ? 1000 : m[2]?.toLowerCase() === "m" ? 1_000_000 : 1));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * コンテキストの大きさ・自動コンパクト・出力の上限（LLM_CONTEXT_WINDOW 等）を Claude Code の環境変数にする。
+ * 書き方が不正なものは渡さず errors に入れる（Claude Code の既定のまま動く）。
+ */
+export function llmLimitsEnv(get: (k: "LLM_CONTEXT_WINDOW" | "LLM_AUTO_COMPACT_PCT" | "LLM_MAX_OUTPUT_TOKENS") => string | undefined = getSetting, autoCompact = boolSetting("LLM_AUTO_COMPACT")): { env: Record<string, string>; errors: string[] } {
+  const env: Record<string, string> = {};
+  const errors: string[] = [];
+  const win = get("LLM_CONTEXT_WINDOW");
+  if (win) {
+    const n = parseTokenCount(win);
+    if (n) env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(n);
+    else errors.push(`LLM_CONTEXT_WINDOW=${win} はトークン数（例 32768・128k）で書く`);
+  }
+  const pct = get("LLM_AUTO_COMPACT_PCT");
+  if (pct) {
+    const n = Number(pct);
+    if (Number.isFinite(n) && n >= 1 && n <= 100) env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE = String(n);
+    else errors.push(`LLM_AUTO_COMPACT_PCT=${pct} は 1〜100`);
+  }
+  const out = get("LLM_MAX_OUTPUT_TOKENS");
+  if (out) {
+    const n = parseTokenCount(out);
+    if (n) env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(n);
+    else errors.push(`LLM_MAX_OUTPUT_TOKENS=${out} はトークン数で書く`);
+  }
+  if (!autoCompact) env.DISABLE_AUTO_COMPACT = "1";
+  return { env, errors };
 }
 
 /**
@@ -43,9 +81,13 @@ export function buildClaudeEnv(settings: ClaudeModelSettings): Record<string, st
   // 認証は LLM_AUTH_MODE（src/agent/llm-auth.ts）。開発者のシェルの ANTHROPIC_*・CLAUDE_CODE_OAUTH_TOKEN は引き継がない
   const auth = resolveLlmAuth();
   const subscription = auth.mode === "subscription";
+  // 親の環境（開発者のシェル）の値は使わず、設定の値だけを入れる
+  const inherited = applyLlmAuthEnv(process.env as Record<string, string>, auth);
+  for (const k of ["CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "DISABLE_AUTO_COMPACT"]) delete inherited[k];
 
   return {
-    ...applyLlmAuthEnv(process.env as Record<string, string>, auth),
+    ...inherited,
+    ...llmLimitsEnv().env,
     HOME: home,
     XDG_CONFIG_HOME: home,
     XDG_DATA_HOME: home,
