@@ -236,8 +236,9 @@ async function simCommands(sub: "sim" | "bench" | "train", v: Record<string, str
       const set = makeEvalSet(Number(v.seed ?? 1), n, room, maxTurns);
       const policy = { kind: "planner", params: loadPolicyParams() } as const;
       const rs = await evaluatePolicy(pool, policy, set);
-      for (const [i, r] of rs.entries()) console.log(`seed ${set.seeds[i]} ${r.scenario} web=${r.webMap} T=${r.totalTurns} 得点 ${r.score}（${perTurn(r).toFixed(1)}/ターン）罠 ${r.hazardHits} 相手 ${r.opponents.join(",") || "-"} ${r.msPerPhase}ms/手`);
-      console.log(`平均 ${(rs.reduce((s, r) => s + perTurn(r), 0) / rs.length).toFixed(1)} 点/ターン`);
+      for (const [i, r] of rs.entries()) console.log(`seed ${set.seeds[i]} ${r.scenario} web=${r.webMap} T=${r.totalTurns} 得点 ${r.score}（${perTurn(r).toFixed(1)}/ターン）罠 ${r.hazardHits} 相手 ${r.opponentKinds.map((k, j) => `${k}:${r.opponents[j]}`).join(",") || "-"} 当てた ${r.put} 当てられた ${r.putDamage}${r.won === null ? "" : r.won ? " 勝ち" : " 負け"} ${r.msPerPhase}ms/手`);
+      const vs = rs.filter((r) => r.won !== null);
+      console.log(`平均 ${(rs.reduce((s, r) => s + perTurn(r), 0) / rs.length).toFixed(1)} 点/ターン${vs.length ? `・相手のいる地図 ${vs.length} 枚で勝ち ${vs.filter((r) => r.won).length}・当てられた合計 ${vs.reduce((s, r) => s + r.putDamage, 0)}` : ""}`);
       return;
     }
     if (sub === "bench") {

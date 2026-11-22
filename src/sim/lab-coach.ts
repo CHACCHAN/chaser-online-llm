@@ -162,14 +162,21 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
     "",
     `## 地図ごとの成績（今の方策${input.runsBefore ? "。前→後は同じ地図を学習前の方策で打たせたもの" : ""}）`,
     "",
-    "| # | 地図 | 大きさ | ターン | 点/ターン | 罠 | 足踏み（最後に同じ所を行き来したターン） | 方策の誤り |",
-    "|---|---|---|---|---|---|---|---|",
+    "| # | 地図 | 大きさ | ターン | 点/ターン | 罠 | 足踏み（最後に同じ所を行き来したターン） | 方策の誤り | 相手 | 当てた／当てられた | 勝ち |",
+    "|---|---|---|---|---|---|---|---|---|---|---|",
   ];
   input.runs.forEach((r, i) => {
     const b = input.runsBefore?.[i];
     const size = r.trace ? `${r.trace.width}×${r.trace.height}` : "-";
-    lines.push(`| ${i} | ${r.scenario} | ${size} | ${r.totalTurns} | ${b ? `${r1(perTurnOf(b))}→` : ""}${r1(perTurnOf(r))} | ${r.hazardHits} | ${stuckTurns(r) || "-"} | ${r.policyErrors || "-"} |`);
+    const vs = r.opponentKinds?.length ? `${r.opponentKinds.join("・")}` : "-";
+    lines.push(`| ${i} | ${r.scenario} | ${size} | ${r.totalTurns} | ${b ? `${r1(perTurnOf(b))}→` : ""}${r1(perTurnOf(r))} | ${r.hazardHits} | ${stuckTurns(r) || "-"} | ${r.policyErrors || "-"} | ${vs} | ${r.put ?? 0}／${r.putDamage ?? 0} | ${r.won === null || r.won === undefined ? "-" : r.won ? "○" : "×"} |`);
   });
+  const withOpp = input.runs.filter((r) => r.won !== null && r.won !== undefined);
+  if (withOpp.length) {
+    const won = withOpp.filter((r) => r.won).length;
+    const pd = withOpp.reduce((a, r) => a + (r.putDamage ?? 0), 0);
+    lines.push("", `相手のいる地図 ${withOpp.length} 枚: 勝ち ${won}、当てられた合計 ${pd}（相手の種類の重み oppGreedy/oppHunter/oppSelf と自己対戦の相手 var/policy/league.json。当てた時の得点は sim-profiles.json の putHit・仮の値）`);
+  }
   const weak = input.runs.map((r, i) => [perTurnOf(r), i] as const).sort((a, b) => a[0] - b[0]).slice(0, 3);
   lines.push("", `弱い地図: ${weak.map(([, i]) => `#${i}`).join(", ")}（traces.json の index。各ターンの位置・得点・手・方策の理由・変わったマス）`);
 

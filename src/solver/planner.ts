@@ -202,8 +202,39 @@ interface Candidate {
   terminal: boolean;
 }
 
-/** 経路探索で手を決める（SolverDecision と同じ形で返す） */
+/** 経路探索で手を決める（SolverDecision と同じ形で返す）。CMD2 で隣に敵がいれば、当てる価値と比べてアイテムを置いて当てる */
 export function planMove(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insight: PlanInsight } {
+  const d = planRoute(wm, ctx);
+  if (ctx.phase !== "CMD2" || ctx.params.attackGain <= 0) return d;
+  const attack = pickAttack(wm, ctx, d);
+  return attack ?? d;
+}
+
+/**
+ * 隣（上下左右）に今のターンに見えた敵がいれば、その向きにアイテムを置く手（p*3s*。-30、置いた後に横へ1マス動く）。
+ * 動いた先が分かっていて通れる（罠・ワープでない）時だけ。当てる価値（attackGain）が、予定の一歩の得点 + 30 より大きい時に選ぶ。
+ */
+function pickAttack(wm: WorldMap, ctx: PlannerContext, planned: SolverDecision & { insight: PlanInsight }): (SolverDecision & { insight: PlanInsight }) | null {
+  const { params: p, evaluator: ev } = ctx;
+  const [x, y] = wm.getPosition();
+  const plannedSpec = CMD2_SPECS[planned.command as Cmd2Command];
+  const plannedTile = plannedSpec ? wm.getTile(x + plannedSpec.move[0], y + plannedSpec.move[1]) : undefined;
+  const plannedGain = plannedTile ? Math.max(0, ev.tileGain(plannedTile.value)) : 0;
+  if (p.attackGain <= plannedGain + 30) return null;
+  for (const e of wm.getEnemySightings()) {
+    if (e.lastSeenTurn < ctx.turn || Math.abs(e.x - x) + Math.abs(e.y - y) !== 1) continue;
+    const dir = DIRS.find((k) => DIR_DELTA[k][0] === e.x - x && DIR_DELTA[k][1] === e.y - y)!;
+    const cmd = (Object.keys(CMD2_SPECS) as Cmd2Command[]).find((c) => CMD2_SPECS[c].put3Dir === dir && CMD2_SPECS[c].obsShape === "ray");
+    if (!cmd) continue;
+    const mv = CMD2_SPECS[cmd].move;
+    const dest = wm.getTile(x + mv[0], y + mv[1]);
+    if (!dest || dest.offField || ev.isPortalValue(dest.value) || ev.stepCost(dest.value, dest.visitedCount, p) === null) continue;
+    return { ...planned, command: cmd, reason: `隣の敵 (${e.x},${e.y}) にアイテムを置いて当てる（見込み ${Math.round(p.attackGain)}）` };
+  }
+  return null;
+}
+
+function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insight: PlanInsight } {
   const t0 = performance.now();
   const { phase, params: p, evaluator: ev } = ctx;
   const [x, y] = wm.getPosition();

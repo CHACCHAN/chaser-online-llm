@@ -111,7 +111,16 @@
         s.push(set.accepted ? `<span class="badge b-continue">保存した（次の試合から使う）</span>` : `<span class="badge b-wait">保存しない（はっきり良くなっていない）</span>`);
       } else s.push(`<span>今の方策 <b>${num(set.before)}</b> 点/ターン</span>`);
       parts.push(`<div class="stats">${s.join("")}</div>`);
+      const vb = versus(L.data.before), va = versus(L.data.after);
+      if (vb) {
+        const t = [`<span title="相手がいる地図で、自分の得点が他の全員より高かった数">相手に勝った ${vb.won}/${vb.n}${va ? ` → <b>${va.won}/${va.n}</b>` : ""} 地図</span>`];
+        t.push(`<span title="置いて当てた得点の合計（シミュレータでの仮の値 putHit）">当てた ${fmt(vb.put)}${va ? ` → ${fmt(va.put)}` : ""}</span>`);
+        t.push(`<span title="当てられた得点の合計">当てられた ${fmt(vb.pd)}${va ? ` → <span class="${va.pd >= vb.pd ? "up" : "down"}">${fmt(va.pd)}</span>` : ""}</span>`);
+        parts.push(`<div class="stats">${t.join("")}</div>`);
+      }
     }
+    const o = st.opponents;
+    if (o) parts.push(`<div class="msg dim" title="knowledge/train-config.json の oppGreedy・oppHunter・oppSelf と var/policy/league.json">相手の種類の重み: 拾う ${num(o.greedy)}・狙う ${num(o.hunter)}・自分 ${num(o.self)}（自己対戦の相手に残っている前の自分 ${o.league} 人。学習で採用されるたびに増える）</div>`);
     const coach = renderCoach(st);
     if (coach) parts.push(coach);
     if (st.idle.enabled && st.idle.reason) parts.push(`<div class="msg">${esc(st.idle.reason)}</div>`);
@@ -121,6 +130,12 @@
   /** 学習の LLM（学習が終わるたびに学習環境を直す）の動き・結果 */
   const COACH_WHAT = { evaluator: "評価関数", profiles: "地図の作り方", trainConfig: "学習のやり方" };
   const COACH_TRIGGER = { manual: "並べた地図の学習", idle: "空き時間の学習", "post-match": "試合後の学習" };
+  // 相手がいた地図での勝ち数・当てた／当てられた得点
+  function versus(runs) {
+    const rs = (runs || []).filter((r) => r && r.won !== null && r.won !== undefined);
+    if (!rs.length) return null;
+    return { won: rs.filter((r) => r.won).length, n: rs.length, put: rs.reduce((a, r) => a + (r.put || 0), 0), pd: rs.reduce((a, r) => a + (r.putDamage || 0), 0) };
+  }
   function renderCoach(st) {
     const running = st.job?.coach?.state === "running";
     if (running) {
@@ -222,13 +237,17 @@
     tr.players.forEach((p, k) => {
       const [x, y] = fr.pos[k], r = Math.max(2.5, cell * 0.45);
       ctx.beginPath(); ctx.arc(x * cell + cell / 2, y * cell + cell / 2, r, 0, Math.PI * 2);
-      ctx.fillStyle = k === me ? MAPC.self : MAPC.enemy; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "#fff"; ctx.stroke();
+      // 自分＝青、相手の「自分」（同じ方策）＝紫、拾う・狙う＝赤
+      ctx.fillStyle = k === me ? MAPC.self : p.kind?.startsWith("自分") ? MAPC.mirror : MAPC.enemy; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "#fff"; ctx.stroke();
     });
     // 見出し: 地図・今の得点・この地図の結果（学習後があれば前→後）
     const before = L.data.before?.[i], after = L.data.after?.[i];
     const pt = (r) => r.score / Math.max(1, r.totalTurns);
     const res = before && after ? `<span class="${pt(after) >= pt(before) ? "up" : "down"}">${num(pt(before))}→${num(pt(after))}</span>` : `${num(pt(run))}`;
-    c.cap.innerHTML = `<span>${esc(label(c.m))}</span><b>${fmt(fr.scores[me])}</b>${run.hazardHits ? `<span class="down">罠${run.hazardHits}</span>` : ""}<span class="r" title="この地図の 1ターンあたりの得点">${res}</span>`;
+    const kinds = run.opponentKinds || [];
+    const opp = kinds.length ? `<span class="dim" title="相手: ${esc(kinds.join("・"))}${run.won ? "（勝った）" : ""}">相手${kinds.length}${run.won ? "・勝" : ""}</span>` : "";
+    const hit = run.putDamage ? `<span class="down" title="当てられた得点">被${fmt(run.putDamage)}</span>` : "";
+    c.cap.innerHTML = `<span>${esc(label(c.m))}</span><b>${fmt(fr.scores[me])}</b>${opp}${hit}${run.hazardHits ? `<span class="down">罠${run.hazardHits}</span>` : ""}<span class="r" title="この地図の 1ターンあたりの得点">${res}</span>`;
   }
   const label = (m) => `${m.name.startsWith("real:") ? "本物" : "作った地図"} ${m.width}×${m.height}${m.webMap ? "" : "・全体なし"}`;
   function drawAll(full) {

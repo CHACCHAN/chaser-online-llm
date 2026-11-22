@@ -37,7 +37,7 @@ const fakeTrain: TrainResult = {
   comparison: { a: 300, b: 305, diff: 5, se: 4, wins: 12, n: 24, hazardsA: 0, hazardsB: 0 },
 };
 const run = (positions: [number, number][]): EpisodeResult => ({
-  scenario: "gen:5x5", webMap: true, totalTurns: positions.length, score: 3000, action: 0, item: 0, hazardHits: 0, policyErrors: 0, msPerPhase: 1, opponents: [],
+  scenario: "gen:5x5", webMap: true, totalTurns: positions.length, score: 3000, action: 0, item: 0, hazardHits: 0, policyErrors: 0, msPerPhase: 1, opponents: [], opponentKinds: [], put: 0, putDamage: 0, won: null,
   trace: { width: 5, height: 5, grid: [[0]], players: [{ id: 1000, self: true }], frames: positions.map((p, i) => ({ turn: i + 1, pos: [p], scores: [0], cmds: ["gr", "wr"], reason: "", changed: [] })) },
 });
 

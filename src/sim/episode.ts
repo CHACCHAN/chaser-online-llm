@@ -1,7 +1,10 @@
-import { CMD1_COMMANDS, CMD2_COMMANDS, DIR_DELTA, DIRS, getTileInfo, WorldMap } from "../memory/world-map";
-import type { PolicyFn } from "../solver/policy";
-import { isPortalTile, SimGame, totalScore, type SimPlayer } from "./engine";
+import { CMD1_COMMANDS, CMD2_COMMANDS, WorldMap } from "../memory/world-map";
+import type { EvaluatorModule } from "../solver/planner";
+import { makePlannerPolicy, type PolicyFn } from "../solver/policy";
+import { runBotTurn, runHunterTurn } from "./bots";
+import { DEFAULT_RULES, SimGame, totalScore, type SimPlayer } from "./engine";
 import type { Scenario } from "./mapgen";
+import { opponentLabel, type OpponentSetup } from "./opponents";
 
 /**
  * シミュレータで1試合を行う。自分の手は本番と同じ WorldMap（観測の反映・位置合わせ）と方策で決める。
@@ -22,6 +25,13 @@ export interface EpisodeResult {
   msPerPhase: number;
   /** 他プレイヤーの得点 */
   opponents: number[];
+  /** 他プレイヤーの種類（拾う・狙う・自分(今/n つ前)） */
+  opponentKinds: string[];
+  /** 自分が相手に当てた得点（+）・当てられた得点（−） */
+  put: number;
+  putDamage: number;
+  /** 自分の得点が他の全員より高かった（相手がいない時は null） */
+  won: boolean | null;
   /** 再生用の記録（trace を頼んだ時だけ） */
   trace?: EpisodeTrace;
 }
@@ -32,7 +42,7 @@ export interface EpisodeTrace {
   height: number;
   /** 始まりの地図 */
   grid: number[][];
-  players: { id: number; self: boolean }[];
+  players: { id: number; self: boolean; kind?: string }[];
   frames: {
     turn: number;
     /** 各プレイヤーの位置（players と同じ順） */
@@ -47,67 +57,42 @@ export interface EpisodeTrace {
   }[];
 }
 
-/** 他プレイヤー: 地図を全部知っていて、一番近い点のあるマスへ歩く */
-function botStep(game: SimGame, bot: SimPlayer): string | null {
-  const w = game.width;
-  const h = game.height;
-  const prev = new Int32Array(w * h).fill(-1);
-  const start = bot.y * w + bot.x;
-  prev[start] = start;
-  const queue = [start];
-  for (let qi = 0; qi < queue.length; qi++) {
-    const i = queue[qi]!;
-    const x = i % w;
-    const y = Math.floor(i / w);
-    if (i !== start) {
-      const v = game.grid[y]![x]!;
-      if (getTileInfo(v).score > 10 && !isPortalTile(v)) {
-        let j = i;
-        while (prev[j] !== start) j = prev[j]!;
-        const dx = (j % w) - bot.x;
-        const dy = Math.floor(j / w) - bot.y;
-        return DIRS.find((d) => DIR_DELTA[d][0] === dx && DIR_DELTA[d][1] === dy) ?? null;
-      }
-    }
-    for (const d of DIRS) {
-      const nx = x + DIR_DELTA[d][0];
-      const ny = y + DIR_DELTA[d][1];
-      if (!game.inField(nx, ny)) continue;
-      const ni = ny * w + nx;
-      if (prev[ni] !== -1) continue;
-      const v = game.grid[ny]![nx]!;
-      const info = getTileInfo(v);
-      if (!info.passable || info.hazard || isPortalTile(v) || game.playerAt(nx, ny, bot)) continue;
-      prev[ni] = i;
-      queue.push(ni);
-    }
-  }
-  return null;
+export { runBotTurn } from "./bots";
+
+export interface EpisodeOptions {
+  maxTurns?: number;
+  onTurn?: (turn: number, game: SimGame) => void;
+  trace?: boolean;
+  /** 自分以外のプレイヤー（starts の順、自分を除く）。足りない分・無ければ「拾う」 */
+  opponents?: OpponentSetup[];
+  /** 相手の「自分」が使う評価関数（既定は今の evaluator.ts） */
+  opponentEvaluator?: EvaluatorModule;
 }
 
-/** 他プレイヤーの1ターン（偽サーバでも使う） */
-export function runBotTurn(game: SimGame, bot: SimPlayer): void {
-  const d1 = botStep(game, bot);
-  game.act(bot, "CMD1", d1 ? `gr${d1}` : "gr");
-  const d2 = botStep(game, bot);
-  game.act(bot, "CMD2", d2 ? `w${d2}` : DIRS.map((d) => `w${d}`).find((c) => {
-    const [dx, dy] = DIR_DELTA[c[1] as "u"];
-    const v = game.tile(bot.x + dx, bot.y + dy);
-    return v !== undefined && getTileInfo(v).passable && !getTileInfo(v).hazard && !isPortalTile(v) && !game.playerAt(bot.x + dx, bot.y + dy, bot);
-  }) ?? "wu");
-  game.endTurn(bot);
+/** 相手の「自分」: 自分と同じく、自分の観測と Webマップだけで方策が動く */
+interface PolicyOpponent {
+  wm: WorldMap;
+  policy: PolicyFn;
 }
 
-export function runEpisode(scn: Scenario, policy: PolicyFn, opts: { maxTurns?: number; onTurn?: (turn: number, game: SimGame) => void; trace?: boolean } = {}): EpisodeResult {
-  const game = new SimGame(scn.grid, scn.starts, opts.maxTurns ? Math.min(opts.maxTurns, scn.totalTurns) : scn.totalTurns);
+export function runEpisode(scn: Scenario, policy: PolicyFn, opts: EpisodeOptions = {}): EpisodeResult {
+  const putHit = scn.putHit ?? 0;
+  const rules = { ...DEFAULT_RULES, putHitItem: putHit, putHitSoil: putHit };
+  const game = new SimGame(scn.grid, scn.starts, opts.maxTurns ? Math.min(opts.maxTurns, scn.totalTurns) : scn.totalTurns, rules);
   const me = game.players[scn.self]!;
+  const others = game.players.filter((p) => p !== me);
+  const setups = new Map<SimPlayer, OpponentSetup>(others.map((p, i) => [p, opts.opponents?.[i] ?? { kind: "greedy" }]));
+  const selfOpps = new Map<SimPlayer, PolicyOpponent>();
+  for (const [p, o] of setups) {
+    if (o.kind === "self") selfOpps.set(p, { wm: new WorldMap(), policy: makePlannerPolicy(o.params, ...(opts.opponentEvaluator ? [opts.opponentEvaluator] : [])) });
+  }
   const wm = new WorldMap();
   let policyErrors = 0;
   let phases = 0;
   let ms = 0;
   let lastReason = "";
   const trace: EpisodeTrace | undefined = opts.trace
-    ? { width: game.width, height: game.height, grid: game.grid.map((r) => [...r]), players: game.players.map((p) => ({ id: p.id, self: p === me })), frames: [] }
+    ? { width: game.width, height: game.height, grid: game.grid.map((r) => [...r]), players: game.players.map((p) => ({ id: p.id, self: p === me, ...(p === me ? {} : { kind: opponentLabel(setups.get(p)!) }) })), frames: [] }
     : undefined;
   let prevGrid = trace ? game.grid.map((r) => [...r]) : null;
   const web = () => {
@@ -137,7 +122,10 @@ export function runEpisode(scn: Scenario, policy: PolicyFn, opts: { maxTurns?: n
   while (!game.over) {
     for (const p of game.players) {
       if (p !== me) {
-        runBotTurn(game, p);
+        const opp = selfOpps.get(p);
+        if (opp) runPolicyOpponentTurn(game, p, opp, scn.webMap);
+        else if (setups.get(p)?.kind === "hunter") runHunterTurn(game, p);
+        else runBotTurn(game, p);
         continue;
       }
       web();
@@ -175,7 +163,36 @@ export function runEpisode(scn: Scenario, policy: PolicyFn, opts: { maxTurns?: n
     hazardHits: me.hazardHits,
     policyErrors,
     msPerPhase: phases ? Math.round((ms / phases) * 100) / 100 : 0,
-    opponents: game.players.filter((p) => p !== me).map((p) => totalScore(p.score)),
+    opponents: others.map((p) => totalScore(p.score)),
+    opponentKinds: others.map((p) => opponentLabel(setups.get(p)!)),
+    put: me.score.put,
+    putDamage: me.score.putDamage,
+    won: others.length ? others.every((p) => totalScore(p.score) < totalScore(me.score)) : null,
     ...(trace ? { trace } : {}),
   };
+}
+
+/** 相手の「自分」の1ターン（例外・合法でない手は安全な手で続ける） */
+function runPolicyOpponentTurn(game: SimGame, p: SimPlayer, opp: PolicyOpponent, webMap: boolean): void {
+  const { wm } = opp;
+  const web = () => {
+    if (webMap) wm.setGlobalGrid(game.webGrid(), [p.x, p.y], "sim", game.turn, p.id, wm.getPosition());
+  };
+  const decide = (phase: "CMD1" | "CMD2"): string => {
+    const legal: readonly string[] = phase === "CMD1" ? CMD1_COMMANDS : CMD2_COMMANDS;
+    let cmd = "";
+    try {
+      cmd = opp.policy(wm, phase, game.turn, { totalTurns: game.totalTurns }).command;
+    } catch {
+      cmd = "";
+    }
+    return legal.includes(cmd) ? cmd : wm.pickSafeFallback(phase);
+  };
+  web();
+  const c1 = decide("CMD1");
+  wm.applyObservation("CMD1", c1, game.act(p, "CMD1", c1), game.turn);
+  if (wm.getLastEventFlags().warpPending) web();
+  const c2 = decide("CMD2");
+  wm.applyObservation("CMD2", c2, game.act(p, "CMD2", c2), game.turn);
+  game.endTurn(p);
 }

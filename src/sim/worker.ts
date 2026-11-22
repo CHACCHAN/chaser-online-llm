@@ -4,6 +4,7 @@ import type { EvaluatorModule } from "../solver/planner";
 import { makePlannerPolicy, type PolicyFn } from "../solver/policy";
 import { runEpisode } from "./episode";
 import { makeScenario } from "./mapgen";
+import { assignOpponents, loadOpponentPlan } from "./opponents";
 import type { EpisodeJob } from "./pool";
 import { makeRng } from "./rng";
 
@@ -24,7 +25,8 @@ self.onmessage = async (ev: MessageEvent<EpisodeJob>) => {
   const job = ev.data;
   try {
     const scn = makeScenario(makeRng(job.seed), { room: job.room });
-    const result = runEpisode(scn, await policyFor(job), { ...(job.maxTurns ? { maxTurns: job.maxTurns } : {}), trace: job.trace === true });
+    const opponents = assignOpponents(job.seed, scn.starts.length - 1, job.opponents ?? loadOpponentPlan());
+    const result = runEpisode(scn, await policyFor(job), { ...(job.maxTurns ? { maxTurns: job.maxTurns } : {}), trace: job.trace === true, opponents });
     postMessage({ ok: true, result });
   } catch (err) {
     postMessage({ ok: false, error: err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err) });

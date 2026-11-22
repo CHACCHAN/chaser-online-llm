@@ -1,6 +1,7 @@
 import { cpus } from "node:os";
 import type { Params } from "../solver/evaluator";
 import type { EpisodeResult } from "./episode";
+import type { OpponentPlan } from "./opponents";
 
 /** シミュレータの1試合分の仕事（地図は seed から worker が作る） */
 export interface EpisodeJob {
@@ -11,6 +12,8 @@ export interface EpisodeJob {
   /** 再生用の記録を返す */
   trace?: boolean;
   policy: { kind: "planner"; params: Params; /** 別の評価関数のファイル（エージェントの改修前後を比べる時） */ evaluatorPath?: string };
+  /** 相手の決め方（無ければ worker が今の設定から作る。学習は始めに1回作って、比べる両方に同じものを渡す） */
+  opponents?: OpponentPlan;
 }
 
 type Pending = { resolve: (r: EpisodeResult) => void; reject: (e: Error) => void };

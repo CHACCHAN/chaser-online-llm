@@ -32,6 +32,7 @@ export const PARAM_SPACE = {
   discount: { init: 0.985, min: 0.85, max: 1, doc: "先の目標ほど価値を割り引く率（1歩あたり）" },
   scanValue: { init: 4, min: 0, max: 40, doc: "観測で新しく見えるマス1つの価値（gr・dig を選ぶ判断）" },
   knightWeight: { init: 1, min: 0, max: 1, doc: "桂馬（CMD2、-20で2マス先）を使うか（0.5未満なら使わない）" },
+  attackGain: { init: 2000, min: 0, max: 10000, doc: "隣（上下左右）の敵にアイテムを置いて当てる価値の見込み（CMD2。予定の一歩の得点＋30 より大きければ当てる。0 なら当てない）" },
 } satisfies Record<string, ParamSpec>;
 
 export type ParamName = keyof typeof PARAM_SPACE;

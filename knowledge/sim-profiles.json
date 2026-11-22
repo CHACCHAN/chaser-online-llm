@@ -1,9 +1,10 @@
 {
-  "_doc": "シミュレータの地図の作り方（src/sim/mapgen.ts）。default を基本に、rooms.<番号> で上書きする。size・turns・webMap は var/room-profiles.json の実測があればそれを使う。fill はタイル番号ごとの重み、blobs は固まり、lines は帯（奈落の川・岩盤の壁）。realMapShare は本物の地図（var/maps/、試合中の Webマップから保存）を少し変えて使う割合。otherTiles は knowledge/tiles.json にあって fill に無いタイル（新しく登録したアイテムなど）を混ぜる重み。本物の地図と見比べて、似るように直してよい",
+  "_doc": "シミュレータの地図の作り方（src/sim/mapgen.ts）。default を基本に、rooms.<番号> で上書きする。size・turns・webMap は var/room-profiles.json の実測があればそれを使う。fill はタイル番号ごとの重み、blobs は固まり、lines は帯（奈落の川・岩盤の壁）。realMapShare は本物の地図（var/maps/、試合中の Webマップから保存）を少し変えて使う割合。otherTiles は knowledge/tiles.json にあって fill に無いタイル（新しく登録したアイテムなど）を混ぜる重み。players は自分を含む人数（相手の種類は knowledge/train-config.json の opp*）。putHit は相手にアイテム・土を置いて当てた時に動く得点（当てた側 +、当てられた側 −。公式の値は未確認の仮の値。room455 で6ターンのうちにプットダメージ -44990 を記録）。本物の地図と見比べて、似るように直してよい",
   "default": {
     "size": [15, 39],
     "turns": [100, 400],
-    "players": [1, 3],
+    "players": [2, 4],
+    "putHit": 5000,
     "webMap": 0.7,
     "realMapShare": 0.5,
     "otherTiles": 0.3,

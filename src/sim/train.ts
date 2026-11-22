@@ -1,11 +1,15 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { POLICY_TRAIN_LOG_PATH, TRAIN_CONFIG_PATH } from "../paths";
+import { POLICY_TRAIN_LOG_PATH } from "../paths";
 import { clampParams, PARAM_SPACE, type ParamName, type Params, type ParamSpec } from "../solver/evaluator";
 import { loadPolicyParams, loadPolicyParamsFile, savePolicyParams } from "../solver/policy";
 import type { EpisodeResult } from "./episode";
 import type { EpisodeJob, SimPool } from "./pool";
+import { addToLeague, loadOpponentPlan, type OpponentPlan } from "./opponents";
 import { gaussian, makeRng } from "./rng";
+import { loadTrainConfig } from "./train-config";
+
+export { loadTrainConfig, TRAIN_CONFIG_BOUNDS, TRAIN_CONFIG_DEFAULT, type TrainConfig } from "./train-config";
 
 /**
  * 方策の学習と比較。
@@ -43,8 +47,8 @@ function sampleSet(set: EvalSet, n: number, rng: () => number, maxTurns: number 
 
 export const perTurn = (r: EpisodeResult) => r.score / Math.max(1, r.totalTurns);
 
-export async function evaluatePolicy(pool: SimPool, policy: PolicySpec, set: EvalSet): Promise<EpisodeResult[]> {
-  return pool.runAll(set.seeds.map((seed, i) => ({ seed, room: set.rooms[i] ?? null, maxTurns: set.maxTurns, policy })));
+export async function evaluatePolicy(pool: SimPool, policy: PolicySpec, set: EvalSet, opponents?: OpponentPlan): Promise<EpisodeResult[]> {
+  return pool.runAll(set.seeds.map((seed, i) => ({ seed, room: set.rooms[i] ?? null, maxTurns: set.maxTurns, policy, ...(opponents ? { opponents } : {}) })));
 }
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
@@ -79,8 +83,9 @@ export function compareResults(ra: EpisodeResult[], rb: EpisodeResult[]): Compar
   };
 }
 
-export async function comparePolicies(pool: SimPool, a: PolicySpec, b: PolicySpec, set: EvalSet): Promise<Comparison> {
-  const [ra, rb] = await Promise.all([evaluatePolicy(pool, a, set), evaluatePolicy(pool, b, set)]);
+export async function comparePolicies(pool: SimPool, a: PolicySpec, b: PolicySpec, set: EvalSet, opponents: OpponentPlan = loadOpponentPlan()): Promise<Comparison> {
+  // 比べる両方が同じ相手と戦う（相手の決め方を1回だけ読む）
+  const [ra, rb] = await Promise.all([evaluatePolicy(pool, a, set, opponents), evaluatePolicy(pool, b, set, opponents)]);
   return compareResults(ra, rb);
 }
 
@@ -138,54 +143,6 @@ export interface TrainResult {
   ms: number;
 }
 
-/** 学習のやり方（knowledge/train-config.json）。読めない・範囲外の値は既定・範囲に収める */
-export interface TrainConfig {
-  popSize: number;
-  batch: number;
-  validation: number;
-  sigmaStart: number;
-  sigmaEnd: number;
-}
-export const TRAIN_CONFIG_DEFAULT: TrainConfig = { popSize: 16, batch: 12, validation: 24, sigmaStart: 0.15, sigmaEnd: 0.04 };
-export const TRAIN_CONFIG_BOUNDS: Record<keyof TrainConfig, [number, number]> = {
-  popSize: [4, 64],
-  batch: [2, 48],
-  validation: [8, 96],
-  sigmaStart: [0.01, 0.5],
-  sigmaEnd: [0.005, 0.5],
-};
-
-/** 学習のやり方を読む。problems に範囲外・読めなかった項目を返す（学習の LLM の改修の確かめに使う） */
-export function loadTrainConfig(file = TRAIN_CONFIG_PATH): { config: TrainConfig; problems: string[] } {
-  const problems: string[] = [];
-  let raw: Record<string, unknown> = {};
-  try {
-    if (existsSync(file)) raw = JSON.parse(readFileSync(file, "utf-8")) as Record<string, unknown>;
-  } catch (err) {
-    problems.push(`読めない: ${err instanceof Error ? err.message : String(err)}`);
-  }
-  const config = { ...TRAIN_CONFIG_DEFAULT };
-  for (const k of Object.keys(TRAIN_CONFIG_DEFAULT) as (keyof TrainConfig)[]) {
-    const v = raw[k];
-    if (v === undefined) continue;
-    const [lo, hi] = TRAIN_CONFIG_BOUNDS[k];
-    if (typeof v !== "number" || !Number.isFinite(v)) {
-      problems.push(`${k} が数でない`);
-      continue;
-    }
-    if (v < lo || v > hi) problems.push(`${k}=${v} は範囲 ${lo}〜${hi} の外`);
-    config[k] = Math.min(hi, Math.max(lo, v));
-  }
-  config.popSize = Math.max(4, Math.round(config.popSize / 2) * 2);
-  config.batch = Math.round(config.batch);
-  config.validation = Math.round(config.validation);
-  if (config.sigmaEnd > config.sigmaStart) {
-    problems.push("sigmaEnd が sigmaStart より大きい");
-    config.sigmaEnd = config.sigmaStart;
-  }
-  return { config, problems };
-}
-
 export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
   const t0 = Date.now();
   const log = opts.log ?? (() => {});
@@ -196,6 +153,8 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
   const maxTurns = opts.maxTurns === undefined ? 200 : opts.maxTurns;
   const rng = makeRng(opts.seed ?? Date.now());
   const before = loadPolicyParams();
+  // 相手（自己対戦の「自分」は学習を始めた時のパラメータ＝before と、前に採用したもの）。学習の間は変えない
+  const opponents = loadOpponentPlan();
   let m = toUnit(before);
   let sigma = cfg.sigmaStart;
   const d = m.length;
@@ -221,7 +180,7 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
       eps.push(e, e.map((x) => -x));
     }
     const cands = eps.map((e) => fromUnit(m.map((v, i) => v + sigma * e[i]!)));
-    const results = await Promise.all(cands.map((params) => evaluatePolicy(opts.pool, { kind: "planner", params }, set)));
+    const results = await Promise.all(cands.map((params) => evaluatePolicy(opts.pool, { kind: "planner", params }, set, opponents)));
     episodes += popSize * batch;
     const fit = results.map((rs) => mean(rs.map(perTurn)));
     const order = fit.map((f, i) => [f, i] as const).sort((a, b) => b[0] - a[0]);
@@ -240,13 +199,15 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
   // 1世代も回らなかった（すぐ止めた）時は確かめない
   if (gen > 0) {
     const val = makeEvalSet(900_000 + Math.floor(rng() * 1e6), valN, opts.room, maxTurns);
-    comparison = await comparePolicies(opts.pool, { kind: "planner", params: before }, { kind: "planner", params: after }, val);
+    comparison = await comparePolicies(opts.pool, { kind: "planner", params: before }, { kind: "planner", params: after }, val, opponents);
     episodes += valN * 2;
   }
   const accepted = gen > 0 && clearlyBetter(comparison);
   if (gen > 0) log(`検証（学習に使っていない ${valN} 地図）: 前 ${comparison.a} → 後 ${comparison.b} 点/ターン（差 ${comparison.diff}±${comparison.se}、勝ち ${comparison.wins}/${comparison.n}）→ ${accepted ? "採用" : "見送り"}`);
   if (accepted && !opts.dryRun) {
     const prev = loadPolicyParamsFile();
+    // 自己対戦: 置き換わる前のパラメータを相手の控え（リーグ）に残す。次からの学習で「前の自分」として戦う
+    addToLeague(before, `${new Date().toISOString().slice(0, 16)} まで使っていたパラメータ（${prev?.source ?? "default"}）`, cfg.leagueSize);
     savePolicyParams(after, "train", {
       perTurn: comparison.b,
       previousPerTurn: comparison.a,

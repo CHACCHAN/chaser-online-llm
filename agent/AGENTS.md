@@ -27,8 +27,8 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 | 過去の試合 | `var/runs/<runId>/`（`summary.json`、`turns.jsonl`、`diagnosis.md`、`MEMO.md`、`evolution-report.md`、`final-map.txt`、その試合の方策の控え `evaluator-snapshot.ts`・`policy-params.json`） |
 | 試合中の今 | `var/current/`（`snapshot.json`、`MEMO.md`） |
 | シミュレータの地図の作り方 | `knowledge/sim-profiles.json`（本物の地図 `var/maps/` と見比べて直してよい） |
-| 方策の学習の記録 | `var/policy/params.json`（今のパラメータ）、`var/policy/train-log.jsonl` |
-| 方策の学習のやり方 | `knowledge/train-config.json`（候補・地図・確かめの数、探す幅） |
+| 方策の学習の記録 | `var/policy/params.json`（今のパラメータ）、`var/policy/train-log.jsonl`、`var/policy/league.json`（自己対戦の相手＝前に採用したパラメータ） |
+| 方策の学習のやり方 | `knowledge/train-config.json`（候補・地図・確かめの数、探す幅、シミュレータの相手の種類の重み `oppGreedy`・`oppHunter`・`oppSelf`、`leagueSize`）。相手と自己対戦の仕組みは `docs/learning.md` |
 | 学習の LLM の記録 | `var/lab-coach/`（学習ごとの統計 report.md・再生 traces.json・結果 log.jsonl）。学習の LLM の手順は `agent/prompts/lab-coach.md` |
 | 作業用の置き場 | `var/tmp/`（試合の写しで試す時などはここに。`var/runs/` に置くと過去の試合として数えられる） |
 

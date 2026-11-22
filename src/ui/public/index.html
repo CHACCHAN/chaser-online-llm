@@ -1584,7 +1584,7 @@ function playerTip(m) {
   return `敵${m.tileId ? " " + m.tileId : "(ID不明)"}${m.lastSeenTurn != null ? `  T${m.lastSeenTurn} に目撃${isStale(m) ? "(古い情報)" : ""}` : ""}`;
 }
 /* 盤面の上の印（自機・敵・軌跡・予測ルート・作戦目標）の色。タイルの上に描くのでテーマに関係なく固定 */
-const MAPC = { self: "#2c47c2", enemy: "#d92d20", trail: "#2c47c2", path: "#ffd23f", plan: "#e0208f" };
+const MAPC = { self: "#2c47c2", enemy: "#d92d20", mirror: "#8a3ffc", trail: "#2c47c2", path: "#ffd23f", plan: "#e0208f" };
 function drawPlayer(c, m, cell, enemy) {
   const px = m.x * cell, py = m.y * cell, cx = px + cell / 2, cy = py + cell / 2, r = Math.max(4, cell / 2 - 1);
   const img = m.tileId ? tileImg(m.tileId) : null, col = enemy ? MAPC.enemy : MAPC.self;

@@ -50,6 +50,8 @@ export const LAB_COACH_LOG_PATH = path.join(VAR_DIR, "lab-coach", "log.jsonl");
 export const POLICY_DIR = path.join(VAR_DIR, "policy");
 export const POLICY_PARAMS_PATH = path.join(POLICY_DIR, "params.json");
 /** 学習の記録（1回ごとに1行） */
+/** 自己対戦の相手（前に採用したパラメータの控え） */
+export const POLICY_LEAGUE_PATH = path.join(POLICY_DIR, "league.json");
 export const POLICY_TRAIN_LOG_PATH = path.join(POLICY_DIR, "train-log.jsonl");
 /** 経路探索の評価関数（エージェントが試合後に改修してよい。シミュレータの成績で採否を決める） */
 export const EVALUATOR_PATH = path.join(PROJECT_ROOT, "src/solver/evaluator.ts");

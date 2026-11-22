@@ -28,6 +28,11 @@ export interface MapProfile {
   lines: { tiles: number[]; count: Range; length: Range; width: Range }[];
   warps: Range;
   blackstars: number;
+  /**
+   * 相手にアイテム・土を置いて当てた時に動く得点（当てた側 +、当てられた側 −）。公式の値は未確認の仮の値。
+   * 実測: room455 で6ターンのうちにプットダメージ -44990。分かったら合わせる
+   */
+  putHit?: number;
 }
 
 /** 1試合分の設定（地図・開始位置・ターン数） */
@@ -39,6 +44,8 @@ export interface Scenario {
   self: number;
   totalTurns: number;
   webMap: boolean;
+  /** 置いて当てた時の得点（MapProfile.putHit） */
+  putHit?: number;
 }
 
 /** 保存した本物の地図（試合中の Webマップの最初の1枚。プレイヤーは除いてある） */
@@ -243,5 +250,5 @@ export function makeScenario(rng: Rng, opts: { room?: number | null; profile?: M
     name = `gen:${w}x${h}`;
   }
   const starts = placeStarts(rng, grid, players);
-  return { name, grid, starts, self: randInt(rng, 0, starts.length - 1), totalTurns, webMap: rng() < profile.webMap };
+  return { name, grid, starts, self: randInt(rng, 0, starts.length - 1), totalTurns, webMap: rng() < profile.webMap, putHit: profile.putHit ?? 0 };
 }

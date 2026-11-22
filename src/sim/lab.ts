@@ -12,6 +12,8 @@ import { makeRng } from "./rng";
 import { type CoachDeps, type CoachResult, readCoachLog, runLabCoach } from "./lab-coach";
 import { trainPolicy, type Comparison, type EvalSet, type GenerationStat, type TrainResult } from "./train";
 
+import { loadLeague } from "./opponents";
+import { loadTrainConfig } from "./train-config";
 /**
  * 学習の仕事をまとめて受け持つ（WebUI の「学習」画面・試合後の学習・試合をしていない間の学習）。
  *
@@ -99,6 +101,8 @@ export interface LabState {
   coachEnabled: boolean;
   /** 最後の学習の LLM の結果 */
   lastCoach: CoachResult | null;
+  /** シミュレータの相手: 種類の重み（拾う・狙う・自分）と、自己対戦の相手に残っている前の自分の数 */
+  opponents: { greedy: number; hunter: number; self: number; league: number };
 }
 
 const workerCount = () => {
@@ -145,6 +149,10 @@ export class LearningLab {
       idle: { enabled: this.idleOn(), chunkMin: numSetting("TRAIN_IDLE_CHUNK_MIN", { min: 1 }), reason: this.idleReason() },
       matchActive: this.matchActive,
       coachEnabled: boolSetting("LAB_COACH"),
+      opponents: (() => {
+        const c = loadTrainConfig().config;
+        return { greedy: c.oppGreedy, hunter: c.oppHunter, self: c.oppSelf, league: loadLeague().members.length };
+      })(),
       lastCoach: this.lastCoach,
     };
   }
