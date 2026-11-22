@@ -58,6 +58,8 @@ export interface UiPredictionState {
   mainLatencyMs?: number | null;
   /** 現在の作戦目標（ローカル座標） */
   plan?: { target: [number, number]; note?: string } | null;
+  /** このフェーズと前のターンの終わりに鳴った、試合中の LLM を呼ぶきっかけ（src/agent/triggers.ts。いまは記録するだけ） */
+  triggers?: { id: string; label: string; detail: string }[];
 }
 
 export interface UiClaudeEvent {

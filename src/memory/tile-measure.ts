@@ -16,6 +16,10 @@ export interface ScoreSample {
   webTurn: number;
   /** 公式のアイテム得点（I:） */
   itemPoint: number;
+  /** 公式の合計（T:）・プット得点（P:）・プットダメージ（PD:）。Webマップに出ている時だけ */
+  totalScore?: number;
+  putPoint?: number;
+  putDamage?: number;
 }
 
 export interface MeasureTurn {

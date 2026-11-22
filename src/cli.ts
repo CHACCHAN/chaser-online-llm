@@ -202,6 +202,24 @@ async function main() {
     return;
   }
 
+  if (subcommand === "triggers") {
+    const { measureTriggers } = await import("./sim/trigger-sim");
+    const { playModelId } = await import("./solver/models");
+    const { TRIGGER_DEFS } = await import("./agent/triggers");
+    const v = values as Record<string, string | boolean | undefined>;
+    const r = measureTriggers({
+      n: Number(v.n ?? 12),
+      seed: Number(v.seed ?? 4_400_000),
+      room: typeof v.room === "string" ? Number(v.room) : null,
+      maxTurns: typeof v["max-turns"] === "string" ? Number(v["max-turns"]) : 200,
+      model: typeof v.model === "string" ? v.model : playModelId(),
+    });
+    console.log(`${r.maps} 地図・${r.turns} ターン。比べたモデル: ${r.voters.join(", ") || "なし（ほかのモデルが試合のモデルと同じパラメータ）"}`);
+    for (const d of TRIGGER_DEFS) console.log(`  ${d.label.padEnd(14, "　")} 100ターンあたり ${r.per100[d.id]!.fired}（条件を満たした ${r.per100[d.id]!.raw}）`);
+    console.log(`1試合あたり LLM を呼ぶ見込み: ${r.callsPerMatch} 回`);
+    return;
+  }
+
   if (subcommand === "sim" || subcommand === "bench" || subcommand === "train") {
     await simCommands(subcommand, values as Record<string, string | boolean | undefined>);
     return;
@@ -219,6 +237,7 @@ async function main() {
       "  cell-note    --room <n> --x <x> --y <y> --note <text> [--abs]  Add a note to a cell (empty --note clears)",
       "  sim          [--room <n>] [--n 8] [--seed s] [--max-turns t] [--model id]  シミュレータで試合をして成績を出す（--model: knowledge/styles.json のモデル。既定は試合で使うモデル）",
       "  bench        [--room <n>] [--n 24] [--evaluator <file>] [--model id]  シミュレータで比べる（--evaluator: 今の evaluator.ts とそのファイル。無し: 既定のパラメータと学習したパラメータ）",
+      "  triggers     [--room <n>] [--n 12] [--model id]  シミュレータで、試合中の LLM を呼ぶきっかけが 100 ターンあたり何回鳴るかを数える",
       "  train        [--room <n>] [--minutes 5] [--dry-run] [--model id]  そのモデルのパラメータを、そのモデルの目的で学習する（はっきり良くなった時だけ保存）",
     ].join("\n"),
   );

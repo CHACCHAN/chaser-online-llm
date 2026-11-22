@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { loadRoomProfiles } from "../memory/knowledge-store";
 import { isRunDirName, POLICY_TRAIN_LOG_PATH, RUNS_DIR } from "../paths";
+import { TRIGGER_DEFS } from "../agent/triggers";
 import { lab } from "../sim/lab";
 
 /**
@@ -29,6 +30,8 @@ export interface RunStat {
   policyModel: string | null;
   hazardHits: number;
   holeRevisits: number;
+  /** 試合中の LLM を呼ぶきっかけ（鳴った回数。記録を始める前の試合は null） */
+  triggers: { counts: Record<string, number>; voters: number } | null;
   llm: {
     enabled: boolean;
     model: string | null;
@@ -148,6 +151,7 @@ export function listRunStats(limit = 500): RunStat[] {
         endReason: typeof s.gameOverReason === "string" ? s.gameOverReason : null,
         policyModel: typeof s.policyModel === "string" ? s.policyModel : null,
         hazardHits: num(s.hazardHits) ?? 0,
+        triggers: s.triggers && typeof s.triggers === "object" ? { counts: s.triggers.counts ?? {}, voters: num(s.triggers.voters) ?? 0 } : null,
         holeRevisits: num(s.holeRevisits) ?? 0,
         llm: {
           enabled: s.agent?.enabled !== false,
@@ -236,6 +240,7 @@ export function statsOverview() {
     rooms: roomStats(runs),
     runs,
     training: trainStats(),
+    triggerDefs: TRIGGER_DEFS.map((d) => ({ id: d.id, label: d.label, source: d.source, doc: d.doc })),
     models: { play: m.play, list: m.models.map((x) => ({ id: x.id, name: x.name, trait: x.trait, trained: x.trained, updatedAt: x.updatedAt, profile: x.profile, tags: x.tags })) },
   };
 }

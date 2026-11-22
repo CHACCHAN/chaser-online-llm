@@ -14,6 +14,7 @@
   };
   const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : "-");
   const trig = { manual: "画面から", idle: "空き時間", "post-match": "試合後", cli: "CLI" };
+  const trigName = (id) => T.data?.triggerDefs?.find((d) => d.id === id)?.label ?? id;
 
   function setTab(t) {
     T.tab = t; save("statsTab", t);
@@ -58,6 +59,15 @@
       tile("LLM の費用（試合中）", usd(cost), llmRuns.length ? `${llmRuns.length} 試合・1試合 ${usd(cost / llmRuns.length)}・${fmt(llmRuns.reduce((s, r) => s + r.llm.calls, 0))} 回` : "LLM を使った試合なし"),
       tile("LLM が動かした手", pct(dir, ph), ph ? `${fmt(dir)} / ${fmt(ph)} 手（LLM を使った試合。LLM が手を決めた・LLM の目標で方策が動いた）` : ""),
       tile("学習", `${acc} / ${d.training.length}`, "採用 / 回数（確かめ用の地図ではっきり良くなった時だけ採用）"),
+      (() => {
+        const tr = runs.filter((r) => r.triggers), tt = tr.reduce((s, r) => s + r.turns, 0);
+        if (!tr.length) return tile("きっかけ", "-", "記録を始めてからの試合がまだありません");
+        const sum = {};
+        for (const r of tr) for (const [k, v] of Object.entries(r.triggers.counts)) sum[k] = (sum[k] || 0) + v;
+        const total = Object.values(sum).reduce((a, b) => a + b, 0);
+        const top = Object.entries(sum).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${esc(trigName(k))} ${v}`).join("・");
+        return tile("きっかけ（100ターンあたり）", n1(tt ? (total / tt) * 100 : 0), `${tr.length} 試合・${top}`);
+      })(),
     ].join("");
 
     const ends = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${v}`).join("・");
@@ -77,13 +87,14 @@
       <td class="wrap dim">${esc(r.endReason || "-")}</td><td>${esc(r.policyModel || "-")}</td>
       <td>${r.llm.calls ? `${esc(r.llm.model || "-")}${r.llm.effort ? ` <span class="dim">${esc(r.llm.effort)}</span>` : ""}` : `<span class="dim">なし</span>`}</td>
       <td class="n">${r.llm.calls ? fmt(r.llm.calls) : "-"}</td><td class="n">${usd(r.llm.costUsd)}</td>
-      <td class="n">${r.llm.calls ? pct(r.llm.directedPhases, r.llm.phases) : "-"}</td></tr>`).join("");
+      <td class="n">${r.llm.calls ? pct(r.llm.directedPhases, r.llm.phases) : "-"}</td>
+      <td class="n" title="${r.triggers ? esc(Object.entries(r.triggers.counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${trigName(k)} ${v}`).join("\n") || "鳴らなかった") : "記録を始める前の試合"}">${r.triggers ? fmt(Object.values(r.triggers.counts).reduce((a, b) => a + b, 0)) : "-"}</td></tr>`).join("");
 
     $("#stRooms").innerHTML = `<div class="tiles">${tiles}</div>
       <section><div class="st-h"><h2>ルーム</h2><span class="dim">行を押すと、そのルームの試合だけを下に出す。1ターンの得点は5ターン以上の試合から（公式があれば公式、なければ推定）</span></div>
         <div class="stbl-wrap"><table class="stbl"><thead><tr><th>ルーム</th><th class="n">試合</th><th class="n">最高</th><th class="n">1ターン 最高</th><th class="n">1ターン 平均</th><th class="n">全ターン</th><th>大きさ</th><th>Webマップ</th><th class="n">当てられた</th><th class="n">LLM 費用</th><th>終わり方</th></tr></thead><tbody>${roomRows || `<tr><td colspan="11" class="dim">まだ試合がありません</td></tr>`}</tbody></table></div></section>
       <section><div class="st-h"><h2>試合${T.room !== null ? `（ルーム ${T.room}）` : ""}</h2><span class="dim">得点は公式（薄い字は推定）。「ずれ」は公式 − 推定。「LLM が動かした」は、LLM が手を決めた（前の構成）か、LLM の目標で方策が動いた（今の構成）手の割合</span>${T.room !== null ? `<button class="btn quiet" type="button" id="stAllRooms">全部のルーム</button>` : ""}</div>
-        <div class="stbl-wrap"><table class="stbl"><thead><tr><th>開始</th><th>ルーム</th><th class="n">ターン</th><th class="n">得点</th><th class="n">1ターン</th><th class="n">当てられた</th><th class="n">ずれ</th><th>終わり方</th><th>方策</th><th>LLM</th><th class="n">呼んだ回数</th><th class="n">費用</th><th class="n">LLM が動かした</th></tr></thead><tbody>${runRows || `<tr><td colspan="13" class="dim">試合がありません</td></tr>`}</tbody></table></div></section>`;
+        <div class="stbl-wrap"><table class="stbl"><thead><tr><th>開始</th><th>ルーム</th><th class="n">ターン</th><th class="n">得点</th><th class="n">1ターン</th><th class="n">当てられた</th><th class="n">ずれ</th><th>終わり方</th><th>方策</th><th>LLM</th><th class="n">呼んだ回数</th><th class="n">費用</th><th class="n">LLM が動かした</th><th class="n" title="試合中の LLM を呼ぶきっかけが鳴った回数（いまは記録するだけ）。マウスを載せると内訳">きっかけ</th></tr></thead><tbody>${runRows || `<tr><td colspan="14" class="dim">試合がありません</td></tr>`}</tbody></table></div></section>`;
     $$("#stRooms tr[data-room]").forEach((tr) => tr.addEventListener("click", () => { const r = Number(tr.dataset.room); T.room = T.room === r ? null : r; renderRooms(); }));
     $("#stAllRooms")?.addEventListener("click", () => { T.room = null; renderRooms(); });
     $$("#stRooms tr[data-run]").forEach((tr) => tr.addEventListener("click", () => {

@@ -105,6 +105,7 @@ flowchart LR
 | :--- | :--- |
 | `sim --room N --n 8 --seed 1 [--max-turns 200] [--model id]` | 方策をシミュレータで打たせて得点を出す（`--model` 既定は試合で使うモデル） |
 | `bench --room N --n 24 [--evaluator <file>] [--model id]` | 2つを同じ地図で比べる（既定: 既定のパラメータと学習したパラメータ。`--evaluator` で今の evaluator.ts と別ファイル） |
+| `triggers --n 12 [--room N] [--model id]` | 試合中の LLM を呼ぶきっかけ（[architecture.md](architecture.md)）が 100 ターンあたり何回鳴るかを数える |
 | `train --room N --minutes 5 [--dry-run] [--model id]` | そのモデルを、そのモデルの目的で学習する（`--dry-run` で保存しない） |
 | `bun scripts/sim-server.ts --port 3990 --seed 1 [--room N --turns 100 --web true]` | 偽サーバを起動（`HOST_URL=http://127.0.0.1:3990/CHaserOnline003/user/ CHASER_USER=sim CHASER_PASS=sim CHASER_TEST_VAR_DIR=<一時フォルダ> AGENT_USE_MAIN=false bun run play --room 1`） |
 

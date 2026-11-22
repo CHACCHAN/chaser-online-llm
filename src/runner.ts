@@ -17,6 +17,7 @@ import { boolSetting, getSetting, numSetting } from "./settings";
 import { saveRealMap } from "./sim/mapgen";
 import * as defaultEvaluator from "./solver/evaluator";
 import type { EvaluatorModule } from "./solver/planner";
+import { buildVoters, defaultTriggerConfig, type FiredTrigger, TriggerMonitor } from "./agent/triggers";
 import { loadModelParams, playModelId } from "./solver/models";
 import { makePlannerPolicy } from "./solver/policy";
 import type { AgentPlan, SolverDecision } from "./solver/types";
@@ -45,6 +46,10 @@ export interface TurnRecord {
   /** このターン最後のメイン問い合わせ1回の入力トークン（キャッシュ込み） */
   mainInputTokens?: number | null;
   breakpointReasons: string[];
+  /** 試合中の LLM を呼ぶきっかけで、このターンに鳴ったもの（src/agent/triggers.ts。いまは記録するだけ） */
+  triggers?: FiredTrigger[];
+  /** 特性ごとのモデルの手（試合で使うモデルと違う手を出したモデルがあった時だけ） */
+  modelVotes?: Partial<Record<"CMD1" | "CMD2", Record<string, string>>>;
   /** 最後に取れた Webマップの `turn=` とその時のハーネスのターン（Webマップのターン表示の意味を確かめるため） */
   webMapTurn?: { ourTurn: number; webTurn: number | null } | null;
   /** このターンに踏んだタイル（番号 → 回数）。タイルの得点の実測に使う */
@@ -71,6 +76,8 @@ export interface RunSummary {
   model: string | null;
   /** 手を出した方策のモデル（knowledge/styles.json の id。設定 POLICY_MODEL） */
   policyModel?: string;
+  /** 試合中の LLM を呼ぶきっかけの集計（鳴った回数・条件を満たした回数・比べたモデルの数・しきい値） */
+  triggers?: ReturnType<TriggerMonitor["summary"]>;
   webMapDetected: boolean;
   webMapUrl: string | null;
   turns: number;
@@ -142,7 +149,7 @@ function syncUiPredictionAndMap(
   decision: SolverDecision,
   source: "solver" | "main" | "fallback",
   breakpointReasons: string[],
-  agentInfo: Partial<Pick<UiPredictionState, "mainAction" | "mainNote" | "mainLatencyMs" | "plan">> = {},
+  agentInfo: Partial<Pick<UiPredictionState, "mainAction" | "mainNote" | "mainLatencyMs" | "plan" | "triggers">> = {},
 ): void {
   const evalSummary = worldMap.evaluateCandidates(phase);
   uiBus.updatePrediction({
@@ -226,7 +233,12 @@ export async function runAgentMatch(
   // 方策（経路探索 ＋ 評価関数 ＋ 学習したパラメータ）は試合開始時に1回だけ読み込む（試合中にファイルが変わっても、この試合は同じもので通す）
   const policyModel = playModelId();
   const matchParams = loadModelParams(policyModel);
-  const planner = makePlannerPolicy(matchParams, await loadEvaluator());
+  const evaluator = await loadEvaluator();
+  const planner = makePlannerPolicy(matchParams, evaluator);
+  // 試合中の LLM を呼ぶきっかけ（いまは記録して統計に出すだけ）。ほかの特性のモデルにも同じ盤面で手を出させて比べる
+  const triggerMonitor = new TriggerMonitor(buildVoters(policyModel, evaluator), defaultTriggerConfig());
+  /** 前のターンの終わりに鳴ったきっかけ（次のフェーズの画面に出す） */
+  let turnEndFired: FiredTrigger[] = [];
   /** 方策が例外を投げても試合は止めない（安全な手にして続ける。UI には最初の1回と以後100回ごとに知らせる） */
   let solverErrors = 0;
   const decideSolver = (wm: WorldMap, phase: "CMD1" | "CMD2", turn: number, plan: AgentPlan | null): SolverDecision => {
@@ -296,6 +308,8 @@ export async function runAgentMatch(
       const tokensAtTurnStart = mainAgent?.usage().totalTokens ?? 0;
       const breakpointReasons: string[] = [];
       const warpWaits: { phase: string; ms: number; aligned: boolean }[] = [];
+      const firedThisTurn: FiredTrigger[] = [];
+      const modelVotes: Partial<Record<"CMD1" | "CMD2", Record<string, string>>> = {};
 
       /** ソルバー候補 → メインエージェント判断 → 送信 → 観測反映 を1フェーズ分行う */
       const playPhase = async (phase: "CMD1" | "CMD2"): Promise<{ command: string; reason: string; values: number[] | null; source: "main" | "solver" }> => {
@@ -304,7 +318,18 @@ export async function runAgentMatch(
           decideSolver(worldMap, phase, turn, mainAgent?.currentPlan ?? null);
         const events = evaluateBreakpoint({ turn, worldMap, solverDecision }).reasons;
         for (const r of events) if (!breakpointReasons.includes(r)) breakpointReasons.push(r);
-        syncUiPredictionAndMap(worldMap, turn, phase, solverDecision, "solver", events);
+        // きっかけ: LLM の目標なしの方策の手と、ほかのモデルの手・観測から（例外は試合に響かせない）
+        let uiTriggers: { id: string; label: string; detail: string }[] = [];
+        try {
+          const play = mainAgent?.currentPlan ? planner(worldMap, phase, turn, { totalTurns, directive: null }) : solverDecision;
+          const tr = triggerMonitor.phase({ wm: worldMap, phase, turn, totalTurns, play });
+          firedThisTurn.push(...tr.fired);
+          if (tr.votes) modelVotes[phase] = { [policyModel]: play.command, ...tr.votes };
+          uiTriggers = [...(phase === "CMD1" ? turnEndFired : []), ...tr.fired].map((f) => ({ id: f.id, label: f.label ?? f.id, detail: f.detail }));
+        } catch (err) {
+          logger.warn({ turn, phase, err: err instanceof Error ? err.message : String(err) }, "きっかけを計算できなかった");
+        }
+        syncUiPredictionAndMap(worldMap, turn, phase, solverDecision, "solver", events, { triggers: uiTriggers });
 
         let decision = solverDecision;
         let source: "main" | "solver" = "solver";
@@ -336,6 +361,7 @@ export async function runAgentMatch(
             mainNote: started ? `${askedAt} の盤面で考え始めた` : "考え中（前の問い合わせ）",
             mainLatencyMs: null,
             plan: mainAgent.currentPlan,
+            triggers: uiTriggers,
           });
         }
 
@@ -450,6 +476,19 @@ export async function runAgentMatch(
           });
         }
       }
+      try {
+        turnEndFired = triggerMonitor.turnEnd({
+          wm: worldMap,
+          turn,
+          totalTurns,
+          web: webMap.lastScore,
+          warpMisaligned: warpWaits.some((w) => !w.aligned),
+        });
+        firedThisTurn.push(...turnEndFired);
+      } catch (err) {
+        turnEndFired = [];
+        logger.warn({ turn, err: err instanceof Error ? err.message : String(err) }, "きっかけを計算できなかった");
+      }
       const record: TurnRecord = {
         turn,
         cmd1,
@@ -469,6 +508,8 @@ export async function runAgentMatch(
           ? { agentTokens: mainAgent.usage().totalTokens - tokensAtTurnStart, mainInputTokens: mainAgent.usage().lastCallInputTokens }
           : {}),
         breakpointReasons,
+        ...(firedThisTurn.length > 0 ? { triggers: firedThisTurn } : {}),
+        ...(Object.keys(modelVotes).length > 0 ? { modelVotes } : {}),
         webMapTurn: webMap.lastTurn,
         landed,
         ...(newScore ? { webScore: newScore } : {}),
@@ -567,6 +608,7 @@ export async function runAgentMatch(
     room: config.room,
     model: agentSettings.model,
     policyModel,
+    triggers: triggerMonitor.summary(turnLogs.length),
     webMapDetected: webMap.available,
     webMapUrl: webMap.sourceUrl,
     turns: turnLogs.length,

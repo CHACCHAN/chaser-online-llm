@@ -318,6 +318,7 @@ table.turns { width: 100%; min-width: 620px; border-collapse: collapse; table-la
 .ev.bad { color: var(--neg); border-color: var(--neg); }
 .ev.plan { color: var(--plan); border-color: var(--plan); }
 .ev.sub { color: var(--sub); border-color: var(--sub); }
+.ev.trig { color: var(--ink); border-style: dashed; border-color: var(--ink3); }
 .detail td { background: var(--sunk); white-space: normal; padding: 10px 14px 12px 44px; }
 .detail dl { margin: 0; display: grid; grid-template-columns: 64px 1fr; gap: 4px 12px; }
 .detail dt { color: var(--ink3); font-size: var(--t-s); }
@@ -1440,6 +1441,7 @@ function eventsOf(t, i, turns) {
   if (t.usedFallback) ev.push(["bad", "fallback"]);
   if ((t.mainActions || []).some((x) => /:plan(\(|$)/.test(String(x)))) ev.push(["plan", "作戦変更"]);
   if (t.delegations?.length) ev.push(["sub", "サブ依頼"]);
+  (t.triggers || []).forEach((f) => ev.push(["trig", `きっかけ: ${f.label || f.id}`]));
   if (t.gameOver) ev.push(["bad", `終了 ${t.gameOverReason || ""}`]);
   return ev;
 }
@@ -1484,7 +1486,9 @@ function renderMain() {
       ${t.delegations?.length ? `<dt>サブ依頼</dt><dd>${t.delegations.map((d) => `<div>${esc(d)}</div>`).join("")}</dd>` : ""}
       <dt>応答</dt><dd>${Array.isArray(t.mainLatencyMs) && t.mainLatencyMs.length ? t.mainLatencyMs.map((x) => sec(x)).join(" + ") : "なし"}${derived(t) ? "  旧ログのため main/solver は usedHarness からの推定" : ""}</dd>
       <dt>位置</dt><dd>(${(t.positionAfter || []).join(", ")})${t.globalPositionAfter ? ` 全体 (${t.globalPositionAfter.join(", ")})` : ""}</dd>
-      ${t.breakpointReasons?.length ? `<dt>停止点</dt><dd>${esc(t.breakpointReasons.join(" / "))}</dd>` : ""}</dl></td></tr>`);
+      ${t.breakpointReasons?.length ? `<dt>停止点</dt><dd>${esc(t.breakpointReasons.join(" / "))}</dd>` : ""}
+      ${t.triggers?.length ? `<dt>きっかけ</dt><dd>${t.triggers.map((f) => `<div>${f.phase ? `${esc(f.phase)} ` : ""}<b>${esc(f.label || f.id)}</b> ${esc(f.detail)}</div>`).join("")}</dd>` : ""}
+      ${t.modelVotes ? `<dt>モデルの手</dt><dd>${Object.entries(t.modelVotes).map(([ph, v]) => `<div>${esc(ph)}: ${Object.entries(v).map(([m, c]) => `${esc(m)} ${esc(c)}`).join("・")}</div>`).join("")}</dd>` : ""}</dl></td></tr>`);
   });
   const ft = document.activeElement?.closest?.("tr.row")?.dataset.turn;
   wrap.innerHTML = `<table class="turns"><colgroup><col style="width:40px"><col style="width:64px"><col style="width:72px"><col style="width:138px"><col style="width:60px"><col style="width:58px"><col style="width:64px"><col></colgroup>
@@ -1561,6 +1565,7 @@ function renderDecide() {
     why = `<div class="dline"><span class="k">代行理由</span><b>${esc(reasonJa(p.mainNote) || "記録なし")}</b>${p.mainNote && reasonJa(p.mainNote) !== p.mainNote ? ` <span class="faint">(${esc(p.mainNote)})</span>` : ""}</div>`;
   }
   if (bp) why += `<div class="dline dim">${esc(bp)}</div>`;
+  if (p.triggers?.length) why += `<div class="dline" title="試合中の LLM を呼ぶきっかけ（いまは記録するだけで、LLM の呼び方は変えていない）"><span class="k">きっかけ</span>${p.triggers.map((f) => `<span class="ev trig" title="${esc(f.detail)}">${esc(f.label)}</span>`).join(" ")}</div>`;
   const plan = curPlan(), hasMain = p.mainAction !== undefined || p.mainNote !== undefined || plan;
   const planLine = plan
     ? `<div class="planline"><b>作戦目標 (${esc(plan.target[0])}, ${esc(plan.target[1])})</b>${plan.note ? ` ${esc(plan.note)}` : ""}</div>`

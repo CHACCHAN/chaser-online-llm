@@ -24,7 +24,7 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 | 通信・Webマップの仕様 | `docs/chaser-protocol.md` |
 | ツール一覧 | `agent/tools/README.md` |
 | ルームの記録（ワープの実測 `warps`・マスのメモ `cellNotes` を含む。座標は絶対座標＝Webマップの列・行） | `var/room-profiles.json` |
-| 過去の試合 | `var/runs/<runId>/`（`summary.json`、`turns.jsonl`、`diagnosis.md`、`MEMO.md`、`evolution-report.md`、`final-map.txt`、その試合の方策の控え `evaluator-snapshot.ts`・`policy-params.json`） |
+| 過去の試合 | `var/runs/<runId>/`（`summary.json`、`turns.jsonl`（ターンごと。試合中の LLM を呼ぶきっかけ `triggers`・モデルごとの手 `modelVotes`・Webマップの公式の得点 `webScore` も）、`diagnosis.md`、`MEMO.md`、`evolution-report.md`、`final-map.txt`、その試合の方策の控え `evaluator-snapshot.ts`・`policy-params.json`） |
 | 試合中の今 | `var/current/`（`snapshot.json`、`MEMO.md`） |
 | シミュレータの地図の作り方 | `knowledge/sim-profiles.json`（本物の地図 `var/maps/` と見比べて直してよい） |
 | 特性ごとのモデル | `knowledge/styles.json`（名前・特性・学習の目的・動かさないパラメータ）、`var/policy/models/<id>.json`（標準以外のパラメータ）、`var/policy/model-profiles.json`（測った特性）。試合で使うのは設定の `POLICY_MODEL`。仕組みは `docs/learning.md` |

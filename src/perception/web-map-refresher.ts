@@ -126,7 +126,15 @@ export class WebMapRefresher {
         this.worldMap.setGlobalGrid(r.grid, r.playerPos, r.stageName, turn, r.selfTileId, capturePos);
         this.consecutiveFailures = 0;
         this.lastSeenTurn = { ourTurn: turn, webTurn: r.turn };
-        if (r.liveScore && r.turn !== null) this.lastScoreSample = { ourTurn: turn, webTurn: r.turn, itemPoint: r.liveScore.itemPoint };
+        if (r.liveScore && r.turn !== null)
+          this.lastScoreSample = {
+            ourTurn: turn,
+            webTurn: r.turn,
+            itemPoint: r.liveScore.itemPoint,
+            totalScore: r.liveScore.totalScore,
+            putPoint: r.liveScore.putPoint,
+            putDamage: r.liveScore.putDamage,
+          };
         this.lastSourceUrl = r.sourceUrl;
         this.lastStageName = r.stageName;
         if (!this.found) {
