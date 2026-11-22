@@ -366,3 +366,59 @@ test("合法手ごとの行き先のマスを、観測元つきで見せる", as
   const s2 = landingLines(wm, ["wu", "keiru"], 3);
   expect(s2).toContain("keiru→?");
 });
+
+test("非同期モード: 手を待たずに裏で聞き、考え中は重ねて聞かない。返答の作戦は届いた時から使う", async () => {
+  Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
+  sent.length = 0;
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0, async: true });
+  const wm = new WorldMap();
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 2, 2, 2, 2], 1);
+  const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => (release = r));
+  proto.ask = async function (this: { options: ClaudeSessionOptions }, text: string): Promise<AskResult> {
+    sent.push({ label: this.options.label ?? "", text, options: this.options });
+    await gate;
+    const m = text.match(/\[TURN (\d+) \/ (CMD[12])\]/)!;
+    return { status: "ok", text: `{"turn": ${m[1]}, "phase": "${m[2]}", "action": "plan", "target": [1, 1], "memo": "裏で考えた"}`, durationMs: 1 };
+  };
+  const done: string[] = [];
+  const ctx = (turn: number, phase: "CMD1" | "CMD2") => ({ turn, phase, worldMap: wm, events: [], solve: (plan: Parameters<typeof decideTurnAction>[3]) => decideTurnAction(wm, phase, turn, plan) });
+  expect(agent.startBackground(ctx(1, "CMD1"), (r) => done.push(r?.action ?? "error"))).toBe(true);
+  // 考え中: 次のフェーズでは聞かない（手は待たない）
+  expect(agent.startBackground(ctx(1, "CMD2"), () => done.push("x"))).toBe(false);
+  expect(agent.thinking).toBe(true);
+  expect(agent.currentPlan).toBeNull();
+  release();
+  await agent.settleBackground(1000);
+  expect(done).toEqual(["plan"]);
+  expect(agent.currentPlan?.target).toEqual([1, 1]);
+  expect(agent.currentMemo).toBe("裏で考えた");
+  expect(agent.thinking).toBe(false);
+  // 非同期モードの説明がシステムプロンプトに入る
+  expect(sent[0]!.options.systemPrompt).toContain("非同期モード");
+  proto.ask = origAsk;
+  await agent.end();
+  delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
+});
+
+test("非同期モード: 考えている間にワープしたら、返答の作戦目標（古い座標）は使わない", async () => {
+  Bun.env.AGENT_MATCH_TOKEN_LIMIT = "0";
+  const agent = new MainAgent({}, 5000);
+  await agent.begin({ room: 1, stageName: null, webMap: false, highScore: 0, async: true });
+  const wm = new WorldMap();
+  wm.applyObservation("CMD1", "gr", [2, 2, 2, 2, 1000, 2, 2, 2, 2], 1);
+  const origAsk = proto.ask as (this: unknown, text: string) => Promise<AskResult>;
+  proto.ask = async function (this: { options: ClaudeSessionOptions }, text: string): Promise<AskResult> {
+    (wm as unknown as { frameVersionCount: number }).frameVersionCount += 1; // 考えている間にワープ
+    const m = text.match(/\[TURN (\d+) \/ (CMD[12])\]/)!;
+    return { status: "ok", text: `{"turn": ${m[1]}, "phase": "${m[2]}", "action": "plan", "target": [1, 1]}`, durationMs: 1 };
+  };
+  agent.startBackground({ turn: 1, phase: "CMD1", worldMap: wm, events: [], solve: (plan) => decideTurnAction(wm, "CMD1", 1, plan) }, () => {});
+  await agent.settleBackground(1000);
+  expect(agent.currentPlan).toBeNull();
+  proto.ask = origAsk;
+  await agent.end();
+  delete Bun.env.AGENT_MATCH_TOKEN_LIMIT;
+});

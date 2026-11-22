@@ -7,7 +7,8 @@ import type { RunSummary } from "./runner";
 import { logger } from "./tools";
 import { uiBus } from "./ui/event-bus";
 
-import { SOLVER_PATH } from "./paths";
+import { EVALUATOR_PATH, SOLVER_PATH } from "./paths";
+import { backupEvaluator, benchRoom, clearEvaluatorBackup, EVALUATOR_BACKUP_PATH, gateEvaluatorChange, trainAfterMatch, type GateResult } from "./sim/post-match";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "./evolution/edit-guard";
 import { appendReview } from "./agent/harness-review";
 import { clearEvolutionPending, markEvolutionPending, recoverPendingEvolution } from "./evolution/pending";
@@ -55,6 +56,23 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
   });
 
   const backupCode = existsSync(SOLVER_PATH) ? readFileSync(SOLVER_PATH, "utf-8") : null;
+  const evaluatorBefore = existsSync(EVALUATOR_PATH) ? readFileSync(EVALUATOR_PATH, "utf-8") : null;
+  backupEvaluator(evaluatorBefore);
+  // 振り返りに渡す: 今の方策の、このルームに似せた地図（本物の地図があれば混ぜる）での成績
+  let simInfo = "";
+  try {
+    const b = await benchRoom(summary.room);
+    const official = summary.officialResult?.totalScore ?? null;
+    const realPerTurn = official !== null && summary.turns > 0 ? Math.round((official / summary.turns) * 10) / 10 : null;
+    simInfo = [
+      "## シミュレータでの今の方策（planner）の成績",
+      `- このルームに似せた地図 ${b.maps} 枚（うち本物の地図を少し変えたもの ${b.realMaps} 枚）: 平均 ${b.perTurn} 点/ターン、罠 ${b.hazardHits} 回`,
+      realPerTurn !== null ? `- この試合の本番: ${realPerTurn} 点/ターン（公式 ${official} / ${summary.turns} ターン）。大きく違えば、シミュレータが本物と違う（地図の作り方・相手・ルール）か、本番の判断に問題がある` : "",
+      "- 比べ方: `bun src/cli.ts sim --room <n>`（1試合ずつ）/ `bun src/cli.ts bench --room <n> --evaluator <file>`（評価関数の比較）",
+    ].filter(Boolean).join("\n");
+  } catch (err) {
+    logger.warn({ err: err instanceof Error ? err.message : String(err) }, "シミュレータの成績を出せなかった");
+  }
   const protectedBefore = snapshotProtectedFiles();
   const tokensBefore = mainAgent.usage().totalTokens;
   // 振り返りの途中でハーネスが止まっても、次の起動で検証し直せるように印を残す（recoverInterruptedEvolution）
@@ -63,6 +81,7 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
     summary.diagnosis?.markdownReport ?? "(no diagnosis)",
     summary.runDir,
     numSetting("AGENT_POST_MATCH_TIMEOUT_MIN", { min: 1 }) * 60_000,
+    simInfo,
   );
   const reverted = restoreProtectedFiles(protectedBefore);
   if (reverted.length > 0) {
@@ -71,7 +90,7 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
       context: "evolution",
       kind: "error",
       title: "編集範囲外の変更を元に戻した",
-      content: `振り返りで変更できるのは active-solver.ts・knowledge/・agent/tools/ のみ:\n${reverted.join("\n")}`,
+      content: `振り返りで変更できるのは evaluator.ts・active-solver.ts・knowledge/・agent/tools/ のみ:\n${reverted.join("\n")}`,
     });
   }
   const outputText = res.status === "ok" ? res.text : `(${res.status}${res.status === "dead" ? `: ${res.error}` : ""})`;
@@ -115,12 +134,34 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
     // 最高記録のソルバーは試合直後に runner が保存済み（改修前の、実際に試合で使ったもの）
   }
 
+  // 評価関数（経路探索）を改修していたら、改修前とシミュレータで比べ、弱くなっていれば元に戻す
+  const evaluatorChanged = evaluatorBefore !== null && existsSync(EVALUATOR_PATH) && readFileSync(EVALUATOR_PATH, "utf-8") !== evaluatorBefore;
+  let evaluatorGate: GateResult | null = null;
+  if (evaluatorChanged) {
+    uiBus.patchState({ statusMessage: `Run ${summary.runId}: 改修した評価関数をシミュレータで比べています...` });
+    evaluatorGate = await gateEvaluatorChange(evaluatorBefore!, summary.room);
+    const c = evaluatorGate.comparison;
+    const detail = c ? `改修前 ${c.a} → 改修後 ${c.b} 点/ターン（差 ${c.diff}±${c.se}、勝ち ${c.wins}/${c.n}、罠 ${c.hazardsA}→${c.hazardsB}）` : `比べられなかった: ${evaluatorGate.error}`;
+    if (!evaluatorGate.ok) {
+      writeFileSync(EVALUATOR_PATH, evaluatorBefore!, "utf-8");
+      uiBus.pushClaudeEvent({ context: "evolution", kind: "error", title: "評価関数の改修を元に戻した（シミュレータで弱くなった）", content: detail });
+    } else {
+      uiBus.pushClaudeEvent({ context: "evolution", kind: "system", title: "評価関数の改修を採用（シミュレータで弱くなっていない）", content: detail });
+    }
+  }
+  clearEvaluatorBackup();
+
   // ここからはレビュー（ソルバーの編集は認めない）。途切れたら検証済みのソルバーへ戻す
   markEvolutionPending(
     { runId: summary.runId, runDir: summary.runDir, startedAt: new Date().toISOString(), stage: "review" },
     existsSync(SOLVER_PATH) ? readFileSync(SOLVER_PATH, "utf-8") : null,
   );
-  summary.evolution = { solverChanged, replayVerified: verification.ok, rolledBack };
+  summary.evolution = {
+    solverChanged,
+    replayVerified: verification.ok,
+    rolledBack,
+    ...(evaluatorChanged ? { evaluatorChanged, evaluatorAccepted: evaluatorGate?.ok ?? false } : {}),
+  };
   await Bun.write(path.join(summary.runDir, "summary.json"), JSON.stringify(summary, null, 2));
 
   await Bun.write(
@@ -131,6 +172,10 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
       `- **Solver Changed**: ${solverChanged}`,
       `- **Replay Verified**: ${verification.ok} (Turns Tested: ${verification.turnsTested}, Changed CMD1: ${verification.changedCmd1Count}, Changed CMD2: ${verification.changedCmd2Count})`,
       `- **Rolled Back**: ${rolledBack}`,
+      evaluatorChanged
+        ? `- **Evaluator Changed**: ${evaluatorGate?.ok ? "accepted" : "reverted"}${evaluatorGate?.comparison ? ` (sim ${evaluatorGate.comparison.a} → ${evaluatorGate.comparison.b} pts/turn, diff ${evaluatorGate.comparison.diff}±${evaluatorGate.comparison.se})` : evaluatorGate?.error ? ` (${evaluatorGate.error})` : ""}`
+        : "",
+      simInfo ? `\n${simInfo}\n` : "",
       `- **Tokens Used (post-match)**: ${(mainAgent.usage().totalTokens - tokensBefore).toLocaleString()}`,
       reverted.length > 0 ? `- **Reverted (out of scope)**: ${reverted.join(", ")}` : "",
       verification.errors.length > 0 ? `- **Errors**: ${verification.errors.join("; ")}` : "",
@@ -176,6 +221,15 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
  * 不合格なら改修前に戻す。結果は UI の出来事とその試合の summary.json に残す。
  */
 export async function recoverInterruptedEvolution(): Promise<void> {
+  // 評価関数の改修の途中で止まっていたら、比べていない改修は使わない（改修前に戻す）
+  if (existsSync(EVALUATOR_BACKUP_PATH)) {
+    const before = readFileSync(EVALUATOR_BACKUP_PATH, "utf-8");
+    if (existsSync(EVALUATOR_PATH) && readFileSync(EVALUATOR_PATH, "utf-8") !== before) {
+      writeFileSync(EVALUATOR_PATH, before, "utf-8");
+      uiBus.pushClaudeEvent({ context: "evolution", kind: "error", title: "前回の振り返りが途中で止まっていた", content: "シミュレータで比べていない評価関数の改修を、改修前に戻した" });
+    }
+    clearEvaluatorBackup();
+  }
   const r = await recoverPendingEvolution((runDir, baselineCode) => verifySolverWithReplay(runDir, { baselineCode }));
   if (!r) return;
   const what = !r.solverChanged
@@ -199,5 +253,32 @@ export async function recoverInterruptedEvolution(): Promise<void> {
     }
   } catch {
     // summary が読めなくても検証・戻しは済んでいる
+  }
+}
+
+/**
+ * 試合後の学習（index.ts・play.ts）。シミュレータで方策のパラメータを TRAIN_AFTER_MATCH_MIN 分だけ学習し、
+ * 学習に使っていない地図ではっきり良くなった時だけ var/policy/params.json に保存する。結果は evolution-report.md と UI に残す。
+ */
+export async function runPostMatchTraining(summary: RunSummary): Promise<void> {
+  const minTurns = numSetting("AGENT_EVOLVE_MIN_TURNS", { min: 0, integer: true });
+  if (summary.turns < minTurns || numSetting("TRAIN_AFTER_MATCH_MIN", { min: 0 }) <= 0) return;
+  uiBus.patchState({ status: "evolving", statusMessage: `Run ${summary.runId}: シミュレータで方策を学習中...` });
+  try {
+    const r = await trainAfterMatch(summary.room, {
+      shouldStop: () => uiBus.getState().stopRequested,
+      log: (m) => uiBus.patchState({ statusMessage: `学習中: ${m}` }),
+    });
+    if (!r) return;
+    const c = r.comparison;
+    const text = `${r.generations} 世代・${r.episodes} 試合。学習に使っていない地図で ${c.a} → ${c.b} 点/ターン（差 ${c.diff}±${c.se}、勝ち ${c.wins}/${c.n}）→ ${r.accepted ? "保存した（次の試合から使う）" : "見送り（はっきり良くなっていない）"}`;
+    uiBus.pushClaudeEvent({ context: "evolution", kind: "system", title: "方策の学習（シミュレータ）", content: text });
+    const report = path.join(summary.runDir, "evolution-report.md");
+    const prev = existsSync(report) ? readFileSync(report, "utf-8") : `# Post-Match Evolution Report (${summary.runId})\n`;
+    writeFileSync(report, `${prev}\n\n## 方策の学習（シミュレータ）\n${text}\n`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: msg }, "方策の学習に失敗");
+    uiBus.pushClaudeEvent({ context: "evolution", kind: "error", title: "方策の学習に失敗", content: msg });
   }
 }

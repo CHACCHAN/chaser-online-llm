@@ -1,19 +1,23 @@
 import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { BEST_SOLVERS_DIR, RUNS_DIR, SOLVER_PATH } from "./paths";
+import { BEST_SOLVERS_DIR, EVALUATOR_PATH, RUNS_DIR, SOLVER_PATH } from "./paths";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
 import { isResultForRun } from "./client/result";
 import type { AgentConfig } from "./config";
 import { analyzeMatchRun, type DiagnosticReport } from "./evolution/analyzer";
 import type { AgentUsageReport, MainAgent } from "./agent/main-agent";
 import { evaluateBreakpoint } from "./agent/turn-events";
-import { getRoomProfile, isWarpTile, recordMeasuredTileScores, recordRoomWarp, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
+import { getRoomProfile, isWarpTile, knownTotalTurns, recordMeasuredTileScores, recordRoomWarp, reloadTilesKnowledge, saveRoomProfile } from "./memory/knowledge-store";
 import { type MeasureResult, measureTileScores, type ScoreSample } from "./memory/tile-measure";
 import { WorldMap, type WebAlignInfo } from "./memory/world-map";
 import { totalTurnsFromWeb, WebMapRefresher } from "./perception/web-map-refresher";
 import { GameOver, logger } from "./tools";
-import { numSetting } from "./settings";
+import { boolSetting, getSetting, numSetting } from "./settings";
+import { saveRealMap } from "./sim/mapgen";
+import * as defaultEvaluator from "./solver/evaluator";
+import type { EvaluatorModule } from "./solver/planner";
+import { loadPolicyParams, makePlannerPolicy } from "./solver/policy";
 import { decideTurnAction as defaultDecideTurnAction, type SolverDecision } from "./solver/active-solver";
 import { type UiPredictionState, uiBus } from "./ui/event-bus";
 
@@ -95,7 +99,15 @@ export interface RunSummary {
     usage?: AgentUsageReport;
   };
   /** 試合後の進化結果（evolve.ts が追記） */
-  evolution?: { solverChanged: boolean; replayVerified: boolean; rolledBack: boolean; interrupted?: boolean };
+  evolution?: {
+    solverChanged: boolean;
+    replayVerified: boolean;
+    rolledBack: boolean;
+    interrupted?: boolean;
+    /** 評価関数（src/solver/evaluator.ts）を改修したか・シミュレータの比較で採用したか */
+    evaluatorChanged?: boolean;
+    evaluatorAccepted?: boolean;
+  };
   unknownTiles: number[];
   diagnosis?: DiagnosticReport;
 }
@@ -127,6 +139,25 @@ async function loadActiveSolver(): Promise<typeof defaultDecideTurnAction> {
     uiBus.pushClaudeEvent({ context: "system", kind: "error", title: "Solver Load Failed", content: msg });
   }
   return defaultDecideTurnAction;
+}
+
+/** 評価関数（エージェントが試合後に改修する）を試合開始時に読み込む。読めなければ同梱の版 */
+let evaluatorCache: { mtimeMs: number; mod: EvaluatorModule } | null = null;
+async function loadEvaluator(): Promise<EvaluatorModule> {
+  try {
+    const mtimeMs = statSync(EVALUATOR_PATH).mtimeMs;
+    if (evaluatorCache && evaluatorCache.mtimeMs === mtimeMs) return evaluatorCache.mod;
+    const mod = (await import(`${EVALUATOR_PATH}?t=${mtimeMs}`)) as EvaluatorModule;
+    if (typeof mod.stepCost === "function" && typeof mod.targetValue === "function") {
+      evaluatorCache = { mtimeMs, mod };
+      return mod;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err: msg }, "evaluator.ts の読み込みに失敗。同梱の版で続ける");
+    uiBus.pushClaudeEvent({ context: "system", kind: "error", title: "評価関数の読み込みに失敗", content: msg });
+  }
+  return defaultEvaluator;
 }
 
 function syncUiPredictionAndMap(
@@ -178,6 +209,8 @@ export async function runAgentMatch(
   };
   const worldMap = new WorldMap();
   const roomProfileBefore = getRoomProfile(config.room);
+  /** 1試合の全ターン数（過去の公式結果、なければ Webマップの残りターンから分かった時に入る） */
+  let totalTurns: number | null = roomProfileBefore.totalTurns ?? knownTotalTurns(config.room);
   /** 記録済みのワープ（worldMap.getWarpLinks() の番号） */
   const recordedWarps = new Set<number>();
   /** turns.jsonl に書いた最後の Webマップの得点（同じものを二度書かない） */
@@ -185,8 +218,18 @@ export async function runAgentMatch(
   let recordedAlign: WebAlignInfo | null = null;
 
   // Web マップは裏で取得する。取れない間は自作マップ、途中で取れたら全体マップ表示に切り替わる
+  let realMapSaved = false;
   const webMap = new WebMapRefresher(config.room, config.webMapUrl, worldMap, (r) => {
     if (r.liveScore) uiBus.updateScores({ liveOfficial: r.liveScore });
+    // 最初に取れた全体マップを本物の地図としてシミュレータ用に残す（試合後の学習で使う）
+    if (!realMapSaved && r.grid) {
+      realMapSaved = true;
+      try {
+        saveRealMap(config.room, runId, r.grid, totalTurns);
+      } catch (err) {
+        logger.warn({ err: err instanceof Error ? err.message : String(err) }, "地図の保存に失敗");
+      }
+    }
     uiBus.updateMap(worldMap.buildUiMapState(null, mainAgent?.currentPlan?.target ?? null));
   });
   await webMap.start();
@@ -208,11 +251,15 @@ export async function runAgentMatch(
   uiBus.updateMap(worldMap.buildUiMapState(null));
 
   // ソルバーは試合開始時に1回だけ読み込む（試合中にファイルが変わっても、この試合は同じソルバーで通す）
+  // 方策: planner（経路探索・学習したパラメータ）か solver（従来のソルバー）。どちらも試合開始時に1回だけ読み込む
+  const policyKind = getSetting("PLAY_POLICY") === "solver" ? "solver" : "planner";
   const loadedSolver = await loadActiveSolver();
+  const planner = policyKind === "planner" ? makePlannerPolicy(loadPolicyParams(), await loadEvaluator()) : null;
   /** ソルバーが例外を投げても試合は止めない（安全な手にして続ける。UI には最初の1回と以後100回ごとに知らせる） */
   let solverErrors = 0;
   const decideSolver: typeof loadedSolver = (wm, phase, turn, plan) => {
     try {
+      if (planner) return planner(wm, phase, turn, { totalTurns, directive: plan ? { target: plan.target, note: plan.note } : null });
       return loadedSolver(wm, phase, turn, plan);
     } catch (err) {
       solverErrors += 1;
@@ -225,6 +272,11 @@ export async function runAgentMatch(
     }
   };
   const turnLogs: TurnRecord[] = [];
+  /** 非同期のメイン: 届いた返答（次に書くターンの記録に入れる） */
+  const asyncMainActions: string[] = [];
+  const asyncMainLatency: number[] = [];
+  const asyncDelegations: string[] = [];
+  const asyncMain = mainAgent !== null && boolSetting("AGENT_ASYNC");
   const commandCounts: Record<string, number> = {};
   let gameOverReason: string | null = null;
 
@@ -251,7 +303,10 @@ export async function runAgentMatch(
       const pickupsBefore = worldMap.getStats().pickups;
       // Webマップの残りターン数から全ターン数が分かれば、メインの「残り」をそれに合わせる（初めてのルームでも分かる）
       const webTotal = totalTurnsFromWeb(webMap.lastTurn);
-      if (webTotal !== null) mainAgent?.setTotalTurns(webTotal);
+      if (webTotal !== null) {
+        mainAgent?.setTotalTurns(webTotal);
+        totalTurns = webTotal;
+      }
 
       let cmd1: string | null = null;
       let cmd1Reason: string | null = null;
@@ -285,7 +340,38 @@ export async function runAgentMatch(
 
         let decision = solverDecision;
         let source: "main" | "solver" = "solver";
-        if (mainAgent) {
+        if (mainAgent && asyncMain) {
+          // 非同期: 手は待たない。座標系の変化・目標への到達を反映してから今の作戦で手を決め直し、メインが空いていれば裏で聞く
+          mainAgent.syncFrame(worldMap);
+          decision = decideSolver(worldMap, phase, turn, mainAgent.currentPlan);
+          const askedAt = `T${turn} ${phase}`;
+          const started = mainAgent.startBackground(
+            { turn, phase, worldMap, events, solve: (plan) => decideSolver(worldMap, phase, turn, plan) },
+            (res, error) => {
+              if (!res) {
+                asyncMainActions.push(`${askedAt}:error(${(error ?? "").slice(0, 60)})`);
+                return;
+              }
+              asyncMainActions.push(`${askedAt}:${res.source === "main" ? res.action : `solver(${res.note})`}${res.planStatus ? `(${res.planStatus})` : ""}`);
+              if (res.durationMs !== null) asyncMainLatency.push(res.durationMs);
+              if (res.delegated) asyncDelegations.push(res.delegated);
+              reloadTilesKnowledge();
+              uiBus.pushClaudeEvent({
+                context: "in_game",
+                kind: "system",
+                title: `メインの返答（${askedAt} に聞いた分）`,
+                content: `${res.source === "main" ? res.action : "返答なし"}: ${res.note}${mainAgent.currentPlan ? ` / 作戦目標 (${mainAgent.currentPlan.target.join(",")})` : ""}`,
+              });
+            },
+          );
+          syncUiPredictionAndMap(worldMap, turn, phase, decision, "solver", events, {
+            mainAction: started ? "thinking" : mainAgent.thinking ? "thinking" : null,
+            mainNote: started ? `${askedAt} の盤面で考え始めた` : "考え中（前の問い合わせ）",
+            mainLatencyMs: null,
+            plan: mainAgent.currentPlan,
+            delegated: null,
+          });
+        } else if (mainAgent) {
           uiBus.patchState({ status: "claude_in_game", statusMessage: `T${turn} ${phase} メインエージェント判断中` });
           let res: Awaited<ReturnType<MainAgent["decide"]>>;
           try {
@@ -447,10 +533,10 @@ export async function runAgentMatch(
         usedHarness,
         cmd1Source,
         cmd2Source,
-        mainLatencyMs,
+        mainLatencyMs: [...mainLatencyMs, ...asyncMainLatency.splice(0)],
         solverFallbackNotes,
-        mainActions,
-        delegations,
+        mainActions: [...mainActions, ...asyncMainActions.splice(0)],
+        delegations: [...delegations, ...asyncDelegations.splice(0)],
         ...(mainAgent
           ? { agentTokens: mainAgent.usage().totalTokens - tokensAtTurnStart, mainInputTokens: mainAgent.usage().lastCallInputTokens }
           : {}),
@@ -524,6 +610,8 @@ export async function runAgentMatch(
   const finishedAt = new Date().toISOString();
   const stats = worldMap.getStats();
   await webMap.drain();
+  // 非同期のメインが考え中なら少し待つ（返答のメモ・依頼を記録に残す）
+  await mainAgent?.settleBackground(5000);
   // サブを先に止めてサブの範囲外の編集を戻す（この後で保存する solver-snapshot・最良ソルバー・振り返りの改修前のコードに混ぜない）
   await mainAgent?.stopSub();
   // 試合中に届いた公式のアイテム得点から、タイルの本当の得点を測って knowledge/tiles.json に残す（振り返りの前に）

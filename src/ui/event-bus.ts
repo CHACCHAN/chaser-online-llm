@@ -51,7 +51,8 @@ export interface UiPredictionState {
   nearestFrontiers: PathTarget[];
   candidates: CandidateEvaluation[];
   /** メインの返答種別 (continue / plan / command)。solver 単独なら null */
-  mainAction?: "continue" | "plan" | "command" | null;
+  /** thinking = 非同期モードでメインが裏で考えている（手は方策が決めた） */
+  mainAction?: "continue" | "plan" | "command" | "thinking" | null;
   /** main なら「作戦どおり」等、solver なら代行理由（時間切れ・多忙など） */
   mainNote?: string | null;
   mainLatencyMs?: number | null;

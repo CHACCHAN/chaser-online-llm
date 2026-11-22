@@ -183,7 +183,7 @@ export class MainAgent {
    * 試合開始（入室前）。prepared があれば準備フェーズで作ったメモから始める（準備は「開始」より前に runPrepPhase で済ませておく）。
    */
   async begin(
-    info: { room: number; stageName: string | null; webMap: boolean; highScore: number; totalTurns?: number | null },
+    info: { room: number; stageName: string | null; webMap: boolean; highScore: number; totalTurns?: number | null; async?: boolean },
     prepared?: { memo: string; usage: UsageTotals } | null,
   ): Promise<AskResult> {
     this.started = true;
@@ -203,6 +203,7 @@ export class MainAgent {
     const rules = existsSync(OFFICIAL_RULES_PATH) ? readFileSync(OFFICIAL_RULES_PATH, "utf-8").trim() : "";
     this.systemPrompt = [
       readPrompt("main.md"),
+      info.async ? `\n${readPrompt("main-async.md")}` : "",
       rules ? `\n## ゲームのルール（knowledge/official-rules.md）\n${rules.replace(/^# .*\n/, "")}` : "",
       commands ? `\n## ゲームのコマンド（knowledge/commands.md）\n${commands.replace(/^# .*\n/, "")}` : "",
       `\n## この試合\n${this.matchInfo}`,
@@ -238,8 +239,62 @@ export class MainAgent {
     return result;
   }
 
+  /** 裏で考えている問い合わせ（非同期モード、AGENT_ASYNC） */
+  private inflight: Promise<void> | null = null;
+
+  get thinking(): boolean {
+    return this.inflight !== null;
+  }
+
+  /**
+   * 非同期モードで毎フェーズ呼ぶ: 座標系の変化・作戦目標への到達を反映する（考え中でも、手は今の作戦で決めるため）。
+   */
+  syncFrame(worldMap: WorldMap): void {
+    this.checkFrameChange(worldMap);
+    this.refreshPlanStatus(worldMap);
+  }
+
+  /**
+   * 非同期モード: 手を待たせずに裏でメインに聞く。考え中なら何もしない（false）。
+   * 返答の作戦（plan）・メモ・サブへの依頼は届いた時に反映する。直接の手（command）は届いた時にはそのフェーズが終わっているので使わない。
+   * 聞いてから返答までにワープで座標系が変わっていたら、返答の作戦の座標は古いので使わない。
+   */
+  startBackground(
+    ctx: { turn: number; phase: "CMD1" | "CMD2"; worldMap: WorldMap; solve: (plan: AgentPlan | null) => SolverDecision; events: string[] },
+    onDone: (r: MainDecision | null, error?: string) => void,
+  ): boolean {
+    if (this.inflight || !this.started) return false;
+    this.syncFrame(ctx.worldMap);
+    const solverNow = ctx.solve(this.plan);
+    const askedFrame = ctx.worldMap.frameVersion;
+    const planBefore = this.plan;
+    this.inflight = (async () => {
+      try {
+        const result = await this.ask(ctx, solverNow);
+        if (ctx.worldMap.frameVersion !== askedFrame && this.plan !== planBefore && this.plan) {
+          this.notices.push(`T${ctx.turn} ${ctx.phase} の返答の作戦目標 (${this.plan.target.join(",")}) は、考えている間にワープして座標系が変わったので使わなかった`);
+          this.plan = null;
+        }
+        this.remember(ctx, result);
+        this.publish();
+        onDone(result);
+      } catch (err) {
+        onDone(null, err instanceof Error ? err.message : String(err));
+      } finally {
+        this.inflight = null;
+      }
+    })();
+    return true;
+  }
+
+  /** 裏の問い合わせが終わるのを待つ（試合の終わり。上限を過ぎたら待たない） */
+  async settleBackground(timeoutMs: number): Promise<void> {
+    if (!this.inflight) return;
+    await Promise.race([this.inflight, Bun.sleep(timeoutMs)]);
+  }
+
   /** 試合後: ツールありの新しいセッションで、メモ・経過・診断をもとに振り返りとソルバー改修を行わせる */
-  async postMatch(diagnosisMarkdown: string, runDir: string, timeoutMs: number): Promise<AskResult> {
+  async postMatch(diagnosisMarkdown: string, runDir: string, timeoutMs: number, simInfo = ""): Promise<AskResult> {
     this.next?.kill();
     this.next = null;
     // 振り返り中にサブが並行して同じファイル（ソルバー・knowledge・tools）を書き換えないよう、先に止める
@@ -271,11 +326,16 @@ export class MainAgent {
         diagnosisMarkdown,
         this.formatSubTodo(),
         subResults ? `\n${subResults}` : "",
-        policy ? `\n${policy}\n\nソルバーの改修もこの方針に沿わせること。` : "",
+        policy ? `\n${policy}\n\n方策の改修もこの方針に沿わせること。` : "",
+        simInfo ? `\n${simInfo}` : "",
         "",
         "## やること",
-        "1. ログを読み、失点原因と、作戦（plan）・直接指定（command）が効いた/効かなかった場面を特定する（必要なら Agent ツールで調査を並行してよい）。",
-        "2. `src/solver/active-solver.ts` を改修する（`decideTurnAction(worldMap, phase, turn, plan)` のシグネチャは維持）。編集してよいのは active-solver.ts（とそのテスト）・knowledge/・agent/tools/ だけ。それ以外（runner.ts 等のハーネス）を変えても自動で元に戻される。ハーネスの改善案は報告に書くこと。",
+        "1. ログを読み、失点原因と、作戦（plan）が効いた/効かなかった場面を特定する（必要なら Agent ツールで調査を並行してよい）。",
+        "2. 方策を改修する。試合で手を決めたのは「この試合の方策」の方。",
+        "   - planner（経路探索）: `src/solver/evaluator.ts`（マスの価値・通る手間・学習する重み PARAM_SPACE）を直す。探索の仕組み（planner.ts）は変えられない。新しい特徴は PARAM_SPACE に重みを足して使う（学習が値を合わせる）。`bun src/cli.ts bench --room <n> --evaluator <改修前の写し>` で比べられる。改修後はハーネスがシミュレータで改修前と比べ、弱くなっていれば元に戻す。",
+        "   - solver: `src/solver/active-solver.ts`（`decideTurnAction(worldMap, phase, turn, plan)` のシグネチャは維持）。",
+        "   - シミュレータが本物と違う所（地図の作り方 `knowledge/sim-profiles.json`、ルール）に気づいたら、sim-profiles.json を直すか報告に書く。",
+        "   編集してよいのは evaluator.ts・active-solver.ts（とそのテスト）・knowledge/・agent/tools/ だけ。それ以外（runner.ts・planner.ts 等のハーネス）を変えても自動で元に戻される。ハーネスの改善案は報告に書くこと。",
         "3. 判明したタイル得点・ルールは knowledge/ に残す。試合中に作った臨時ツール（`@temporary`）は、ソルバーへ組み込む／正式ツールにする（`@temporary` を外す）／削除する、のどれかに決める。",
         `4. \`bun src/cli.ts verify --run-dir ${runDir}\` と \`bun run typecheck\` が通るまで直す。`,
         "5. 最後に、何を変えたかを3行以内で報告する。",

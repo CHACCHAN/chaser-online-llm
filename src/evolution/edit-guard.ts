@@ -4,7 +4,7 @@ import { EDIT_GUARD_BACKUP_DIR, PROJECT_ROOT } from "../paths";
 
 /**
  * 試合後の振り返りでメインエージェントが触ってよいのは
- * src/solver/active-solver.ts（とそのテスト）・knowledge/・agent/tools/ だけ。
+ * src/solver/active-solver.ts（とそのテスト）・src/solver/evaluator.ts（経路探索の評価関数）・knowledge/・agent/tools/ だけ。
  * それ以外の保護対象（ハーネス本体・プロンプト・ユーザーの作戦方針・設定・手順書）が変わっていたら元に戻す。
  */
 const PROTECTED_GLOBS = [
@@ -21,7 +21,7 @@ const PROTECTED_GLOBS = [
   ".env",
   ".env.example",
 ];
-const ALLOWED = new Set(["src/solver/active-solver.ts", "src/solver/active-solver.test.ts"]);
+const ALLOWED = new Set(["src/solver/active-solver.ts", "src/solver/active-solver.test.ts", "src/solver/evaluator.ts"]);
 
 export type ProtectedSnapshot = Map<string, string>;
 

@@ -1,6 +1,6 @@
 import { Client, loginWithRetry } from "./client";
 import { loadAgentConfig } from "./config";
-import { recoverInterruptedEvolution, runPostMatchEvolution } from "./evolve";
+import { recoverInterruptedEvolution, runPostMatchEvolution, runPostMatchTraining } from "./evolve";
 import { waitAwareClientConfig } from "./client/wait-status";
 import { boolSetting, numSetting } from "./settings";
 import { getRoomProfile, knownTotalTurns, loadRoomProfiles } from "./memory/knowledge-store";
@@ -304,6 +304,8 @@ async function main() {
           "Claude Code self-evolution completed",
         );
       }
+      // シミュレータで方策を学習する（LLM の振り返りとは別。振り返りを切っていても行う）
+      if (!uiBus.getState().stopRequested) await runPostMatchTraining(summary);
 
       // 順に回るルーム: 次の試合は並びの次のルーム（ループの頭で切り替わり、準備もそのルームでやり直す）
       const nextRoom = nextQueuedRoom(roomQueue, config.room);
@@ -347,6 +349,7 @@ async function main() {
               webMap: profile.webMapAvailable ?? false,
               highScore: profile.highScore ?? 0,
               totalTurns: knownTotalTurns(config.room),
+              async: boolSetting("AGENT_ASYNC"),
             },
             prep ? { memo: prep.memo, usage: prep.usage } : null,
           );

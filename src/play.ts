@@ -11,7 +11,7 @@ import { parseArgs } from "node:util";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { Client, loginWithRetry } from "./client";
 import { loadAgentConfig } from "./config";
-import { recoverInterruptedEvolution, runPostMatchEvolution } from "./evolve";
+import { recoverInterruptedEvolution, runPostMatchEvolution, runPostMatchTraining } from "./evolve";
 import { getRoomProfile, knownTotalTurns } from "./memory/knowledge-store";
 import { runAgentMatch } from "./runner";
 import { boolSetting, numSetting } from "./settings";
@@ -48,6 +48,7 @@ try {
         webMap: profile.webMapAvailable ?? false,
         highScore: profile.highScore ?? 0,
         totalTurns: knownTotalTurns(config.room),
+        async: boolSetting("AGENT_ASYNC"),
       },
       prep ? { memo: prep.memo, usage: prep.usage } : null,
     );
@@ -87,6 +88,7 @@ try {
     const evo = await runPostMatchEvolution(summary, mainAgent);
     console.log(JSON.stringify({ evolution: { ok: evo.ok, verified: evo.replayVerified, rolledBack: evo.rolledBack } }));
   }
+  if (values.evolve === true) await runPostMatchTraining(summary);
 } finally {
   await mainAgent?.end();
 }

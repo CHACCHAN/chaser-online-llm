@@ -127,6 +127,11 @@ export const SETTINGS = {
     defaultValue: "default",
   },
   AGENT_USE_MAIN: { group: "llm", description: "メインエージェントを使う（false でソルバーのみ）", defaultValue: "true" },
+  AGENT_ASYNC: {
+    group: "llm",
+    description: "メインを待たずに打つ（true）。手は毎フェーズ方策がすぐ決め、メインは裏で盤面を読んで作戦（目標）を出し、届いた時から反映する。false = 毎フェーズメインの返答を待つ（時間でターンが進むルームでは間に合わない）",
+    defaultValue: "true",
+  },
   AGENT_HEDGE_SEC: {
     group: "llm",
     description: "メインがこの秒数たっても返答しない時、同じ問い合わせをもう1つのプロセスにも送り、先に返った方を使う（ゲートウェイの詰まり対策。0=しない）",
@@ -173,6 +178,27 @@ export const SETTINGS = {
     description: "このターン数未満で終わった試合（待機切れ・接続失敗など）は振り返り・最高記録の更新をしない",
     defaultValue: "3",
   },
+  PLAY_POLICY: {
+    group: "other",
+    description: "試合中に手を決める方策: planner（経路探索。評価関数 src/solver/evaluator.ts と学習したパラメータ var/policy/params.json）| solver（従来のソルバー src/solver/active-solver.ts）",
+    defaultValue: "planner",
+    options: ["planner", "solver"],
+  },
+  TRAIN_AFTER_MATCH_MIN: {
+    group: "other",
+    description: "試合後にシミュレータで方策のパラメータを学習する時間（分、0=しない）。その試合の地図（Webマップ）も学習に混ぜる。はっきり良くなった時だけ保存",
+    defaultValue: "5",
+  },
+  SIM_MAX_TURNS: {
+    group: "other",
+    description: "学習・比較のシミュレータで1試合を何ターンで打ち切るか（短いほど速い）",
+    defaultValue: "200",
+  },
+  SIM_WORKERS: {
+    group: "other",
+    description: "シミュレータを並列に回す数（空 = CPU の数 − 2、最大16）",
+    defaultValue: "",
+  },
   AGENT_EVOLVE: {
     group: "llm",
     description: "WebUI 連続モードで試合後にソルバー改修（振り返り）を行う（bun run play は --evolve 指定時のみ）",
@@ -192,7 +218,8 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
   { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_AUTH_MODE", "LLM_API_URL", "LLM_API_KEY", "LLM_API_HEADERS", "LLM_OAUTH_TOKEN", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_CONTEXT_WINDOW", "LLM_AUTO_COMPACT", "LLM_AUTO_COMPACT_PCT", "LLM_MAX_OUTPUT_TOKENS", "LLM_MODELS_TIMEOUT_SEC"] },
-  { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
+  { id: "learn", title: "方策・学習", keys: ["PLAY_POLICY", "TRAIN_AFTER_MATCH_MIN", "SIM_MAX_TURNS", "SIM_WORKERS"] },
+  { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_ASYNC", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
   { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_CONCURRENCY", "AGENT_SUB_TASK_TIMEOUT_MIN"] },
   { id: "post", title: "試合後（進化・レビュー）", keys: ["AGENT_EVOLVE", "AGENT_EVOLVE_MIN_TURNS", "AGENT_POST_MATCH_TIMEOUT_MIN", "AGENT_REVIEW", "AGENT_REVIEW_TIMEOUT_SEC", "AGENT_REVIEW_KEEP"] },
