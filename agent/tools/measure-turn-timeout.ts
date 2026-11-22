@@ -9,7 +9,11 @@
 import { parseArgs } from "node:util";
 import { Client } from "../../src/client";
 import { WorldMap } from "../../src/memory/world-map";
-import { decideTurnAction } from "../../src/solver/active-solver";
+import { makePlannerPolicy } from "../../src/solver/policy";
+
+// 手は方策（経路探索。active-solver.ts は 2026-11-22 に外した）
+const planner = makePlannerPolicy();
+const decideTurnAction = (wm: Parameters<typeof planner>[0], phase: "CMD1" | "CMD2", turn: number) => planner(wm, phase, turn, { totalTurns: null });
 import { GameOver } from "../../src/tools";
 
 const { values } = parseArgs({

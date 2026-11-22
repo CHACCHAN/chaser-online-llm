@@ -17,7 +17,13 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { WorldMap } from "../../src/memory/world-map";
 import type { TurnRecord } from "../../src/runner";
-import { decideTurnAction, type AgentPlan } from "../../src/solver/active-solver";
+import { makePlannerPolicy } from "../../src/solver/policy";
+import type { AgentPlan } from "../../src/solver/types";
+
+// 手は方策（経路探索。active-solver.ts は 2026-11-22 に外した）
+const planner = makePlannerPolicy();
+const decideTurnAction = (wm: WorldMap, phase: "CMD1" | "CMD2", turn: number, plan: AgentPlan | null = null) =>
+  planner(wm, phase, turn, { totalTurns: null, directive: plan ? { target: plan.target, note: plan.note } : null });
 
 const CANDIDATES = ["gr", "gru", "grd", "grl", "grr"] as const;
 
