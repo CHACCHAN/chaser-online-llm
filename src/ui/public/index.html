@@ -433,7 +433,7 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 .envrow { display: grid; grid-template-columns: 240px minmax(0, 1fr) 56px; gap: 8px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line2); }
 .envrow .key-n { font-family: var(--mono); font-size: var(--t-s); overflow-wrap: anywhere; }
 .envrow.changed .key-n { color: var(--warn); font-weight: 600; }
-.envrow input { width: 100%; font-family: var(--mono); font-size: var(--t-s); background: var(--sunk); }
+.envrow input, .envrow select { width: 100%; font-family: var(--mono); font-size: var(--t-s); background: var(--sunk); }
 .envrow .d { font-size: var(--t-xs); color: var(--ink3); grid-column: 1 / -1; margin-top: -2px; line-height: 1.6; }
 .dlg-f { display: flex; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
 
@@ -1711,7 +1711,7 @@ function renderEnv() {
   const rows = envRows.map((e, i) => [e, i]).filter(([e]) => e.section === sec);
   const custom = (e) => e.description === "カスタム環境変数";
   $("#envBody").innerHTML = rows.length === 0 ? `<p class="hint-p">項目はありません。</p>` : rows.map(([e, i]) => `<div class="envrow${isChanged(e) ? " changed" : ""}">${custom(e) ? `<input data-k="${i}" value="${esc(e.key)}" placeholder="KEY" aria-label="変数名" spellcheck="false" />` : `<label class="key-n" for="envv${i}">${esc(e.key)}</label>`}
-      <input id="envv${i}" data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" ${custom(e) ? `aria-label="値"` : ""} spellcheck="false" autocomplete="off" />${custom(e) ? `<button class="btn quiet" data-del="${i}" type="button" aria-label="この変数を削除">×</button>` : e.secret ? `<button class="btn quiet" data-sec="${i}" type="button" aria-label="${esc(e.key)} を表示">表示</button>` : "<span></span>"}
+      ${e.options ? `<select id="envv${i}" data-v="${i}">${[...new Set([...e.options, ...(e.value && !e.options.includes(e.value) ? [e.value] : [])])].map((o) => `<option value="${esc(o)}"${o === e.value ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>` : `<input id="envv${i}" data-v="${i}" type="${e.secret ? "password" : "text"}" value="${esc(e.value)}" ${custom(e) ? `aria-label="値"` : ""} spellcheck="false" autocomplete="off" />`}${custom(e) ? `<button class="btn quiet" data-del="${i}" type="button" aria-label="この変数を削除">×</button>` : e.secret ? `<button class="btn quiet" data-sec="${i}" type="button" aria-label="${esc(e.key)} を表示">表示</button>` : "<span></span>"}
       ${e.description && !custom(e) ? `<div class="d">${esc(e.description)}</div>` : ""}</div>`).join("");
 }
 $("#envBody").addEventListener("input", (e) => {

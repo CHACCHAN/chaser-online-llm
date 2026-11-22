@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CLAUDE_HOME_DIR, PROJECT_ROOT } from "../paths";
+import { resolveLlmAuth } from "./llm-auth";
 
 export const CLAUDE_BINARY = path.join(PROJECT_ROOT, "node_modules/.bin/claude");
 
@@ -38,22 +39,25 @@ export function buildClaudeEnv(settings: ClaudeModelSettings): Record<string, st
     if (!existsSync(f)) writeFileSync(f, onboarding, "utf-8");
   }
 
-  const apiKey = Bun.env.LLM_API_KEY ?? "";
-  const baseUrl = (Bun.env.LLM_API_URL ?? "").replace(/\/v1\/?$/, "");
+  const baseUrl = (Bun.env.LLM_API_URL ?? "").trim().replace(/\/+$/, "").replace(/\/v1$/, "");
   const sub = settings.subModel || settings.model;
+  // 鍵の送り方は LLM_API_AUTH（src/agent/llm-auth.ts）。親の環境（開発者のシェル）の ANTHROPIC_* は使わない
+  const auth = resolveLlmAuth();
+  const inherited = { ...(process.env as Record<string, string>) };
+  for (const k of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_BASE_URL"]) delete inherited[k];
+  const authEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(auth.claudeEnv)) if (v !== null) authEnv[k] = v;
 
   return {
-    ...(process.env as Record<string, string>),
+    ...inherited,
     HOME: home,
     XDG_CONFIG_HOME: home,
     XDG_DATA_HOME: home,
     XDG_STATE_HOME: home,
     XDG_CACHE_HOME: path.join(home, ".cache"),
     CLAUDE_CONFIG_DIR: configDir,
-    ANTHROPIC_API_KEY: apiKey,
-    ANTHROPIC_AUTH_TOKEN: apiKey,
+    ...authEnv,
     ...(baseUrl ? { ANTHROPIC_BASE_URL: baseUrl } : {}),
-    ...(apiKey ? { ANTHROPIC_CUSTOM_HEADERS: `X-Gravitee-Api-Key: ${apiKey}` } : {}),
     ...(settings.model ? { ANTHROPIC_MODEL: settings.model } : {}),
     // ゲートウェイに存在しない既定モデル (haiku 等) を裏で呼ばせないよう、エイリアスを全て差し替える
     ...(sub

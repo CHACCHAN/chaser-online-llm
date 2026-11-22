@@ -4,7 +4,18 @@
 
 - 実行バイナリは `./node_modules/.bin/claude`（`@anthropic-ai/claude-code`）。ホストの `~/.claude` は使わない。
 - `HOME` と `CLAUDE_CONFIG_DIR` を `var/claude-home/` に向け、初回に onboarding 済みの `.claude.json` を作る。
-- ゲートウェイは `LLM_API_URL` を `ANTHROPIC_BASE_URL` に渡し（末尾の `/v1` は除去）、`LLM_API_KEY` を `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` と `X-Gravitee-Api-Key` ヘッダに渡す。
+- ゲートウェイは `LLM_API_URL` を `ANTHROPIC_BASE_URL` に渡す（末尾の `/v1` は除去。空なら Anthropic API に直接）。Anthropic 互換の `/v1/messages` を持つものなら何でもよい。
+- 鍵の送り方は `LLM_API_AUTH`（`src/agent/llm-auth.ts`）。モデル一覧（`GET /v1/models`）も同じ送り方:
+
+  | `LLM_API_AUTH` | 送るもの | 向いている接続先 |
+  |---|---|---|
+  | `gravitee`（既定） | `x-api-key`・`Authorization: Bearer`・`X-Gravitee-Api-Key` の全部（`ANTHROPIC_API_KEY`・`ANTHROPIC_AUTH_TOKEN`・`ANTHROPIC_CUSTOM_HEADERS`） | Gravitee |
+  | `x-api-key` | `x-api-key` だけ（`ANTHROPIC_API_KEY`） | Anthropic API に直接（`LLM_API_URL` は空でよい） |
+  | `bearer` | `Authorization: Bearer` だけ（`ANTHROPIC_AUTH_TOKEN`） | LiteLLM・OpenRouter など |
+  | `header` | `LLM_API_KEY_HEADER` の名前のヘッダだけ（`ANTHROPIC_CUSTOM_HEADERS`。Claude Code にはダミーの鍵を渡す） | Azure API Management（`Ocp-Apim-Subscription-Key`）・Kong（`apikey`）など |
+  | `none` | 鍵を送らない | 認証の無いローカルのプロキシ |
+
+  どの方式でも `LLM_API_EXTRA_HEADERS`（`"名前: 値; 名前: 値"`）を足して送る。開発者のシェルの `ANTHROPIC_*` は引き継がない。
 - モデル: メインは `--model` / `LLM_MODEL_NAME`。`ANTHROPIC_MODEL` と `sonnet` / `opus` の各エイリアスを選択中のモデルに差し替え、ゲートウェイにない既定モデルが裏で呼ばれないようにする。サブは `--sub-model` / `LLM_SUB_MODEL_NAME`（空ならメインと同じ）で、`haiku` 系エイリアスと `CLAUDE_CODE_SUBAGENT_MODEL` に入る。
 - effort: メインは `--effort` / `LLM_MODEL_EFFORT`、サブは `--sub-effort` / `LLM_SUB_MODEL_EFFORT`（空ならメインと同じ）。
 - 起動引数の共通部分: `-p --output-format stream-json --verbose --dangerously-skip-permissions --disable-slash-commands`、さらに `--model`, `--effort`。全て `--input-format stream-json` で起動する。試合中のメインは `--system-prompt <main.md＋ルール(official-rules.md)＋コマンド(commands.md)＋方針＋strategy.md> --tools "" --no-session-persistence`（Claude Code 既定のシステムプロンプトとツール定義を送らない）、サブは `--append-system-prompt <sub.md> --no-session-persistence`。

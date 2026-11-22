@@ -12,6 +12,8 @@ export interface SettingDef {
   description: string;
   defaultValue: string;
   secret?: boolean;
+  /** 選べる値（WebUI の設定で候補として出す） */
+  options?: readonly string[];
 }
 
 export const SETTINGS = {
@@ -70,10 +72,27 @@ export const SETTINGS = {
   CHASER_LOGIN_RETRY_SEC: { group: "chaser", description: "ログイン再試行の間隔（秒）", defaultValue: "45" },
 
   // --- Claude Code ハーネス / エージェント ---
-  LLM_API_URL: { group: "llm", description: "LiteLLM / Gravitee ゲートウェイ URL", defaultValue: "" },
-  LLM_API_KEY: {
+  LLM_API_URL: {
     group: "llm",
-    description: "API キー (ANTHROPIC_API_KEY / X-Gravitee-Api-Key として送信)",
+    description: "LLM のゲートウェイの URL（Anthropic 互換の /v1/messages を持つもの。末尾の /v1 は有っても無くてもよい。空なら Anthropic API に直接）",
+    defaultValue: "",
+  },
+  LLM_API_KEY: { group: "llm", description: "API キー（送り方は LLM_API_AUTH）", defaultValue: "", secret: true },
+  LLM_API_AUTH: {
+    group: "llm",
+    description:
+      "鍵の送り方: gravitee（x-api-key・Bearer・X-Gravitee-Api-Key の全部）| x-api-key（Anthropic API に直接など）| bearer（Authorization: Bearer。LiteLLM・OpenRouter など）| header（LLM_API_KEY_HEADER の名前のヘッダ）| none（送らない）",
+    defaultValue: "gravitee",
+    options: ["gravitee", "x-api-key", "bearer", "header", "none"],
+  },
+  LLM_API_KEY_HEADER: {
+    group: "llm",
+    description: "LLM_API_AUTH=header の時に鍵を載せるヘッダ名（例: Ocp-Apim-Subscription-Key・apikey）",
+    defaultValue: "",
+  },
+  LLM_API_EXTRA_HEADERS: {
+    group: "llm",
+    description: "どの方式でも足して送るヘッダ（\"名前: 値; 名前: 値\"）。ゲートウェイがテナント・バージョンなどを求める時に使う",
     defaultValue: "",
     secret: true,
   },
@@ -151,7 +170,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "server", title: "サーバ接続", keys: ["HOST_URL", "CHASER_USER", "CHASER_PASS", "CHASER_ROOM", "CHASER_HTTP_TIMEOUT_SEC", "CHASER_RETRY_MS"] },
   { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
-  { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_API_URL", "LLM_API_KEY", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },
+  { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_API_URL", "LLM_API_KEY", "LLM_API_AUTH", "LLM_API_KEY_HEADER", "LLM_API_EXTRA_HEADERS", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },
   { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
   { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_CONCURRENCY", "AGENT_SUB_TASK_TIMEOUT_MIN"] },
