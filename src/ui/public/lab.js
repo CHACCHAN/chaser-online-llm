@@ -194,7 +194,7 @@
   }
 
   /** 学習の LLM（学習が終わるたびに学習環境を直す）の動き・結果 */
-  const COACH_WHAT = { evaluator: "評価関数", profiles: "地図の作り方", trainConfig: "学習のやり方" };
+  const COACH_WHAT = { evaluator: "評価関数", profiles: "地図の作り方", trainConfig: "学習のやり方", styles: "モデル", review: "ハーネスへの要望" };
   const COACH_TRIGGER = { manual: "並べた地図の学習", idle: "空き時間の学習", "post-match": "試合後の学習" };
   // 相手がいた地図での勝ち数・当てた／当てられた得点
   function versus(runs) {
@@ -206,7 +206,7 @@
     const running = st.job?.coach?.state === "running";
     if (running) {
       const sec = (Date.now() - new Date(st.job.coach.startedAt)) / 1000;
-      return `<div class="coach"><div class="head"><b>学習の LLM が学習環境を直しています</b><span class="dim">${Math.floor(sec / 60)}分${Math.round(sec % 60)}秒</span></div><div class="msg">結果を読んで評価関数・地図の作り方・学習のやり方を直し、直したものは確かめて、弱くなっていれば戻します</div></div>`;
+      return `<div class="coach"><div class="head"><b>学習の LLM が学習環境を直しています</b><span class="dim">${Math.floor(sec / 60)}分${Math.round(sec % 60)}秒</span></div><div class="msg">結果と理論値の目安との差を読んで評価関数・地図の作り方・学習のやり方・モデルを直し、直したものは確かめて、弱くなっていれば戻します</div></div>`;
     }
     const c = st.lastCoach;
     if (!c) return st.coachEnabled ? "" : `<div class="msg">学習の LLM は切っています（上の「学習の LLM」で入れられます）</div>`;
@@ -214,7 +214,9 @@
     const status = { ok: "", timeout: "（時間切れ）", dead: "（止まった）", stopped: "（試合が始まったので止めて、改修は戻した）" }[c.status] ?? "";
     const items = c.changes.map((x) => `<li class="${x.accepted ? "ok" : "ng"}">${esc(COACH_WHAT[x.what] || x.what)}: ${x.accepted ? "採用" : "戻した"} — ${esc(x.detail.replace(/^(採用|戻した)[:：]\s*/, ""))}</li>`);
     if (c.reverted?.length) items.push(`<li class="ng">範囲の外の変更を戻した: ${esc(c.reverted.join("、"))}</li>`);
-    return `<div class="coach"><div class="head"><b>学習の LLM${esc(status)}</b><span class="dim">${esc(when)}・${esc(COACH_TRIGGER[c.trigger] || c.trigger)}の後・記録 ${esc(c.dir)}</span></div>${c.summary ? `<div class="say">${esc(c.summary)}</div>` : ""}${items.length ? `<ul>${items.join("")}</ul>` : `<div class="dim">直したものは無し</div>`}</div>`;
+    const g = c.gap;
+    const gap = g ? `<div class="msg" title="同じ地図・同じ相手で、全部のワープの行き先を知っている・深く考える方策と比べた（src/sim/oracle.ts）">理論値の目安に届いている割合 <b>${Math.round(g.ratio * 100)}%</b>（今 ${fmt(g.policy)} / 目安 ${fmt(g.reference)} 点/ターン。差の内訳: 知らないこと +${fmt(g.knowledgeGap)}・考えが浅いこと +${fmt(g.searchGap)}）</div>` : "";
+    return `<div class="coach"><div class="head"><b>学習の LLM${esc(status)}</b><span class="dim">${esc(when)}・${esc(COACH_TRIGGER[c.trigger] || c.trigger)}の後・記録 ${esc(c.dir)}</span></div>${gap}${c.summary ? `<div class="say">${esc(c.summary)}</div>` : ""}${items.length ? `<ul>${items.join("")}</ul>` : `<div class="dim">直したものは無し</div>`}</div>`;
   }
 
   $("#lmMake").addEventListener("click", async () => {

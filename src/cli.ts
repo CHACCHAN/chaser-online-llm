@@ -220,7 +220,7 @@ async function main() {
     return;
   }
 
-  if (subcommand === "sim" || subcommand === "bench" || subcommand === "train") {
+  if (subcommand === "sim" || subcommand === "bench" || subcommand === "train" || subcommand === "gap") {
     await simCommands(subcommand, values as Record<string, string | boolean | undefined>);
     return;
   }
@@ -237,13 +237,14 @@ async function main() {
       "  cell-note    --room <n> --x <x> --y <y> --note <text> [--abs]  Add a note to a cell (empty --note clears)",
       "  sim          [--room <n>] [--n 8] [--seed s] [--max-turns t] [--model id]  シミュレータで試合をして成績を出す（--model: knowledge/styles.json のモデル。既定は試合で使うモデル）",
       "  bench        [--room <n>] [--n 24] [--evaluator <file>] [--model id]  シミュレータで比べる（--evaluator: 今の evaluator.ts とそのファイル。無し: 既定のパラメータと学習したパラメータ）",
+      "  gap          [--room <n>] [--n 12] [--model id]  理論値の目安（全部のワープの行き先を知っている・深く考える方策）との差を同じ地図・同じ相手で測る",
       "  triggers     [--room <n>] [--n 12] [--model id]  シミュレータで、試合中の LLM を呼ぶきっかけが 100 ターンあたり何回鳴るかを数える",
       "  train        [--room <n>] [--minutes 5] [--dry-run] [--model id]  そのモデルのパラメータを、そのモデルの目的で学習する（はっきり良くなった時だけ保存）",
     ].join("\n"),
   );
 }
 
-async function simCommands(sub: "sim" | "bench" | "train", v: Record<string, string | boolean | undefined>): Promise<void> {
+async function simCommands(sub: "sim" | "bench" | "train" | "gap", v: Record<string, string | boolean | undefined>): Promise<void> {
   const { SimPool } = await import("./sim/pool");
   const { comparePolicies, evaluatePolicy, makeEvalSet, perTurn, trainPolicy } = await import("./sim/train");
   const { loadModelParams, playModelId } = await import("./solver/models");
@@ -260,6 +261,15 @@ async function simCommands(sub: "sim" | "bench" | "train", v: Record<string, str
       for (const [i, r] of rs.entries()) console.log(`seed ${set.seeds[i]} ${r.scenario} web=${r.webMap} T=${r.totalTurns} 得点 ${r.score}（${perTurn(r).toFixed(1)}/ターン）罠 ${r.hazardHits} 相手 ${r.opponentKinds.map((k, j) => `${k}:${r.opponents[j]}`).join(",") || "-"} 当てた ${r.put} 当てられた ${r.putDamage}${r.won === null ? "" : r.won ? " 勝ち" : " 負け"} ${r.msPerPhase}ms/手`);
       const vs = rs.filter((r) => r.won !== null);
       console.log(`平均 ${(rs.reduce((s, r) => s + perTurn(r), 0) / rs.length).toFixed(1)} 点/ターン${vs.length ? `・相手のいる地図 ${vs.length} 枚で勝ち ${vs.filter((r) => r.won).length}・当てられた合計 ${vs.reduce((s, r) => s + r.putDamage, 0)}` : ""}`);
+      return;
+    }
+    if (sub === "gap") {
+      const { measureGap, renderGap } = await import("./sim/oracle");
+      const set = makeEvalSet(Number(v.seed ?? 800_000), Number(v.n ?? 12), room, maxTurns);
+      const params = loadModelParams(model);
+      const g = await measureGap(pool, set.seeds.map((seed, i) => ({ seed, room: set.rooms[i] ?? null, maxTurns: set.maxTurns, policy: { kind: "planner" as const, params } })));
+      console.log(`モデル ${model}・${g.maps.length} 地図`);
+      for (const line of renderGap(g)) console.log(line);
       return;
     }
     if (sub === "bench") {

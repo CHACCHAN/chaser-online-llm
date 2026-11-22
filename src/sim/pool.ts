@@ -12,6 +12,11 @@ export interface EpisodeJob {
   /** 再生用の記録を返す */
   trace?: boolean;
   policy: { kind: "planner"; params: Params; /** 別の評価関数のファイル（エージェントの改修前後を比べる時） */ evaluatorPath?: string };
+  /**
+   * 理論値の目安（同じ地図・同じ相手）: know = 全体マップを毎ターン見て、全部のワープの行き先を知っている。
+   * deep = それに加えて、目標の数・先読み・ビーム幅を一番大きくする
+   */
+  oracle?: "know" | "deep";
   /** 相手の決め方（無ければ worker が今の設定から作る。学習は始めに1回作って、比べる両方に同じものを渡す） */
   opponents?: OpponentPlan;
 }

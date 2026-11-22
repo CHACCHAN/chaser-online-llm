@@ -5,6 +5,7 @@ import { isRunDirName, POLICY_TRAIN_LOG_PATH, RUNS_DIR } from "../paths";
 import { TRIGGER_DEFS } from "../agent/triggers";
 import { aggregateReviews, loadRunReview, type TriggerReview } from "../agent/trigger-review";
 import { lab } from "../sim/lab";
+import { readCoachLog } from "../sim/lab-coach";
 
 /**
  * 「統計」画面の中身（GET /api/stats）。試合の記録（var/runs/*）・ルームの記録（room-profiles.json）・
@@ -276,6 +277,10 @@ export function statsOverview() {
     rooms: roomStats(runs),
     runs,
     training: trainStats(),
+    // 理論値の目安との差（学習の LLM を動かすたびに測る。古い順）
+    gap: readCoachLog(200)
+      .filter((c) => c.gap)
+      .map((c) => ({ at: c.finishedAt, model: c.model ?? "standard", trigger: c.trigger, ...c.gap! })),
     triggerReview: triggerReviewStats(runs),
     triggerDefs: TRIGGER_DEFS.map((d) => ({ id: d.id, label: d.label, source: d.source, doc: d.doc })),
     models: { play: m.play, list: m.models.map((x) => ({ id: x.id, name: x.name, trait: x.trait, trained: x.trained, updatedAt: x.updatedAt, profile: x.profile, tags: x.tags })) },

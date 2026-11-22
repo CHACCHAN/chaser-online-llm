@@ -133,9 +133,18 @@
     $("#stTrain").innerHTML = `<section><div class="st-h"><h2>学習ごとの差</h2><span class="dim">学習に使っていない地図での、学習前 → 後の差（± 標準誤差）。標準以外のモデルはそのモデルの目的の値なので、モデルどうしでは比べられない</span></div>
         <div class="st-key"><span><i style="background:var(--ink)"></i>採用</span><span><i style="border:1.5px solid var(--ink3);width:7px;height:7px"></i>見送り</span></div>
         <div class="mini">${boxes || '<div class="dim">まだ学習の記録がありません</div>'}</div></section>
+      ${renderGap(d.gap || [], name)}
       <section><div class="st-h"><h2>学習の記録</h2><span class="dim">新しい順（var/policy/train-log.jsonl）</span></div>
         <div class="stbl-wrap"><table class="stbl"><thead><tr><th>日時</th><th>モデル</th><th>きっかけ</th><th>地図</th><th class="n">世代</th><th class="n">試合</th><th class="n">前 → 後</th><th class="n">差</th><th>結果</th><th class="n">時間</th></tr></thead><tbody>${rows || `<tr><td colspan="10" class="dim">まだありません</td></tr>`}</tbody></table></div></section>`;
     $$("#stTrain svg[data-model]").forEach((svg) => drawTrain(svg, by[svg.dataset.model]));
+  }
+
+  /* 理論値の目安との差（学習の LLM を動かすたび。新しい順の表） */
+  function renderGap(list, name) {
+    const rows = [...list].reverse().slice(0, 30).map((g) => `<tr><td>${esc(when(g.at))}</td><td>${esc(name(g.model))}</td><td>${esc(trig[g.trigger] || g.trigger || "-")}</td>
+      <td class="n"><b>${Math.round(g.ratio * 100)}%</b></td><td class="n">${n1(g.policy)} / ${n1(g.reference)}</td><td class="n">+${n1(g.knowledgeGap)}</td><td class="n">+${n1(g.searchGap)}</td></tr>`).join("");
+    return `<section><div class="st-h"><h2>理論値の目安との差</h2><span class="dim">同じ地図・同じ相手で、全部のワープの行き先を知っている方策（知らないことの差）と、さらに深く考える方策（考えが浅いことの差）と比べる。100% に近いほど目安に届いている（src/sim/oracle.ts・bun src/cli.ts gap）</span></div>
+      <div class="stbl-wrap"><table class="stbl"><thead><tr><th>日時</th><th>モデル</th><th>きっかけ</th><th class="n">届いている割合</th><th class="n">今 / 目安（点/ターン）</th><th class="n">知らないこと</th><th class="n">考えが浅いこと</th></tr></thead><tbody>${rows || `<tr><td colspan="7" class="dim">まだありません（学習の LLM が動くたびに測る）</td></tr>`}</tbody></table></div></section>`;
   }
 
   const tip = document.createElement("div");

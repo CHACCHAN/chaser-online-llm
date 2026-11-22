@@ -2,7 +2,10 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, write
 import path from "node:path";
 import { AGENT_WORK_TOOLS, type AskResult, ClaudeSession } from "../agent/claude-session";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "../evolution/edit-guard";
-import { AGENT_DIR, EVALUATOR_PATH, LAB_COACH_DIR, LAB_COACH_LOG_PATH, POLICY_TRAIN_LOG_PATH, PROJECT_ROOT, SIM_MAPS_DIR, SIM_PROFILES_PATH, TRAIN_CONFIG_PATH } from "../paths";
+import { appendReview } from "../agent/harness-review";
+import { OBJECTIVE_KEYS } from "../solver/models";
+import { PARAM_SPACE } from "../solver/evaluator";
+import { AGENT_DIR, AGENT_REVIEW_PATH, EVALUATOR_PATH, POLICY_STYLES_PATH, LAB_COACH_DIR, LAB_COACH_LOG_PATH, POLICY_TRAIN_LOG_PATH, PROJECT_ROOT, SIM_MAPS_DIR, SIM_PROFILES_PATH, TRAIN_CONFIG_PATH } from "../paths";
 import { getSetting, numSetting } from "../settings";
 import { logger } from "../tools/logger";
 import type { EpisodeResult } from "./episode";
@@ -10,6 +13,7 @@ import { getTileInfo } from "../memory/world-map";
 import { isPortalTile } from "./engine";
 import { loadRealMaps, makeScenario } from "./mapgen";
 import { gateEvaluatorChange, type GateResult } from "./post-match";
+import { type OracleGap, renderGap } from "./oracle";
 import { makeRng } from "./rng";
 import { loadTrainConfig, type TrainResult } from "./train";
 
@@ -28,7 +32,7 @@ import { loadTrainConfig, type TrainResult } from "./train";
  */
 
 export interface CoachChange {
-  what: "evaluator" | "profiles" | "trainConfig";
+  what: "evaluator" | "profiles" | "trainConfig" | "styles" | "review";
   accepted: boolean;
   detail: string;
 }
@@ -44,6 +48,9 @@ export interface CoachResult {
   finishedAt: string;
   trigger: string;
   dir: string;
+  /** 学習したモデルと、理論値の目安との差（統計の推移に出す） */
+  model?: string;
+  gap?: { policy: number; reference: number; ratio: number; knowledgeGap: number; searchGap: number } | null;
 }
 
 export interface CoachInput {
@@ -54,6 +61,10 @@ export interface CoachInput {
   runs: EpisodeResult[];
   /** 同じ地図を学習の前の方策で打たせた記録（あれば） */
   runsBefore?: EpisodeResult[] | null;
+  /** 理論値の目安との差（src/sim/oracle.ts。測れなかったら null） */
+  gap?: OracleGap | null;
+  /** 学習したモデル */
+  model?: string;
 }
 
 export interface CoachDeps {
@@ -62,7 +73,7 @@ export interface CoachDeps {
   /** 止める（試合が始まった等）。true になったら LLM を止め、改修は全部戻す */
   shouldStop?: () => boolean;
   gateEvaluator?: (baselineCode: string, room: number | null) => Promise<GateResult>;
-  paths?: { evaluator?: string; profiles?: string; trainConfig?: string; dir?: string; log?: string };
+  paths?: { evaluator?: string; profiles?: string; trainConfig?: string; styles?: string; review?: string; dir?: string; log?: string };
   /** 守る範囲（src/ など）の変更を戻すか（テストでは戻さない） */
   guard?: boolean;
 }
@@ -170,6 +181,55 @@ export function histogramDistance(a: Map<number, number>, b: Map<number, number>
   return d;
 }
 
+/** モデルの数の上限（学習の LLM が足せるのはここまで。学習の時間を分け合うので） */
+export const MAX_STYLES = 8;
+
+/** 学習の LLM が直したモデルの定義が使えるか（使えなければ理由）。前からあるモデルは消さない */
+export function stylesProblem(text: string | null, beforeText: string | null): string | null {
+  const ids = (t: string | null): string[] => {
+    try {
+      const raw = JSON.parse(t ?? "{}") as { styles?: { id?: unknown }[] };
+      return Array.isArray(raw.styles) ? raw.styles.map((s) => String(s?.id)) : [];
+    } catch {
+      return [];
+    }
+  };
+  let raw: { styles?: Record<string, unknown>[] };
+  try {
+    raw = JSON.parse(text ?? "") as typeof raw;
+  } catch (err) {
+    return `JSON が読めない: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  if (!Array.isArray(raw.styles)) return "styles が配列でない";
+  const now = ids(text);
+  const missing = ids(beforeText).filter((id) => !now.includes(id));
+  if (missing.length) return `前からあるモデルを消した（${missing.join(",")}）`;
+  if (now.length > MAX_STYLES) return `モデルが ${MAX_STYLES} より多い`;
+  if (new Set(now).size !== now.length) return "id が重なっている";
+  for (const s of raw.styles) {
+    if (typeof s.id !== "string" || !/^[a-z0-9_-]{1,32}$/.test(s.id) || typeof s.name !== "string" || !s.name) return `id・name が正しくない（${String(s.id)}）`;
+    const obj = (s.objective ?? {}) as Record<string, unknown>;
+    for (const [k, w] of Object.entries(obj)) {
+      if (!OBJECTIVE_KEYS.includes(k as never)) return `${s.id}: 知らない目的 ${k}`;
+      const lim = k === "hazard" ? 3000 : 5;
+      if (typeof w !== "number" || !Number.isFinite(w) || Math.abs(w) > lim) return `${s.id}: 目的 ${k} の重みが範囲外（±${lim}）`;
+    }
+    for (const [k, v] of Object.entries((s.fixed ?? {}) as Record<string, unknown>)) {
+      const spec = (PARAM_SPACE as Record<string, { min: number; max: number }>)[k];
+      if (!spec) return `${s.id}: 知らないパラメータ ${k}`;
+      if (typeof v !== "number" || v < spec.min || v > spec.max) return `${s.id}: ${k} が範囲外（${spec.min}〜${spec.max}）`;
+    }
+  }
+  return null;
+}
+
+/** 報告の「## ハーネスへの要望」の節（無ければ null）。agent/REVIEW.md に足す */
+export function harnessRequests(summary: string): string | null {
+  const m = summary.match(/^##\s*ハーネスへの要望\s*$([\s\S]*?)(?=^##\s|(?![\s\S]))/m);
+  const body = m?.[1]?.trim();
+  return body && !/^(なし|特になし|-)$/.test(body) ? body : null;
+}
+
 /** 本物の地図が保存してあるルーム */
 function roomsWithRealMaps(): number[] {
   if (!existsSync(SIM_MAPS_DIR)) return [];
@@ -249,6 +309,13 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
   const weak = input.runs.map((r, i) => [perTurnOf(r), i] as const).sort((a, b) => a[0] - b[0]).slice(0, 3);
   lines.push("", `弱い地図: ${weak.map(([, i]) => `#${i}`).join(", ")}（traces.json の index。各ターンの位置・得点・手・方策の理由・変わったマス）`);
 
+  // 理論値の目安との差
+  if (input.gap) {
+    lines.push("", "## 理論値の目安との差（同じ地図・同じ相手。src/sim/oracle.ts。目標: 届いている割合を 100% に近づける）", "", ...renderGap(input.gap));
+    const prev = readCoachLog(5).filter((c) => c.gap).map((c) => `${c.finishedAt.slice(5, 16)} ${c.model ?? "standard"} ${(c.gap!.ratio * 100).toFixed(0)}%`);
+    if (prev.length) lines.push(`- これまで: ${prev.join("、")}`);
+  }
+
   // 地図の作り方と本物の地図の違い
   const rooms = [...new Set([...(input.room !== null ? [input.room] : []), ...roomsWithRealMaps()])];
   lines.push("", "## 作った地図と本物の地図の違い（タイルの割合。knowledge/sim-profiles.json を直す手がかり）", "");
@@ -306,10 +373,12 @@ export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Prom
     evaluator: deps.paths?.evaluator ?? EVALUATOR_PATH,
     profiles: deps.paths?.profiles ?? SIM_PROFILES_PATH,
     trainConfig: deps.paths?.trainConfig ?? TRAIN_CONFIG_PATH,
+    styles: deps.paths?.styles ?? POLICY_STYLES_PATH,
+    review: deps.paths?.review ?? AGENT_REVIEW_PATH,
   };
   const dir = deps.paths?.dir ?? path.join(LAB_COACH_DIR, startedAt.replace(/[:.]/g, "-"));
   const report = writeCoachReport(input, dir);
-  const before = { evaluator: read(files.evaluator), profiles: read(files.profiles), trainConfig: read(files.trainConfig) };
+  const before = { evaluator: read(files.evaluator), profiles: read(files.profiles), trainConfig: read(files.trainConfig), styles: read(files.styles) };
   const stop = deps.shouldStop ?? (() => false);
   const guard = deps.guard === false ? null : snapshotProtectedFiles();
   const rel = (f: string) => path.relative(PROJECT_ROOT, f);
@@ -324,10 +393,11 @@ export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Prom
     `- 評価関数 \`${rel(files.evaluator)}\`（方策が何を狙い、どれだけ遠回りするか。新しい特徴は PARAM_SPACE に重みを足す）。比べ方: \`bun src/cli.ts bench --room <n> --evaluator <改修前の写し>\``,
     `- 地図の作り方 \`${rel(files.profiles)}\`（本物の地図・実測に似せる。易しくするための変更はしない）`,
     `- 学習のやり方 \`${rel(files.trainConfig)}\`（候補・地図・確かめの数、探す幅）`,
-    "ほか（src/ のハーネス）を変えても元に戻される。ハーネスの不具合に気づいたら、直さずに報告に書く。",
+    `- モデル \`${rel(files.styles)}\`（特性ごとのモデルを足す・目的を直す。前からあるモデルは消さない。${MAX_STYLES} 個まで）`,
+    "ほか（src/ のハーネス）を変えても元に戻される。ハーネスの不具合・ハーネスでしか直らないことに気づいたら、直さずに報告の「## ハーネスへの要望」に書く（agent/REVIEW.md に載り、開発者が直す）。",
     "",
     "## 最後に",
-    "何を見て、何を直したか（直さなかったならその理由）を5行以内で報告する。",
+    "何を見て、何を直したか（直さなかったならその理由）を5行以内で報告する。ハーネスへの要望があれば、その後に「## ハーネスへの要望」の節を付ける（無ければ付けない）。",
   ].join("\n");
 
   const timeoutMs = numSetting("LAB_COACH_TIMEOUT_MIN", { min: 1 }) * 60_000;
@@ -346,8 +416,20 @@ export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Prom
 
   if (stopped) {
     // 試合が始まった等: 確かめていない改修は全部戻す
-    for (const k of ["evaluator", "profiles", "trainConfig"] as const) if (read(files[k]) !== before[k]) restore(files[k], before[k]);
+    for (const k of ["evaluator", "profiles", "trainConfig", "styles"] as const) if (read(files[k]) !== before[k]) restore(files[k], before[k]);
   } else {
+    // モデル（特性）: 足す・目的を直す。前からあるモデルは消さない。新しいモデルは次の学習（合間の学習が順に育てる）から
+    if (read(files.styles) !== before.styles) {
+      const problem = stylesProblem(read(files.styles), before.styles);
+      if (problem) {
+        restore(files.styles, before.styles);
+        changes.push({ what: "styles", accepted: false, detail: `戻した（${problem}）` });
+      } else {
+        const ids = (t: string | null) => ((JSON.parse(t ?? '{"styles":[]}') as { styles: { id: string }[] }).styles ?? []).map((s) => s.id);
+        const added = ids(read(files.styles)).filter((id) => !ids(before.styles).includes(id));
+        changes.push({ what: "styles", accepted: true, detail: added.length ? `モデルを足した: ${added.join(", ")}` : "モデルの定義を直した" });
+      }
+    }
     // 学習のやり方
     if (read(files.trainConfig) !== before.trainConfig) {
       const { config, problems } = loadTrainConfig(files.trainConfig);
@@ -394,6 +476,17 @@ export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Prom
     }
   }
 
+  // ハーネスへの要望（評価関数・地図・学習のやり方では直らないこと）→ agent/REVIEW.md（開発者が読む）
+  const requests = res.status === "ok" ? harnessRequests(res.text) : null;
+  if (requests && !stopped) {
+    try {
+      appendReview({ runId: `学習の LLM ${rel(dir)}`, room: input.room ?? 0, model: input.model ?? null, text: `### 学習の LLM からの要望\n${requests}` }, files.review);
+      changes.push({ what: "review", accepted: true, detail: "ハーネスへの要望を agent/REVIEW.md に書いた" });
+    } catch (err) {
+      logger.warn({ err: err instanceof Error ? err.message : String(err) }, "ハーネスへの要望を書けなかった");
+    }
+  }
+
   const result: CoachResult = {
     status: stopped ? "stopped" : res.status === "ok" ? "ok" : res.status === "timeout" ? "timeout" : "dead",
     summary: res.status === "ok" ? res.text.trim().slice(0, 2000) : res.status === "dead" ? `止まった: ${res.error}` : res.status === "timeout" ? "時間切れ（それまでの改修を確かめた）" : "",
@@ -403,6 +496,8 @@ export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Prom
     finishedAt: new Date().toISOString(),
     trigger: input.trigger,
     dir: rel(dir),
+    ...(input.model ? { model: input.model } : {}),
+    gap: input.gap ? { policy: input.gap.policy, reference: input.gap.reference, ratio: input.gap.ratio, knowledgeGap: input.gap.knowledgeGap, searchGap: input.gap.searchGap } : null,
   };
   try {
     const logFile = deps.paths?.log ?? LAB_COACH_LOG_PATH;

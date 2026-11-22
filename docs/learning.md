@@ -40,6 +40,7 @@ flowchart LR
 | `episode.ts` | 1試合。自分は本番と同じ `WorldMap`（観測の反映・Webマップでの位置合わせ）と方策で打つ。相手は下の「相手と自己対戦」 |
 | `bots.ts`・`opponents.ts` | 相手（拾う・狙う・自分）と、自己対戦の相手の控え（リーグ `var/policy/league.json`） |
 | `pool.ts`・`worker.ts` | Bun Worker で並列（`SIM_WORKERS`、既定は CPU 数−2、最大16） |
+| `oracle.ts` | 理論値の目安との差。同じ地図・同じ相手で、今の方策と「知っていれば」（全体マップを毎ターン見て、全部のワープの行き先を初めから知っている）・「深く考えれば」（さらに目標の数・先読み・ビーム幅を最大）を打たせ、地図ごとに一番高いものを目安にする。届いている割合と、差の内訳（知らないこと・考えが浅いこと）。本当の最適ではなく、今の方策の仕組みで届くはずの点の目安 |
 | `train.ts` | 学習（ES、対称サンプリング）。目的は 1ターンあたりの得点の平均。学習に使わない地図で確かめ、差が標準誤差の1.5倍より大きく罠も増えない時だけ保存 |
 | `post-match.ts` | 試合後: 評価関数の改修の比較（弱くなっていない＝`notWorse` で合格）・ルームでの成績（振り返りに渡す） |
 | `lab.ts` | 学習の仕事の受け持ち（WebUI の「地図を作る → 並べた地図で学習 → 統計」、試合後の学習 `TRAIN_AFTER_MATCH_MIN`、試合をしていない間の学習 `TRAIN_IDLE`）。同時に1つ |
@@ -90,14 +91,15 @@ flowchart LR
 
 ## 学習の LLM（学習環境を直す。`src/sim/lab-coach.ts`）
 
-試合中の LLM とは別のセッション。学習（並べた地図・試合後・空き時間）が終わるたびに続けて動く（`LAB_COACH`、既定オン。試すだけ・止めた・試合中は動かない。試合後の学習は次の試合の前なので動く）。
+試合中の LLM とは別のセッション。開発者が手伝わなくても、方策を理論値の目安に近づけ続けるのが目標。学習（並べた地図・試合後・空き時間）が終わるたびに続けて動く（`LAB_COACH`、既定オン。試すだけ・止めた・試合中は動かない。試合後の学習は次の試合の前なので動く）。
 
-1. `var/lab-coach/<日時>/` に統計 `report.md`（学習の前→後と確かめ用の地図の結果、地図ごとの点/ターン・罠・足踏み・方策の誤り、作った地図と本物の地図のタイルの割合の違い、最近の学習）と再生の記録 `traces.json` を書き出す。並べた地図で学習した時はその地図の前→後、それ以外は今の方策で 12 枚打たせたもの。
-2. ツールありの Claude Code（`agent/prompts/lab-coach.md`、モデルは `LAB_COACH_MODEL`・空なら LLM と同じ、上限 `LAB_COACH_TIMEOUT_MIN` 分）が読んで直す。直してよいのは次の3つ:
+1. `var/lab-coach/<日時>/` に統計 `report.md`（学習の前→後と確かめ用の地図の結果、地図ごとの点/ターン・罠・足踏み・方策の誤り、作った地図と本物の地図のタイルの割合の違い、最近の学習）と再生の記録 `traces.json` を書き出す。並べた地図で学習した時はその地図の前→後、それ以外は今の方策で 12 枚打たせたもの。同じ地図・同じ相手で理論値の目安との差（`oracle.ts`）も測って載せる（これまでの割合も）。
+2. ツールありの Claude Code（`agent/prompts/lab-coach.md`、モデルは `LAB_COACH_MODEL`・空なら LLM と同じ、上限 `LAB_COACH_TIMEOUT_MIN` 分）が読んで直す。直してよいのは次の4つ:
    - **評価関数** `src/solver/evaluator.ts` → 改修前と同じ地図で比べ（`gateEvaluatorChange`、試合後の振り返りと同じ）、弱くなっていれば戻す。
    - **地図の作り方** `knowledge/sim-profiles.json` → 地図が作れなければ戻す。本物の地図があるルームで、作った地図のタイルの割合が本物から遠ざかったら（L1 距離が 0.02 より増えたら）戻す。方策の得点では比べない（易しい地図にすれば得点は上がってしまうので）。統計には地図の形（区画の数・一番大きい区画の外の点・罠に囲まれた点。`mapStructure`）も本物と作ったものを並べ、学習の LLM が `partitions`・`enclosures` を本物に合わせる。
    - **学習のやり方** `knowledge/train-config.json`（1世代の候補の数 `popSize`・地図の数 `batch`・確かめ用の地図の数 `validation`・探す幅 `sigmaStart`/`sigmaEnd`。`trainPolicy` が毎回読む）→ 範囲の外なら戻す。
-3. それ以外（ハーネス）の変更は戻す（edit-guard）。試合が始まる・「止める」を押すと LLM を止め、確かめていない改修を全部戻す。結果は `var/lab-coach/log.jsonl` に残し、「学習」画面に出す。
+   - **モデル** `knowledge/styles.json`（特性ごとのモデルを足す・目的と動かさないパラメータを直す）→ 前からあるモデルを消した・id が重なる・`MAX_STYLES`（8）より多い・目的の重みが ±5（`hazard` は ±3000）の外・`fixed` が `PARAM_SPACE` の外なら戻す（`stylesProblem`）。足したモデルは合間の学習が順に育てる。
+3. それ以外（ハーネス）の変更は戻す（edit-guard）。ハーネスでしか直らないことは報告の `## ハーネスへの要望` の節に書かせ、ハーネスが `agent/REVIEW.md` に足す（開発者が読む）。試合が始まる・「止める」を押すと LLM を止め、確かめていない改修を全部戻す。結果（理論値の目安との差も）は `var/lab-coach/log.jsonl` に残し、「学習」画面と「統計」の「学習の推移」（理論値の目安との差の表）に出す。
 
 ## CLI（`bun src/cli.ts …`）
 
@@ -105,6 +107,7 @@ flowchart LR
 | :--- | :--- |
 | `sim --room N --n 8 --seed 1 [--max-turns 200] [--model id]` | 方策をシミュレータで打たせて得点を出す（`--model` 既定は試合で使うモデル） |
 | `bench --room N --n 24 [--evaluator <file>] [--model id]` | 2つを同じ地図で比べる（既定: 既定のパラメータと学習したパラメータ。`--evaluator` で今の evaluator.ts と別ファイル） |
+| `gap --room N --n 12 [--model id]` | 理論値の目安との差を同じ地図・同じ相手で測る（`oracle.ts`。届いている割合と差の内訳） |
 | `triggers --n 12 [--room N] [--model id]` | 試合中の LLM を呼ぶきっかけ（[architecture.md](architecture.md)）が 100 ターンあたり何回鳴るかを数える |
 | `train --room N --minutes 5 [--dry-run] [--model id]` | そのモデルを、そのモデルの目的で学習する（`--dry-run` で保存しない） |
 | `bun scripts/sim-server.ts --port 3990 --seed 1 [--room N --turns 100 --web true]` | 偽サーバを起動（`HOST_URL=http://127.0.0.1:3990/CHaserOnline003/user/ CHASER_USER=sim CHASER_PASS=sim CHASER_TEST_VAR_DIR=<一時フォルダ> AGENT_USE_MAIN=false bun run play --room 1`） |

@@ -67,6 +67,8 @@ export interface EpisodeOptions {
   opponents?: OpponentSetup[];
   /** 相手の「自分」が使う評価関数（既定は今の evaluator.ts） */
   opponentEvaluator?: EvaluatorModule;
+  /** 理論値の目安: 自分は地図にある全部のワープの行き先を初めから知っている（Webマップは呼ぶ側が毎ターン見せる） */
+  knowAllWarps?: boolean;
 }
 
 /** 相手の「自分」: 自分と同じく、自分の観測と Webマップだけで方策が動く */
@@ -87,6 +89,7 @@ export function runEpisode(scn: Scenario, policy: PolicyFn, opts: EpisodeOptions
     if (o.kind === "self") selfOpps.set(p, { wm: new WorldMap(), policy: makePlannerPolicy(o.params, ...(opts.opponentEvaluator ? [opts.opponentEvaluator] : [])) });
   }
   const wm = new WorldMap();
+  if (opts.knowAllWarps) wm.setKnownGlobalWarps(game.knownWarps());
   let policyErrors = 0;
   let phases = 0;
   let ms = 0;

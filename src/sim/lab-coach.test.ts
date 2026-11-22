@@ -25,7 +25,8 @@ afterAll(() => {
 /** 本物のファイルを触らないよう、写しの場所で動かす */
 function sandbox() {
   const dir = mkdtempSync(path.join(tmpdir(), "coach-"));
-  const p = { evaluator: path.join(dir, "evaluator.ts"), profiles: path.join(dir, "sim-profiles.json"), trainConfig: path.join(dir, "train-config.json"), dir: path.join(dir, "out"), log: path.join(dir, "log.jsonl") };
+  const p = { evaluator: path.join(dir, "evaluator.ts"), profiles: path.join(dir, "sim-profiles.json"), trainConfig: path.join(dir, "train-config.json"), styles: path.join(dir, "styles.json"), review: path.join(dir, "REVIEW.md"), dir: path.join(dir, "out"), log: path.join(dir, "log.jsonl") };
+  writeFileSync(p.styles, JSON.stringify({ styles: [{ id: "standard", name: "バランス", objective: {} }, { id: "hunter", name: "ハンター", objective: { put: 1 } }] }));
   copyFileSync(EVALUATOR_PATH, p.evaluator);
   copyFileSync(SIM_PROFILES_PATH, p.profiles);
   copyFileSync(TRAIN_CONFIG_PATH, p.trainConfig);
@@ -128,4 +129,61 @@ test("地図の形: 帯で区切られた区画の数・大きい区画の外の
   expect(s.regions).toBe(2);
   expect(s.enclosed).toBeGreaterThan(0);
   expect(s.outsideMain).toBeGreaterThan(0);
+});
+
+test("学習の LLM が足したモデル: 前からあるモデルは消さず、範囲の中だけ通す", async () => {
+  const { stylesProblem } = await import("./lab-coach");
+  const before = JSON.stringify({ styles: [{ id: "standard", name: "バランス", objective: {} }, { id: "hunter", name: "ハンター", objective: { put: 1 } }] });
+  const add = (s: object) => JSON.stringify({ styles: [...JSON.parse(before).styles, s] });
+  expect(stylesProblem(add({ id: "warper", name: "ワープ使い", objective: { item: 0.5 }, fixed: { exitValue: 800 } }), before)).toBeNull();
+  expect(stylesProblem(JSON.stringify({ styles: [{ id: "standard", name: "バランス" }] }), before)).toContain("消した");
+  expect(stylesProblem(add({ id: "x", name: "x", objective: { put: 50 } }), before)).toContain("範囲外");
+  expect(stylesProblem(add({ id: "x", name: "x", fixed: { depth: 99 } }), before)).toContain("範囲外");
+  expect(stylesProblem(add({ id: "x", name: "x", objective: { speed: 1 } }), before)).toContain("知らない目的");
+  expect(stylesProblem("{", before)).toContain("JSON");
+});
+
+test("報告の「ハーネスへの要望」の節を取り出す（無い・なしなら null）", async () => {
+  const { harnessRequests } = await import("./lab-coach");
+  expect(harnessRequests("直した。\n\n## ハーネスへの要望\n- 方策に敵から逃げる特徴が欲しい（地図 3 で T40〜90 当てられ続けた）\n")).toContain("逃げる");
+  expect(harnessRequests("直した。\n## ハーネスへの要望\nなし\n")).toBeNull();
+  expect(harnessRequests("直した。")).toBeNull();
+  expect(harnessRequests("## ハーネスへの要望\n- A\n## 次\n- B")).toBe("- A");
+});
+
+test("理論値の目安との差: 地図ごとに一番高いものを目安に、知らないこと・考えが浅いことに分ける", async () => {
+  const { summarizeGap } = await import("./oracle");
+  const r = (score: number) => ({ scenario: "m", score, totalTurns: 10 }) as EpisodeResult;
+  const g = summarizeGap([r(1000), r(3000)], [r(2000), r(2000)], [r(4000), r(1000)]);
+  expect(g.reference).toBe(350);
+  expect(g.policy).toBe(200);
+  expect(g.ratio).toBeCloseTo(0.571, 3);
+  expect(g.knowledgeGap).toBe(50);
+  expect(g.searchGap).toBe(100);
+});
+
+test("学習の LLM がモデルを足し、ハーネスへの要望を agent/REVIEW.md に書く。前からあるモデルを消したら戻す", async () => {
+  const p = sandbox();
+  const styles = JSON.parse(readFileSync(p.styles, "utf-8"));
+  const r = await runLabCoach(
+    { trigger: "manual", room: null, train: fakeTrain, runs: [] },
+    {
+      guard: false,
+      paths: p,
+      ask: async () => {
+        writeFileSync(p.styles, JSON.stringify({ styles: [...styles.styles, { id: "warper", name: "ワープ使い", objective: {}, fixed: { exitValue: 900 } }] }));
+        return { status: "ok", text: "ワープ使いを足した。\n\n## ハーネスへの要望\n- 敵から逃げる特徴が欲しい", durationMs: 1 };
+      },
+    },
+  );
+  expect(r.changes.find((c) => c.what === "styles")).toMatchObject({ accepted: true, detail: "モデルを足した: warper" });
+  expect(r.changes.find((c) => c.what === "review")).toMatchObject({ accepted: true });
+  expect(readFileSync(p.review, "utf-8")).toContain("敵から逃げる特徴");
+
+  const bad = await runLabCoach(
+    { trigger: "manual", room: null, train: fakeTrain, runs: [] },
+    { guard: false, paths: { ...p, dir: path.join(p.dir, "2") }, ask: async () => { writeFileSync(p.styles, JSON.stringify({ styles: [styles.styles[0]] })); return { status: "ok", text: "", durationMs: 1 }; } },
+  );
+  expect(bad.changes.find((c) => c.what === "styles")).toMatchObject({ accepted: false });
+  expect(readFileSync(p.styles, "utf-8")).toContain("warper");
 });

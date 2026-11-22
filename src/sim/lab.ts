@@ -1,3 +1,4 @@
+import { measureGap } from "./oracle";
 import { numSetting, boolSetting, getSetting } from "../settings";
 import type { Params } from "../solver/evaluator";
 import { PARAM_SPACE, type ParamSpec } from "../solver/evaluator";
@@ -335,9 +336,23 @@ export class LearningLab {
         job.coach = { state: "running", startedAt: new Date().toISOString(), result: null };
         this.emit(true);
         // 地図ごとの成績: 並べた地図があればそれ、無ければ今の方策でこのルームの地図を打たせる
-        const runs = useSet ? this.runsAfter! : await this.pool!.runAll(Array.from({ length: 12 }, (_, i) => ({ seed: 6_000_000 + Math.floor(Math.random() * 1e6) + i, room, maxTurns: maxTurns(), trace: true, policy: { kind: "planner" as const, params: loadModelParams(model.id) } })));
+        const params = loadModelParams(model.id);
+        const base = 6_000_000 + Math.floor(Math.random() * 1e6);
+        const jobs = useSet
+          ? this.evalSet!.seeds.map((seed, i) => ({ seed, room: this.evalSet!.rooms[i] ?? null, maxTurns: this.evalSet!.maxTurns, trace: true, policy: { kind: "planner" as const, params: r.after } }))
+          : Array.from({ length: 12 }, (_, i) => ({ seed: base + i, room, maxTurns: maxTurns(), trace: true, policy: { kind: "planner" as const, params } }));
+        const runs = useSet ? this.runsAfter! : await this.pool!.runAll(jobs);
+        // 理論値の目安との差（同じ地図・同じ相手で、全部を知っている・深く考える方策と比べる）
+        job.message = "理論値の目安との差を測っています";
+        this.emit(true);
+        const gap = await measureGap(this.pool!, jobs, runs).catch((err) => {
+          logger.warn({ err: err instanceof Error ? err.message : String(err) }, "理論値の目安との差を測れなかった");
+          return null;
+        });
+        job.message = "学習の LLM が結果を読んで、学習環境を直しています";
+        this.emit(true);
         const result = await runLabCoach(
-          { trigger: opts.trigger, room, train: r, runs, runsBefore: useSet ? this.runsBefore : null },
+          { trigger: opts.trigger, room, train: r, runs, runsBefore: useSet ? this.runsBefore : null, gap, model: model.id },
           { ...(this.coachDeps ?? {}), shouldStop: () => this.stopFlag || inMatch() },
         );
         job.coach = { ...job.coach, state: "done", result };

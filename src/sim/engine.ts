@@ -154,6 +154,20 @@ export class SimGame {
     return v;
   }
 
+  /** 地図にある全部のワープの入口と行き先（理論値の目安を出す方策に渡す。地図の座標 = Webマップの座標） */
+  knownWarps(): { from: [number, number]; to: [number, number] }[] {
+    const out: { from: [number, number]; to: [number, number] }[] = [];
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const v = this.grid[y]![x]!;
+        if (!isPortalTile(v)) continue;
+        const to = this.portalDest(v, x, y);
+        if (to) out.push({ from: [x, y], to });
+      }
+    }
+    return out;
+  }
+
   private portalDest(v: number, x: number, y: number): [number, number] | null {
     if (isBlackstar(v)) {
       // ブラックスター: 番号順の次のブラックスターへ（60→61→62→63→60）。無ければ飛ばない
