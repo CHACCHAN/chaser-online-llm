@@ -7,6 +7,7 @@
  *
  * --model / --sub-model / --effort / --sub-effort / --turn-budget は .env より優先（src/config.ts）。
  */
+import "./env-files"; // .env.local より .env を優先（最初に読む）
 import { parseArgs } from "node:util";
 import { MainAgent, type PrepResult, runPrepPhase } from "./agent/main-agent";
 import { Client, loginWithRetry } from "./client";

@@ -172,10 +172,10 @@ input[type="checkbox"] { accent-color: var(--ink); width: 15px; height: 15px; ma
 .flow small { font-weight: 400; opacity: .85; font-size: var(--t-xs); }
 
 .actions { display: flex; align-items: center; gap: var(--s2); flex: none; margin-left: auto; }
-.util { display: flex; align-items: center; gap: 2px; flex: none; padding-left: var(--s2); border-left: 1px solid var(--line2); }
+.util { display: flex; align-items: center; gap: 2px; flex: none; padding-left: var(--s2); margin-left: auto; }
 #btnSetup { display: none; }
 .top.running #btnSetup { display: inline-flex; }
-.top.running:not(.setup-open) .setup { display: none; }
+.top.running:not(.setup-open) .setup > :not(.actions) { display: none; }
 
 /* 状態の帯: 何が起きているか + 計器の数字 */
 .strip { display: flex; align-items: center; gap: var(--s4); padding: 8px var(--s4); border-top: 1px solid var(--line2); background: var(--bg); min-width: 0; }
@@ -365,6 +365,9 @@ details.cand li { display: flex; justify-content: space-between; gap: 8px; paddi
 .mapbox { padding: 0 14px 12px; position: relative; }
 .mapbox canvas { display: block; image-rendering: pixelated; border: 1px solid var(--line); background: var(--unk); max-width: 100%; cursor: crosshair; }
 .mapinfo { font-size: var(--t-s); color: var(--ink2); margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+/* 盤面がまだ無い時は、右の「いまの判断」と同じ高さにして下の線を揃える */
+.mapbox:has(canvas[hidden]) { padding-bottom: 14px; }
+.mapbox:has(canvas[hidden]) .mapinfo { margin-top: 0; }
 .mapinfo .sw { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .mapinfo .sw i { display: inline-block; width: 14px; height: 0; border-top: 3px solid; }
 .mapinfo .sw i.dot2 { width: 9px; height: 9px; border: 0; border-radius: 50%; }
@@ -463,7 +466,6 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 #labFlow { display: none; }
 body.view-lab #flow, body.view-lab .actions, body.view-lab .strip, body.view-lab .setup, body.view-lab #btnSetup { display: none !important; }
 body.view-lab #labFlow { display: flex; }
-body.view-lab .util { margin-left: auto; }
 #lmRoom { max-width: 320px; }
 
 /* ---------- 学習: 地図を並べて同時に再生 ---------- */
@@ -522,8 +524,9 @@ body.view-lab .util { margin-left: auto; }
   .flow li { flex: 1 1 0; justify-content: center; padding: 0 6px 0 14px; }
   .flow li:first-child { padding-left: 8px; }
   #btnSetup { display: inline-flex; }
-  .setup { display: none; }
+  .top:not(.setup-open) .setup > :not(.actions) { display: none; }
   .top.setup-open .setup { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .top.setup-open .setup .actions { grid-column: 1 / -1; }
   .top.setup-open .setup .grp { flex-wrap: wrap; }
   .top.setup-open .grp.wide { grid-column: 1 / -1; }
   #selRoom, #inMain, #inSub { width: auto; flex: 1 1 120px; }
@@ -545,7 +548,7 @@ body.view-lab .util { margin-left: auto; }
 }
 @media (max-width: 640px) {
   .bar, .strip { padding-left: var(--s4); padding-right: var(--s4); }
-  .actions { order: 7; flex-basis: 100%; }
+  .actions { flex-basis: 100%; }
   .views { order: 1; }
   .actions .btn { flex: 1; }
   .util { margin-left: auto; border-left: 0; padding-left: 0; }
@@ -590,11 +593,6 @@ body.view-lab .util { margin-left: auto; }
       <li data-step="train"><span class="pip" aria-hidden="true"></span><span class="fl">学習</span></li>
       <li data-step="stats"><span class="pip" aria-hidden="true"></span><span class="fl">統計</span></li>
     </ol>
-    <div class="actions">
-      <button class="btn primary" id="btnStart" type="button"><i class="spin" aria-hidden="true"></i><span id="btnStartLabel">開始</span></button>
-      <button class="btn" id="btnPause" type="button" hidden>試合後に一時停止</button>
-      <button class="btn danger" id="btnStop" type="button" hidden>停止</button>
-    </div>
     <div class="util">
       <button class="btn quiet" id="btnSetup" type="button" aria-expanded="false" aria-controls="setup">試合の設定</button>
       <button class="btn quiet" id="btnTheme" type="button">自動</button>
@@ -616,13 +614,18 @@ body.view-lab .util { margin-left: auto; }
 
   <div class="setup" id="setup" role="group" aria-label="試合の設定">
     <div class="grp wide"><label for="selRoom" title="719 のように1つ、555-560 のように範囲、555,568 のように並べて指定できる。複数なら「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る">ルーム</label><input id="selRoom" list="dlRooms" placeholder="719 / 555-560 / 555,568" autocomplete="off" spellcheck="false" /><datalist id="dlRooms"></datalist></div>
-    <div class="grp wide"><label for="inMain">メイン</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selEffort" class="adv" aria-label="メインの effort（思考の深さ）" title="メインの思考の深さ"></select></div>
-    <div class="grp wide adv"><label for="inSub">サブ</label><input id="inSub" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selSubEffort" aria-label="サブの effort（思考の深さ）" title="サブの思考の深さ。「同上」はメインと同じ"></select></div>
-    <div class="grp adv"><label for="inBudget" title="メインが1手に使える思考時間。超えるとソルバーが代わりに打つ">思考予算</label><input id="inBudget" type="number" min="3" step="1" inputmode="numeric" /><span class="lb">秒</span></div>
+    <div class="grp wide"><label for="inMain">LLM</label><input id="inMain" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selEffort" class="adv" aria-label="LLM の effort（思考の深さ）" title="LLM の思考の深さ"></select></div>
+    <div class="grp wide adv"><label for="inSub">サブ</label><input id="inSub" list="dlModels" placeholder="モデル名で検索" autocomplete="off" spellcheck="false" /><select id="selSubEffort" aria-label="サブの effort（思考の深さ）" title="サブの思考の深さ。「同上」はLLM と同じ"></select></div>
+    <div class="grp adv"><label for="inBudget" title="LLM が1手に使える思考時間。超えるとソルバーが代わりに打つ">思考予算</label><input id="inBudget" type="number" min="3" step="1" inputmode="numeric" /><span class="lb">秒</span></div>
     <div class="grp adv"><label for="inMax">最大ターン</label><input id="inMax" type="number" min="1" step="1" placeholder="無制限" inputmode="numeric" /></div>
     <div class="grp"><label class="chk" title="試合が終わったら自動で次の試合を始める"><input type="checkbox" id="chkAuto" />自動で次へ</label></div>
     <span class="hint" id="modelHint"></span>
     <datalist id="dlModels"></datalist>
+    <div class="actions">
+      <button class="btn primary" id="btnStart" type="button"><i class="spin" aria-hidden="true"></i><span id="btnStartLabel">開始</span></button>
+      <button class="btn" id="btnPause" type="button" hidden>試合後に一時停止</button>
+      <button class="btn danger" id="btnStop" type="button" hidden>停止</button>
+    </div>
   </div>
 </header>
 
@@ -687,8 +690,8 @@ body.view-lab .util { margin-left: auto; }
     <section class="agent" aria-label="エージェント">
       <div class="tabs" role="tablist" aria-label="エージェント">
         <button type="button" role="tab" id="agLog" data-ag="log" aria-controls="paneLog" aria-selected="true" title="Claude Code の思考・ツール呼び出しログ">思考ログ <span class="cnt" id="logCount"></span></button>
-        <button type="button" role="tab" id="agSub" data-ag="sub" aria-controls="paneSub" aria-selected="false" tabindex="-1" title="メインが依頼した裏の仕事（調査・ツール作成・ログ分析）">サブの仕事 <span class="cnt" id="subBadge"></span></button>
-        <button type="button" role="tab" id="agMemo" data-ag="memo" aria-controls="paneMemo" aria-selected="false" tabindex="-1" title="メインは毎フェーズ前の会話なしで呼ばれる。次のフェーズへ引き継ぐのはこのメモと直近の経過・現在の状況だけ">メモ <span class="cnt" id="memoLen"></span></button>
+        <button type="button" role="tab" id="agSub" data-ag="sub" aria-controls="paneSub" aria-selected="false" tabindex="-1" title="LLM が依頼した裏の仕事（調査・ツール作成・ログ分析）">サブの仕事 <span class="cnt" id="subBadge"></span></button>
+        <button type="button" role="tab" id="agMemo" data-ag="memo" aria-controls="paneMemo" aria-selected="false" tabindex="-1" title="LLM は毎フェーズ前の会話なしで呼ばれる。次のフェーズへ引き継ぐのはこのメモと直近の経過・現在の状況だけ">メモ <span class="cnt" id="memoLen"></span></button>
       </div>
       <div class="ag-pane" id="paneLog" role="tabpanel" aria-labelledby="agLog">
         <div class="pane-tools">
@@ -706,7 +709,7 @@ body.view-lab .util { margin-left: auto; }
         <div class="scroll" id="subBody"></div>
       </div>
       <div class="ag-pane" id="paneMemo" role="tabpanel" aria-labelledby="agMemo" hidden>
-        <div class="pane-tools"><span class="hint">次のフェーズへ引き継ぐメモ。メインは毎回前の会話なしで呼ばれる</span></div>
+        <div class="pane-tools"><span class="hint">次のフェーズへ引き継ぐメモ。LLM は毎回前の会話なしで呼ばれる</span></div>
         <div class="scroll"><pre class="memo-body" id="memoBody"></pre></div>
       </div>
     </section>
@@ -756,7 +759,7 @@ body.view-lab .util { margin-left: auto; }
       </section>
       <section class="pane" data-pane="policy" hidden>
         <h3>作戦方針</h3>
-        <p class="hint-p">メインエージェントが最優先で守る方針（agent/policies/&lt;名前&gt;.md）。次の試合から有効です。</p>
+        <p class="hint-p">LLM が最優先で守る方針（agent/policies/&lt;名前&gt;.md）。次の試合から有効です。</p>
         <div class="pol-row">
           <select id="polSel" aria-label="方針"></select>
           <button class="btn" id="polUse" type="button">この方針を使う</button>
@@ -791,7 +794,7 @@ const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValu
 
 /* 状態ラベル・点の色・流れの段 */
 const STATUS = {
-  idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], waiting: ["他プレイヤー待ち", "warn"], claude_in_game: ["メインが思考中", "think"],
+  idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], waiting: ["他プレイヤー待ち", "warn"], claude_in_game: ["LLM が思考中", "think"],
   preparing: ["準備中", "think"], standby: ["スタンバイOK", "ok"],
   evolving: ["振り返り・学習中", "evo"], cooldown: ["次の試合を準備中", "warn"], paused: ["一時停止", "warn"], error: ["エラー", "err"],
 };
@@ -1017,8 +1020,8 @@ function renderHead() {
   $("#btnStart").classList.toggle("busy", preparingNow);
   $("#btnStart").dataset.mode = needPrep ? "prepare" : "start";
   $("#btnStartLabel").textContent = preparingNow ? "準備中…" : needPrep ? "準備" : "開始";
-  $("#btnStart").title = preparingNow ? "メインがルール・過去の試合・作戦方針を読んで最初のメモを作成中（ルームにはまだ入っていません）"
-    : needPrep ? "入室前に、メインがルール・このルームの過去の試合・作戦方針を読んで最初のメモを作る（ルームには入らない）。終わると「開始」になります"
+  $("#btnStart").title = preparingNow ? "LLM がルール・過去の試合・作戦方針を読んで最初のメモを作成中（ルームにはまだ入っていません）"
+    : needPrep ? "入室前に、LLM がルール・このルームの過去の試合・作戦方針を読んで最初のメモを作る（ルームには入らない）。終わると「開始」になります"
     : "入室して試合を始める";
   renderPrepInfo(prep, st.running);
   $("#btnPause").disabled = !!st.pauseRequested; $("#btnPause").textContent = st.pauseRequested ? "一時停止を予約済み" : "試合後に一時停止";
@@ -1026,7 +1029,7 @@ function renderHead() {
   $("#nTurnSub").textContent = st.maxTurns ? ` /${st.maxTurns}` : "";
   $("#nEst").textContent = fmt(st.scores.estimatedTotal);
   renderUsage(st.agentUsage);
-  $("#memoBody").textContent = st.agentMemo || "まだメモはありません。準備が終わると、メインの最初のメモがここに入ります。";
+  $("#memoBody").textContent = st.agentMemo || "まだメモはありません。準備が終わると、LLM の最初のメモがここに入ります。";
   $("#memoBody").classList.toggle("faint", !st.agentMemo);
   $("#memoLen").textContent = st.agentMemo ? `${st.agentMemo.length}字` : "";
   const live = st.scores.liveOfficial ? st.scores.liveOfficial.totalScore : st.scores.lastOfficialTotal;
@@ -1341,7 +1344,7 @@ function agentLine(r) {
   const sep = ` <span class="faint">/</span> `;
   const ev = r?.evolution ? `${sep}進化後: ${r.evolution.solverChanged ? "ソルバー変更あり" : "変更なし"}${r.evolution.solverChanged ? (r.evolution.replayVerified ? "・リプレイ検証OK" : "・検証NG") : ""}${r.evolution.rolledBack ? "・巻き戻し" : ""}` : "";
   const mx = a.maxLatencyMs != null ? ` / 最大 ${sec(a.maxLatencyMs)}` : "";
-  return `<span class="agent-line dim">メイン ${m(a.model)} effort ${ef(a.effort)}${sep}サブ ${a.subModel ? m(a.subModel) : '<span class="faint">メインと同じ</span>'} effort ${a.subEffort ? esc(a.subEffort) : "メインと同じ"}${sep}思考予算 ${a.turnBudgetSec ?? "-"}秒${a.avgLatencyMs != null ? `${sep}平均応答 ${sec(a.avgLatencyMs)}${mx}` : ""}${ev}</span>`;
+  return `<span class="agent-line dim">LLM ${m(a.model)} effort ${ef(a.effort)}${sep}サブ ${a.subModel ? m(a.subModel) : '<span class="faint">LLM と同じ</span>'} effort ${a.subEffort ? esc(a.subEffort) : "LLM と同じ"}${sep}思考予算 ${a.turnBudgetSec ?? "-"}秒${a.avgLatencyMs != null ? `${sep}平均応答 ${sec(a.avgLatencyMs)}${mx}` : ""}${ev}</span>`;
 }
 
 /* ============ ターン履歴 / レポート ============ */
@@ -1486,7 +1489,7 @@ function renderDecide() {
   el.innerHTML = `
     <div class="now"><div class="big ${src}">${esc(p.command)}</div><div><span class="badge ${badge.cls}">${esc(badge.text)}</span><div class="faint adv" style="font-size:var(--t-s);margin-top:4px">確信度 ${Math.round((p.confidence ?? 0) * 100)}%</div></div></div>
     <p class="why">${esc(p.reason || "")}</p>${why}${planLine}${deleg}
-    <div style="margin-top:12px;font-size:var(--t-s)" class="dim adv">メイン応答（${hasLat ? "このフェーズ" : "直前ターン"}） <b style="color:var(--ink)" class="mono">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
+    <div style="margin-top:12px;font-size:var(--t-s)" class="dim adv">LLM 応答（${hasLat ? "このフェーズ" : "直前ターン"}） <b style="color:var(--ink)" class="mono">${lat ? sec(lat) : "-"}</b> / 予算 ${st.turnBudgetSec}秒</div>
     <div class="meter ${lat >= budget ? "over" : ""}" role="meter" aria-label="思考予算の使用" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(ratio * 100)}"><i style="width:${ratio * 100}%"></i></div>
     ${last ? `<div class="prev"><span>直前 T${last.turn}</span>${chip(last, 1)}${chip(last, 2)}<span class="mono">${fmt(last.estimatedScoreAfter)}点</span></div>` : ""}
     ${cands || fr ? `<details class="cand"><summary>候補ルート</summary><ul>${cands}${fr}</ul></details>` : ""}`;
@@ -1511,15 +1514,15 @@ function fmtTok(n) { return n == null ? "-" : n >= 1e6 ? `${(n / 1e6).toFixed(n 
 function sumTok(u) { return u ? u.inputTokens + u.outputTokens + u.cacheReadTokens + u.cacheCreationTokens : 0; }
 function renderUsage(u) {
   const b = $("#nTok"), sub = $("#nTokSub"), box = $("#lnTok");
-  if (!u) { b.textContent = "-"; sub.textContent = "トークン"; b.style.color = ""; box.title = "この試合でエージェント（メイン・サブ）が使ったトークン"; return; }
+  if (!u) { b.textContent = "-"; sub.textContent = "トークン"; b.style.color = ""; box.title = "この試合でエージェント（LLM・サブ）が使ったトークン"; return; }
   b.innerHTML = esc(fmtTok(u.totalTokens)) + (u.limitTokens ? `<small> /${esc(fmtTok(u.limitTokens))}</small>` : "");
   const ratio = u.limitTokens ? u.totalTokens / u.limitTokens : 0;
   b.style.color = u.limitReached ? "var(--neg)" : ratio > 0.8 ? "var(--warn)" : "";
   sub.textContent = u.limitReached ? "トークン上限到達" : "トークン";
   box.title = [
     `合計 ${(u.totalTokens || 0).toLocaleString()} トークン（上限 ${u.limitTokens ? u.limitTokens.toLocaleString() : "なし"}）`,
-    `メイン ${fmtTok(sumTok(u.main))}（${u.main?.calls ?? 0}回） / サブ ${fmtTok(sumTok(u.sub))}`,
-    `メインの直近1回の入力 ${u.lastCallInputTokens == null ? "-" : u.lastCallInputTokens.toLocaleString()} トークン（毎回前の会話なしで聞くので一定）`,
+    `LLM ${fmtTok(sumTok(u.main))}（${u.main?.calls ?? 0}回） / サブ ${fmtTok(sumTok(u.sub))}`,
+    `LLM の直近1回の入力 ${u.lastCallInputTokens == null ? "-" : u.lastCallInputTokens.toLocaleString()} トークン（毎回前の会話なしで聞くので一定）`,
     u.estimatedTimeoutTokens ? `うち予算切れで止めた分の見積もり ${u.estimatedTimeoutTokens.toLocaleString()}` : "",
     u.total?.costUsd ? `推定コスト ${u.total.costUsd.toFixed(2)}` : "",
   ].filter(Boolean).join("\n");
@@ -1550,7 +1553,7 @@ function renderSub() {
   const sig = JSON.stringify([tasks, [...S.subClosed]]);
   if (sig === subSig) return; subSig = sig;
   const box = $("#subBody");
-  if (!tasks.length) { box.innerHTML = `<div class="empty">まだ依頼はありません。メインが調査・ツール作成・ログ分析を頼むと、ここに並びます。</div>`; return; }
+  if (!tasks.length) { box.innerHTML = `<div class="empty">まだ依頼はありません。LLM が調査・ツール作成・ログ分析を頼むと、ここに並びます。</div>`; return; }
   box.innerHTML = [...tasks].reverse().map((t) => {
     const fin = t.status === "done" || t.status === "failed";
     const du = fin ? (t.durationMs != null ? sec(t.durationMs) : "") : t.status === "running" ? `<span data-since="${t.id}">${fmtElapsed(now - (S.subSeen[t.id] || now))}</span>` : "";

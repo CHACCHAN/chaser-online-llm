@@ -1,3 +1,4 @@
+import "./env-files"; // .env.local より .env を優先（最初に読む）
 import path from "node:path";
 import { CURRENT_SNAPSHOT_PATH, RUNS_DIR } from "./paths";
 import { existsSync, readFileSync } from "node:fs";

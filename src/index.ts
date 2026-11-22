@@ -1,3 +1,4 @@
+import "./env-files"; // .env.local より .env を優先（最初に読む）
 import { Client, loginWithRetry } from "./client";
 import { loadAgentConfig } from "./config";
 import { recoverInterruptedEvolution, runPostMatchEvolution, runPostMatchTraining } from "./evolve";

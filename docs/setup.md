@@ -8,7 +8,7 @@ cp .env.example .env   # CHASER_USER / CHASER_PASS と LLM のつなぎ方（下
 bun run start          # Web ダッシュボードを起動
 ```
 
-ブラウザで `http://localhost:3456`（`.env` の `PORT`）を開き、ルームを選んで「準備」→「開始」を押す。画面上の「設定」から `.env` を直接編集して保存できる（再起動なしで次の読み取りから反映）。
+ブラウザで `http://localhost:3456`（`.env` の `PORT`）を開き、ルームを選んで「準備」→「開始」を押す。画面上の「設定」から `.env` を直接編集して保存できる（再起動なしで次の読み取りから反映）。設定は `.env` だけで、`.env.local` などが残っていても `.env` の値を使う（起動時にその旨を出す）。
 
 ## Docker（devcontainer を使わない場合）
 
