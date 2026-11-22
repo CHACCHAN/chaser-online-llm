@@ -35,7 +35,8 @@ export function loadAgentConfig(argv: string[] = Bun.argv.slice(2)): AgentConfig
       model: { type: "string" },
       effort: { type: "string" },
       "turn-budget": { type: "string" },
-      "solver-only": { type: "boolean" },
+      "no-llm": { type: "boolean" },
+      "solver-only": { type: "boolean" }, // 前の名前（--no-llm と同じ）
       "web-map-url": { type: "string" },
       port: { type: "string" },
     },
@@ -66,7 +67,7 @@ export function loadAgentConfig(argv: string[] = Bun.argv.slice(2)): AgentConfig
     model: cli("model") ?? getSetting("LLM_MODEL_NAME") ?? Bun.env.LLM_MODEL,
     effort: str("effort", "LLM_MODEL_EFFORT"),
     turnBudgetSec: required(num("turn-budget", "AGENT_TURN_BUDGET_SEC", { min: 3 }), "AGENT_TURN_BUDGET_SEC"),
-    useMainAgent: values["solver-only"] === true ? false : boolSetting("AGENT_USE_MAIN"),
+    useMainAgent: values["no-llm"] === true || values["solver-only"] === true ? false : boolSetting("AGENT_USE_MAIN"),
     retryMs: required(num("retry-ms", "CHASER_RETRY_MS", { min: 50 }), "CHASER_RETRY_MS"),
     maxTurns: num("max-turns", "CHASER_MAX_TURNS", { min: 1, integer: true }),
     maxMatches: num("max-matches", "CHASER_MAX_MATCHES", { min: 1, integer: true }),

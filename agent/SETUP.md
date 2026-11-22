@@ -1,7 +1,7 @@
 # SETUP.md — セットアップ手順（エージェント専用）
 
 > このファイルはエージェントが**何をするか**を残す手順書。実行して変更が出たら、このファイルと `SELF_CHECK.md` の両方を更新する。
-> 最終更新: 2026-11-22 / v56（学習の LLM: 学習のたびに評価関数・地図の作り方・学習のやり方を直す）
+> 最終更新: 2026-11-22 / v57（サブエージェント・LLM を待って打つモード・古いソルバーを外す。設定の細かい項目を「詳しい設定」に畳む）
 
 ## 0. 前提
 - Bun がインストール済み、`bun install` 済み
@@ -21,7 +21,7 @@
 **既知の事実（2026-11-20 時点）**
 - サーバ `ver 20260217`
 - 制限時間は公開情報に記載なし。**実測（2026-11-20, room3）: CMD1 を120秒遅らせても切断なし**。サーバ応答は1コマンド約1.6秒で一定
-- 使い捨てメインの応答時間（gpt-6.2-astra/sol, effort=medium, 2026-11-20）: 1フェーズ 約5〜8秒、入力 約5,800〜7,000トークン（マップの大きさによる）
+- 使い捨ての試合中の LLM の応答時間（gpt-6.2-astra/sol, effort=medium, 2026-11-20）: 1フェーズ 約5〜8秒、入力 約5,800〜7,000トークン（マップの大きさによる）
 - タイル得点は公式公開ページに根拠なし。`tiles.json` は実測値で管理する
 
 ## 2. 描画素材の確認
@@ -35,10 +35,10 @@
 ## 3. 動作確認
 1. `bun test` — 全通過
 2. `bun run typecheck` — エラー0
-3. `bun run verify-solver` — `replaySmokeTest.ok: true`
+3. `bun run verify-policy` — `ok: true`
 4. `bun run start` → `http://127.0.0.1:3456` でマップが画像タイル (`/assets/tiles/*.gif`) で描画されること。ヘッダの「学習」で「地図を作る」と並べた地図が全部同時に再生され、「この地図で学習」（0.5 分）の後に地図ごとの学習前→後が出ること
 5. シミュレータ: `bun src/cli.ts sim --n 16`（罠 0、数ミリ秒/手）。ハーネス全体は偽サーバで通す（`bun scripts/sim-server.ts` と `HOST_URL=http://127.0.0.1:3990/CHaserOnline003/user/ CHASER_USER=sim CHASER_PASS=sim CHASER_TEST_VAR_DIR=<一時フォルダ> AGENT_USE_MAIN=false bun run play --room 1`。本番サーバには触れない）
-6. オフライン判断テスト: 過去の `var/runs/<runId>/turns.jsonl` を WorldMap に再生し、数ターン分 `MainAgent.decide()` を呼ぶ → 全て `source=main`、合法手、予算内
+6. 試合の記録での確かめ: `bun src/cli.ts verify --run-dir var/runs/<runId>` → `ok: true`（方策が例外なく合法手を返し、その試合の評価関数より罠へ動く手が増えていない）
 
 ## 4. 変更があった場合
 - 差分（バージョン・プロトコル・タイル・素材）を `knowledge/` に反映

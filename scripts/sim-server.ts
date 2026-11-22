@@ -5,7 +5,7 @@
  *
  * 別の端末で（var/ を汚さないよう一時フォルダを使う）:
  *   HOST_URL=http://127.0.0.1:3990/CHaserOnline003/user/ CHASER_USER=sim CHASER_PASS=sim CHASER_TEST_VAR_DIR=var/tmp/sim-var \
- *     AGENT_PREP=false bun run play --room 1 --solver-only
+ *     AGENT_PREP=false bun run play --room 1 --no-llm
  */
 import { parseArgs } from "node:util";
 import { startFakeServer } from "../src/sim/fake-server";

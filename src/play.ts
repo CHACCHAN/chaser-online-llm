@@ -1,9 +1,9 @@
 /**
  * WebUI を使わずに1試合だけ実行する（実戦テスト・A/B 比較用）。
  *
- *   bun run play --room 3 --max-turns 5               # メインエージェントあり
- *   bun run play --room 3 --solver-only                # ソルバーのみ
- *   bun run play --room 3 --evolve                     # 試合後の振り返り・ソルバー改修まで行う
+ *   bun run play --room 3 --max-turns 5               # LLM（裏で作戦）あり
+ *   bun run play --room 3 --no-llm                     # LLM なし（方策だけ）
+ *   bun run play --room 3 --evolve                     # 試合後の振り返り・評価関数の改修と学習まで行う
  *
  * --model / --effort / --turn-budget は .env より優先（src/config.ts）。
  */

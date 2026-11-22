@@ -31,13 +31,13 @@ docker compose down                  # 止める
 | コマンド | 内容 |
 | :--- | :--- |
 | `bun run start` | Web ダッシュボード + 試合ループ（本番） |
-| `bun run play --room 3 [--solver-only] [--evolve] [--login-wait-min 10]` | WebUI なしで1試合。`--evolve` で試合後の改修まで行う。二重ログイン時は指定分まで再試行 |
+| `bun run play --room 3 [--no-llm] [--evolve] [--login-wait-min 10]` | WebUI なしで1試合。`--evolve` で試合後の振り返り（評価関数の改修）と学習まで行う。二重ログイン時は指定分まで再試行 |
 | `bun run claude-login [status\|logout]` | ハーネスの Claude Code（`var/claude-home`）をサブスクリプションにログインさせる |
 | `bun test` / `bun run typecheck` | 単体テスト / 型チェック |
-| `bun run verify-solver` | ソルバーの読み込みと合法手のスモークテスト |
+| `bun run verify-policy` | 方策（経路探索＋評価関数＋学習したパラメータ）の読み込みと合法手のスモークテスト |
 | `bun src/cli.ts <subcommand>` | エージェント用 CLI（[claude-evolution.md](claude-evolution.md)） |
 
-起動オプション（`src/config.ts`。`.env` より優先）: `--room`, `--model`, `--sub-model`, `--effort`, `--sub-effort`, `--turn-budget`（秒）, `--max-turns`, `--max-matches`, `--solver-only`（メインを使わずソルバーだけで打つ）, `--web-map-url`, `--port`, `--retry-ms`。
+起動オプション（`src/config.ts`。`.env` より優先）: `--room`, `--model`, `--effort`, `--turn-budget`（秒）, `--max-turns`, `--max-matches`, `--no-llm`（試合中に LLM を使わず方策だけで打つ。前の名前 `--solver-only` も可）, `--web-map-url`, `--port`, `--retry-ms`。
 
 ## 設定（.env）
 
@@ -49,10 +49,12 @@ docker compose down                  # 止める
 | `LLM_AUTH_MODE` | `api`（Anthropic 互換 API）/ `subscription`（Claude のサブスクリプション） |
 | `LLM_API_URL`, `LLM_API_KEY`, `LLM_API_HEADERS` | api: 接続先（空なら Anthropic API に直接）・鍵（鍵の無いローカル LLM なら空）・送るヘッダ（`"名前: 値; 名前: 値"`、`{KEY}` が鍵に置き換わる。既定 `x-api-key: {KEY}`） |
 | `LLM_OAUTH_TOKEN` | subscription: `claude setup-token` のトークン（空なら `bun run claude-login` でログインした情報） |
-| `LLM_MODEL_NAME` / `LLM_SUB_MODEL_NAME` | メインのモデル / サブのモデル（サブが空ならメインと同じ） |
-| `LLM_MODEL_EFFORT` / `LLM_SUB_MODEL_EFFORT` | `low` / `medium` / `high` / `xhigh` / `max`。既定は `medium`。サブが空ならメインと同じ |
+| `LLM_MODEL_NAME` | LLM のモデル（準備・試合中・振り返りで使う。学習の LLM は `LAB_COACH_MODEL`、空なら同じ） |
+| `LLM_MODEL_EFFORT` | `low` / `medium` / `high` / `xhigh` / `max`。既定は `medium` |
 | `LLM_CONTEXT_WINDOW`, `LLM_AUTO_COMPACT`, `LLM_AUTO_COMPACT_PCT`, `LLM_MAX_OUTPUT_TOKENS` | コンテキストの大きさ・自動コンパクト・出力の上限（ローカル LLM など小さいモデル向け） |
-| `AGENT_TURN_BUDGET_SEC` | 1フェーズあたりの思考予算（既定 20 秒）。超えるとソルバー手を送る |
+| `AGENT_TURN_BUDGET_SEC` | 試合中の LLM の1回の返答を待つ上限（既定 20 秒）。手は待たずに方策が打ち、超えた返答は捨てる |
+
+めったに変えない項目は WebUI の設定で「詳しい設定も出す」を入れた時だけ出る。使われなくなった項目（サブエージェント・`AGENT_ASYNC`・`PLAY_POLICY` など）が `.env` に残っていれば「使われなくなった項目」に出て、消せる。
 
 LLM のつなぎ方（送るヘッダの例・サブスクリプション・コンテキスト）の詳細は [claude-evolution.md](claude-evolution.md) の冒頭。
 
@@ -62,10 +64,10 @@ LLM のつなぎ方（送るヘッダの例・サブスクリプション・コ�
 | :--- | :--- | :--- |
 | `src/` | 実装（コードのみ） | 管理 |
 | `knowledge/` | タイル得点 `tiles.json`、戦略 `strategy.md`、公式調査の記録 `research/`、サーバ仕様の実測 `server.json` | 管理 |
-| `agent/` | メイン／サブのプロンプト（`prompts/`）、手順書（`SETUP.md`, `SELF_CHECK.md`）、エージェントが作るツール（`tools/`） | 管理 |
+| `agent/` | LLM のプロンプト（`prompts/`: 準備・試合中・学習の LLM）、手順書（`SETUP.md`, `SELF_CHECK.md`）、エージェントが作るツール（`tools/`） | 管理 |
 | `assets/` | 公式タイル GIF と `manifest.json` | 管理 |
 | `docs/` | 仕様ドキュメント | 管理 |
-| `var/` | 実行時データ: `runs/`（試合ログ）, `room-profiles.json`, `best-solvers/`, `claude-home/`（隔離 HOME）, `current/snapshot.json`（毎ターンの盤面）, `tmp/`（作業用） | 除外 |
+| `var/` | 実行時データ: `runs/`（試合ログ）, `room-profiles.json`, `policy/`（学習したパラメータ）, `lab-coach/`（学習の LLM の記録）, `maps/`（本物の地図）, `claude-home/`（隔離 HOME）, `current/snapshot.json`（毎ターンの盤面）, `tmp/`（作業用） | 除外 |
 
 全パスは `src/paths.ts` に集約している。
 

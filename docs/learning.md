@@ -1,13 +1,13 @@
 # 方策・シミュレータ・学習
 
-試合中の手は**経路探索の方策**（`src/solver/planner.ts`、1手数ミリ秒）が毎フェーズ必ず出す。LLM は待たない。LLM（メイン）は裏で盤面を読み、作戦（`plan` の目標）を出す係で、着いた時に方策が使う。試合後は**シミュレータ**で方策のパラメータを学習し、エージェントが評価関数（`src/solver/evaluator.ts`）を直したらシミュレータで比べて採否を決める。
+試合中の手は**経路探索の方策**（`src/solver/planner.ts`、1手数ミリ秒）が毎フェーズ必ず出す。LLM は待たない。試合中の LLM は裏で盤面を読み、作戦（`plan` の目標）を出す係で、届いた時から方策が使う。試合後は**シミュレータ**で方策のパラメータを学習し、LLM が評価関数（`src/solver/evaluator.ts`）を直したら試合の記録とシミュレータで確かめて採否を決める。
 
 ```mermaid
 flowchart LR
   subgraph Match["試合中"]
     Obs["観測・Webマップ<br/>WorldMap"] --> Pol["方策 planner.ts<br/>評価関数 evaluator.ts × params.json"]
     Pol -- "毎フェーズすぐ手を送る" --> Srv["CHaser サーバ"]
-    Obs -. "盤面・経過（裏で）" .-> LLM["メイン（LLM）<br/>main.md + main-async.md"]
+    Obs -. "盤面・経過（裏で）" .-> LLM["試合中の LLM<br/>main.md"]
     LLM -. "作戦 plan（届いた時に反映）" .-> Pol
   end
   subgraph After["試合後"]
@@ -15,7 +15,7 @@ flowchart LR
     Gen --> Sim["シミュレータ engine.ts<br/>並列 SimPool"]
     Sim --> Train["学習 train.ts（ES）<br/>はっきり良い時だけ保存"]
     Train --> Params[("var/policy/params.json")]
-    Review["振り返り（LLM）<br/>evaluator.ts を改修"] --> Gate["同じ地図で改修前と比べる<br/>弱くなれば元に戻す"]
+    Review["振り返り（LLM）<br/>evaluator.ts を改修"] --> Gate["試合の記録の盤面で確かめ、<br/>同じ地図で改修前と比べる<br/>どちらかに落ちれば元に戻す"]
     Gate --> Sim
   end
   Params --> Pol
@@ -25,12 +25,11 @@ flowchart LR
 
 | 役 | ファイル | 内容 |
 | :--- | :--- | :--- |
-| 方策 | `src/solver/planner.ts`（ハーネス） | 知っているマスで Dijkstra。目標の候補（得点のあるマス＋固まりの加点・未知との境目・ワープ・メインの作戦の目標）から上位 K 個を選び、残りの歩数の中で回る順をビームサーチ。最初の一歩（歩く・斜め）を返す。ワープの中心が見えたら `gr`。行ける目標が無い時は、知っている通れるマスへ動く（場外 -500 を避ける） |
+| 方策 | `src/solver/planner.ts`（ハーネス） | 知っているマスで Dijkstra。目標の候補（得点のあるマス＋固まりの加点・未知との境目・ワープ・LLM の作戦の目標）から上位 K 個を選び、残りの歩数の中で回る順をビームサーチ。最初の一歩（歩く・斜め）を返す。ワープの中心が見えたら `gr`。行ける目標が無い時は、知っている通れるマスへ動く（場外 -500 を避ける） |
 | 評価関数 | `src/solver/evaluator.ts`（**エージェントが直してよい**） | マスの通りにくさ（`stepCost`）・目標の価値（`targetValue`）・得点（`tileGain`）と、パラメータの範囲（`PARAM_SPACE`）。学習で決まった値は `var/policy/params.json` |
-| メイン（LLM） | `src/agent/main-agent.ts`・`agent/prompts/main-async.md` | `AGENT_ASYNC=true`（既定）: 方策を待たせず、毎フェーズ「考え中でなければ」今の盤面（全体マップ・経過・メモ・方策の判断）で裏の問い合わせを始める。返ってきた `plan` を作戦にする（考えている間にワープなどで座標系が変わっていれば、その目標は捨てる）。`command` は使わない。`delegate` はそのままサブへ |
-| 切替 | `PLAY_POLICY` | `planner`（既定）/ `solver`（前の `active-solver.ts`） |
+| 試合中の LLM | `src/agent/main-agent.ts`・`agent/prompts/main.md` | 方策を待たせず、毎フェーズ「考え中でなければ」今の盤面（全体マップ・経過・メモ・方策の判断）で裏の問い合わせを始める。返ってきた `plan` を作戦にする（考えている間にワープなどで座標系が変わっていれば、その目標は捨てる）。1回の上限は `AGENT_TURN_BUDGET_SEC` |
 
-時間でターンが進むルーム（room 455 のように1ターン約5秒）では、LLM の返答（24〜105秒）を待つと手が間に合わなかった。方策が手を出し、LLM は作戦だけにしたのはこのため。
+時間でターンが進むルーム（room 455 のように1ターン約5秒）では、LLM の返答（24〜105秒）を待つと手が間に合わなかった。方策が手を出し、LLM は作戦だけにしたのはこのため（2026-11-22 に、LLM の返答を待って打つモード・サブエージェント・古いソルバー `active-solver.ts` は外した）。
 
 ## シミュレータ（`src/sim/`）
 
@@ -49,7 +48,7 @@ flowchart LR
 
 - 方策は地図を覚えていない（その場で見えているマスから経路を探す）ので、初めてのマップでも同じように動く。
 - その試合の Webマップは `var/maps/` に残り、次の学習から本物の地図として混ざる。ルームの大きさ・ターン数も実測が地図作りに入る。
-- 見たことのないタイルは `tiles.json` に登録されると（サブ・振り返り・得点の実測）、次の地図作りから混ざる。
+- 見たことのないタイルは `tiles.json` に登録されると（振り返り・得点の実測）、次の地図作りから混ざる。
 
 ## WebUI の「学習」画面
 
@@ -64,7 +63,7 @@ flowchart LR
    - **評価関数** `src/solver/evaluator.ts` → 改修前と同じ地図で比べ（`gateEvaluatorChange`、試合後の振り返りと同じ）、弱くなっていれば戻す。
    - **地図の作り方** `knowledge/sim-profiles.json` → 地図が作れなければ戻す。本物の地図があるルームで、作った地図のタイルの割合が本物から遠ざかったら（L1 距離が 0.02 より増えたら）戻す。方策の得点では比べない（易しい地図にすれば得点は上がってしまうので）。
    - **学習のやり方** `knowledge/train-config.json`（1世代の候補の数 `popSize`・地図の数 `batch`・確かめ用の地図の数 `validation`・探す幅 `sigmaStart`/`sigmaEnd`。`trainPolicy` が毎回読む）→ 範囲の外なら戻す。
-3. それ以外（ハーネス・ソルバー）の変更は戻す（edit-guard）。試合が始まる・「止める」を押すと LLM を止め、確かめていない改修を全部戻す。結果は `var/lab-coach/log.jsonl` に残し、「学習」画面に出す。
+3. それ以外（ハーネス）の変更は戻す（edit-guard）。試合が始まる・「止める」を押すと LLM を止め、確かめていない改修を全部戻す。結果は `var/lab-coach/log.jsonl` に残し、「学習」画面に出す。
 
 ## CLI（`bun src/cli.ts …`）
 

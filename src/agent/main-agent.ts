@@ -242,7 +242,7 @@ export class MainAgent {
     await Promise.race([this.inflight, Bun.sleep(timeoutMs)]);
   }
 
-  /** 試合後: ツールありの新しいセッションで、メモ・経過・診断をもとに振り返りとソルバー改修を行わせる */
+  /** 試合後: ツールありの新しいセッションで、メモ・経過・診断をもとに振り返りと評価関数の改修を行わせる */
   async postMatch(diagnosisMarkdown: string, runDir: string, timeoutMs: number, simInfo = ""): Promise<AskResult> {
     this.next?.kill();
     this.next = null;
