@@ -11,10 +11,14 @@ import { runAgentMatch } from "./runner";
 import { logger } from "./tools";
 import { nextQueuedRoom, parseRoomQueue, type UiControlCommand, uiBus } from "./ui/event-bus";
 import { startWebUiServer } from "./ui/server";
+import { lab } from "./sim/lab";
 
 async function main() {
   const config = loadAgentConfig();
   const server = startWebUiServer(config.port);
+  // 試合をしていない間の学習（TRAIN_IDLE / WebUI の「学習」）は今のルームに似せた地図も使う
+  lab.roomForIdle = () => config.room;
+  lab.startIdleLoop();
   /** ルーム欄で複数のルーム（"555-560"・"555,568"）を指定した時の並び。1試合ごとに次へ進む（1つだけなら空） */
   let roomQueue: number[] = [];
   const settingsState = () => ({
@@ -324,6 +328,7 @@ async function main() {
     };
 
     inMatch = true;
+    lab.setMatchActive(true);
     try {
       uiBus.patchState({
         status: "connecting",
@@ -402,6 +407,7 @@ async function main() {
       });
     } finally {
       inMatch = false;
+      lab.setMatchActive(false);
       currentClient = null;
       // 試合が終わったら保留のルームをすぐ反映する（連続を切って待機に戻った後の「準備」が前のルームにならないように）
       applyPendingRoom();

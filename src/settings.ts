@@ -189,6 +189,16 @@ export const SETTINGS = {
     description: "試合後にシミュレータで方策のパラメータを学習する時間（分、0=しない）。その試合の地図（Webマップ）も学習に混ぜる。はっきり良くなった時だけ保存",
     defaultValue: "5",
   },
+  TRAIN_IDLE: {
+    group: "other",
+    description: "試合をしていない間もシミュレータで学習を続ける（WebUI の「学習」画面でも切り替えられる）。試合が始まると止まる",
+    defaultValue: "false",
+  },
+  TRAIN_IDLE_CHUNK_MIN: {
+    group: "other",
+    description: "試合をしていない間の学習の1回分の時間（分）。1回ごとに確かめ、はっきり良くなった時だけ保存する",
+    defaultValue: "10",
+  },
   SIM_MAX_TURNS: {
     group: "other",
     description: "学習・比較のシミュレータで1試合を何ターンで打ち切るか（短いほど速い）",
@@ -218,7 +228,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
   { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_AUTH_MODE", "LLM_API_URL", "LLM_API_KEY", "LLM_API_HEADERS", "LLM_OAUTH_TOKEN", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_CONTEXT_WINDOW", "LLM_AUTO_COMPACT", "LLM_AUTO_COMPACT_PCT", "LLM_MAX_OUTPUT_TOKENS", "LLM_MODELS_TIMEOUT_SEC"] },
-  { id: "learn", title: "方策・学習", keys: ["PLAY_POLICY", "TRAIN_AFTER_MATCH_MIN", "SIM_MAX_TURNS", "SIM_WORKERS"] },
+  { id: "learn", title: "方策・学習", keys: ["PLAY_POLICY", "TRAIN_AFTER_MATCH_MIN", "TRAIN_IDLE", "TRAIN_IDLE_CHUNK_MIN", "SIM_MAX_TURNS", "SIM_WORKERS"] },
   { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_ASYNC", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
   { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_CONCURRENCY", "AGENT_SUB_TASK_TIMEOUT_MIN"] },

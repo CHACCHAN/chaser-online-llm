@@ -97,8 +97,22 @@ export interface TrainOptions {
   seed?: number;
   /** 保存しない（試すだけ） */
   dryRun?: boolean;
+  /** 記録用: 何がきっかけの学習か（manual / idle / post-match / cli） */
+  trigger?: string;
   log?: (msg: string) => void;
+  /** 世代ごとの成績（WebUI の学習曲線） */
+  onGeneration?: (g: GenerationStat) => void;
   shouldStop?: () => boolean;
+}
+
+export interface GenerationStat {
+  gen: number;
+  /** 候補のうち最良・平均の 1ターンあたりの得点 */
+  best: number;
+  mean: number;
+  sigma: number;
+  ms: number;
+  episodes: number;
 }
 
 export interface TrainResult {
@@ -155,15 +169,20 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
     sigma = 0.15 - 0.11 * Math.min(1, (Date.now() - t0) / Math.max(1, opts.budgetMs));
     genMs = Date.now() - g0;
     gen += 1;
+    opts.onGeneration?.({ gen, best: Math.round(order[0]![0] * 10) / 10, mean: Math.round(mean(fit) * 10) / 10, sigma, ms: genMs, episodes });
     log(`世代${gen}: 最良 ${order[0]![0].toFixed(1)} / 平均 ${mean(fit).toFixed(1)} 点/ターン（σ=${sigma.toFixed(3)}、${(genMs / 1000).toFixed(1)}秒）`);
   }
 
   const after = fromUnit(m);
-  const val = makeEvalSet(900_000 + Math.floor(rng() * 1e6), valN, opts.room, maxTurns);
-  const comparison = await comparePolicies(opts.pool, { kind: "planner", params: before }, { kind: "planner", params: after }, val);
-  episodes += valN * 2;
+  let comparison: Comparison = { a: 0, b: 0, diff: 0, se: 0, wins: 0, n: 0, hazardsA: 0, hazardsB: 0 };
+  // 1世代も回らなかった（すぐ止めた）時は確かめない
+  if (gen > 0) {
+    const val = makeEvalSet(900_000 + Math.floor(rng() * 1e6), valN, opts.room, maxTurns);
+    comparison = await comparePolicies(opts.pool, { kind: "planner", params: before }, { kind: "planner", params: after }, val);
+    episodes += valN * 2;
+  }
   const accepted = gen > 0 && clearlyBetter(comparison);
-  log(`検証（学習に使っていない ${valN} 地図）: 前 ${comparison.a} → 後 ${comparison.b} 点/ターン（差 ${comparison.diff}±${comparison.se}、勝ち ${comparison.wins}/${comparison.n}）→ ${accepted ? "採用" : "見送り"}`);
+  if (gen > 0) log(`検証（学習に使っていない ${valN} 地図）: 前 ${comparison.a} → 後 ${comparison.b} 点/ターン（差 ${comparison.diff}±${comparison.se}、勝ち ${comparison.wins}/${comparison.n}）→ ${accepted ? "採用" : "見送り"}`);
   if (accepted && !opts.dryRun) {
     const prev = loadPolicyParamsFile();
     savePolicyParams(after, "train", {
@@ -179,7 +198,7 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
     mkdirSync(path.dirname(POLICY_TRAIN_LOG_PATH), { recursive: true });
     appendFileSync(
       POLICY_TRAIN_LOG_PATH,
-      `${JSON.stringify({ at: new Date().toISOString(), room: opts.room, generations: gen, episodes, accepted, dryRun: !!opts.dryRun, comparison, after })}\n`,
+      `${JSON.stringify({ at: new Date().toISOString(), room: opts.room, generations: gen, episodes, accepted, dryRun: !!opts.dryRun, trigger: opts.trigger ?? null, ms: Date.now() - t0, comparison, after })}\n`,
     );
   } catch {
     // 記録に失敗しても学習の結果は返す

@@ -1,6 +1,22 @@
 # Web ダッシュボード
 
-起動: `bun run start` → `http://localhost:3456`（`--port` または `PORT` で変更）。実装は `src/ui/server.ts`（HTTP と SSE）、`src/ui/event-bus.ts`（状態と配信）、`src/ui/public/index.html`（単一ファイルの画面）。
+起動: `bun run start` → `http://localhost:3456`（`--port` または `PORT` で変更）。実装は `src/ui/server.ts`（HTTP と SSE）、`src/ui/event-bus.ts`（状態と配信）、`src/ui/public/index.html`（試合の画面と共通の部品）、`src/ui/public/lab.js`（「学習」画面）、`src/ui/lab-routes.ts`（「学習」の API）。
+
+ヘッダの左で **「試合」と「学習」** を切り替える（最後に開いた方を覚える）。学習の仕事が動いている間は「学習」に緑の点が付く。
+
+## 「学習」画面（方策・シミュレータ・学習。CHaser サーバには触れない）
+
+仕組みは [learning.md](learning.md)。仕事（学習・比べる）は同時に1つだけで、`src/sim/lab.ts` の `LearningLab` が受け持つ（試合後の学習・試合をしていない間の学習も同じ）。
+
+- **方策**（左）: 試合の手（`PLAY_POLICY`）、LLM の使い方（`AGENT_ASYNC`）、パラメータの出どころ（初期値／学習で保存）と保存した時の成績、試合後の学習の時間。
+- **パラメータ**（左）: `evaluator.ts` の `PARAM_SPACE` の各項目を範囲の中の位置で示す（◆ が初期値）。マウスを置くと意味が出る。
+- **学習**（中央）: ルーム（半分の地図をそのルームに似せる。空なら全部）・時間・「試すだけ」（保存しない）で始める／止める（止めると、そこまでの結果を学習に使っていない地図で確かめて終わる）。「試合をしていない間も学習を続ける」（`TRAIN_IDLE` を .env に保存。`TRAIN_IDLE_CHUNK_MIN` 分ずつ。試合が始まると止まり、終わるとまた始まる）。進み具合・世代ごとの成績の曲線（候補の最良・平均）・結果（前→後、差±標準誤差、勝ち数、保存／見送り）。
+- **比べる**（中央）: 今の方策・初期値の方策・前のソルバーのうち2つを同じ地図で打たせて比べる。
+- **学習の記録**（中央）: `var/policy/train-log.jsonl` の新しい方から（きっかけ: 手動・空き時間・試合後・CLI）。
+- **シミュレータ**（右）: seed（同じなら同じ地図）・似せるルーム・ターン数・方策を選んで1試合打たせ、盤面で再生する（再生・一時停止・ターンのスライダー・速さ）。各ターンの得点・手・方策の判断の理由、地図の種類（作った地図／本物の地図を変えたもの、全体マップの有無）。
+- **地図のもと**（右）: 保存した本物の地図（`var/maps/`）の数と、地図の作り方（`knowledge/sim-profiles.json`）。
+
+試合の画面では、手の出どころを「方策」（経路探索。旧 solver）と「LLM」（メイン）と表示する。
 
 ## 画面の構成
 
@@ -35,6 +51,13 @@
 | `GET /api/env` / `POST /api/env` | `.env` の取得と保存。保存時は CHASER_ROOM と LLM_MODEL_NAME を実行中の設定にも反映 |
 | `POST /api/action/preview-map` | 指定ルームの Web マップを取得し、盤面に表示 |
 | `POST /api/action/verify-solver` | ソルバーのスモークテスト（リプレイ検証の結果を返す） |
+| `GET /lab.js` | 「学習」画面のスクリプト |
+| `GET /api/lab` | 学習の状態（`LabState`）・方策とパラメータ（今の値・初期値・範囲・出どころ）・学習の記録・本物の地図の数・地図の作り方 |
+| `POST /api/lab/train` | 学習を始める（`room`, `minutes`, `dryRun`）。すぐ返り、進み具合は SSE の `lab` で届く。ほかの仕事が動いていれば 409（空き時間の学習なら止めて代わる） |
+| `POST /api/lab/bench` | 2つの方策を同じ地図で比べる（`a`, `b` は `current` / `default` / `solver`、`n`, `room`） |
+| `POST /api/lab/stop` | 動いている仕事を止める |
+| `POST /api/lab/idle` | 試合をしていない間の学習を切り替える（`enabled`。.env の `TRAIN_IDLE` に保存） |
+| `POST /api/lab/episode` | 1試合をシミュレータで打たせ、再生用の記録（`trace`: 始まりの地図・各ターンの位置・得点・手・理由・変わったマス）を返す（`seed`, `room`, `maxTurns`, `policy`） |
 | `GET /api/events` | SSE。接続直後に `state` を送り、以降は差分を流す |
 
 ### `POST /api/control` の action
@@ -58,6 +81,7 @@
 | `prediction` | `UiPredictionState`（フェーズ、手、理由、候補、高得点目標、ブレークポイント理由） |
 | `scores` | 推定・公式・最高得点などの数値 |
 | `turn` | 完了した `TurnRecord` 1 件 |
+| `lab` | `LabState`（動いている仕事・最後の仕事・世代ごとの成績・空き時間の学習の状態）。変化のたび（0.3 秒に1回まで） |
 | `claude` | Claude の思考・ツールログ 1 件（`UiClaudeEvent`）。ソルバー失敗、リプレイ結果、.env 更新なども同じ経路 |
 
 接続は 15 秒ごとに keepalive を送る。

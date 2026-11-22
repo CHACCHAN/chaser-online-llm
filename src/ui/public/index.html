@@ -448,6 +448,58 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 .dlg-f { display: flex; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--line); align-items: center; flex-wrap: wrap; }
 
 /* ---------- 幅に合わせる ---------- */
+/* ---------- 画面の切り替え・学習 ---------- */
+.views { flex: none; }
+.views button { padding: 4px 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.vdot { width: 7px; height: 7px; border-radius: 50%; background: var(--pos); animation: pulse 1.6s infinite; }
+.lab { flex: 1; display: grid; grid-template-columns: 300px minmax(0, 1fr) 460px; min-height: 0; }
+.lab .col { overflow-y: auto; }
+.lab-l { border-right: 1px solid var(--line); background: var(--panel); }
+.lab-r { border-left: 1px solid var(--line); background: var(--panel); }
+.lab .block.grow { flex: 1 0 auto; border-bottom: 0; }
+.lpad { padding: 0 14px 14px; font-size: var(--t-s); }
+.lform { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.lform .grp + .grp { padding-left: 0; border-left: 0; }
+.lform input[type="number"] { width: 84px; }
+.lform #ltMin { width: 64px; }
+.chk.idle { margin-top: 12px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+.kv dt { color: var(--ink2); white-space: nowrap; }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ptab { width: 100%; border-collapse: collapse; }
+.ptab td { padding: 4px 0; border-bottom: 1px solid var(--line2); vertical-align: middle; }
+.ptab td.n { font-family: var(--mono); font-size: var(--t-xs); color: var(--ink2); padding-right: 8px; white-space: nowrap; }
+.ptab td.v { font-family: var(--mono); text-align: right; padding-left: 8px; white-space: nowrap; }
+.pbar { position: relative; height: 8px; background: var(--sunk); border: 1px solid var(--line2); border-radius: 2px; min-width: 60px; }
+.pbar i { position: absolute; top: -1px; bottom: -1px; width: 3px; margin-left: -1.5px; background: var(--main); border-radius: 1px; }
+.pbar b { position: absolute; top: 50%; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; background: var(--ink3); transform: rotate(45deg); }
+.ljob { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px; background: var(--sunk); display: grid; gap: 6px; }
+.ljob:empty { display: none; }
+.ljob .hd { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ljob .msg { color: var(--ink2); overflow-wrap: anywhere; }
+.progress { height: 6px; background: var(--panel); border-radius: 3px; overflow: hidden; border: 1px solid var(--line2); }
+.progress i { display: block; height: 100%; background: var(--pos); transition: width .4s; }
+.cmpline { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; }
+.cmpline b { font-size: var(--t-l); }
+.curve-wrap { margin-top: 12px; }
+#ljCurve { width: 100%; height: 190px; display: block; }
+#ljCurve text { fill: var(--ink3); font-size: 11px; font-family: var(--mono); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: var(--t-xs); color: var(--ink2); }
+.legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.lhist { padding: 0 14px 14px; overflow-x: auto; }
+.lhist table { width: 100%; border-collapse: collapse; font-size: var(--t-s); }
+.lhist th { text-align: left; font-weight: 400; color: var(--ink3); font-size: var(--t-xs); padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.lhist td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line2); white-space: nowrap; }
+.lhist td.num { font-family: var(--mono); text-align: right; }
+.simbox { position: relative; margin-top: 12px; display: flex; justify-content: center; background: var(--sunk); border: 1px solid var(--line2); border-radius: var(--r); padding: 8px; min-height: 120px; align-items: center; }
+.simbox canvas { image-rendering: pixelated; max-width: 100%; }
+.simctl { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+.simctl input[type="range"] { flex: 1; min-width: 0; accent-color: var(--ink); }
+.siminfo { margin-top: 10px; display: grid; gap: 6px; }
+.siminfo .reason { color: var(--ink2); font-family: var(--mono); font-size: var(--t-xs); overflow-wrap: anywhere; min-height: 2.6em; }
+.maps-list { display: grid; gap: 4px; }
+.maps-list div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line2); padding: 3px 0; }
+
 @media (max-width: 1360px) {
   .ro { padding: 0 9px; min-width: 56px; }
   .ro b { font-size: 17px; } .ro.lead b { font-size: 20px; }
@@ -455,6 +507,7 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 }
 @media (max-width: 1279px) {
   .work { grid-template-columns: 224px minmax(0, 1fr) 340px; }
+  .lab { grid-template-columns: 260px minmax(0, 1fr) 380px; }
   .bar { gap: var(--s3); }
   .flow li { padding: 0 12px 0 19px; }
   .grp + .grp { padding-left: 0; border-left: 0; }
@@ -487,6 +540,12 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
   .readout { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; gap: 8px 0; margin-left: 0; padding-top: 10px; border-top: 1px solid var(--line2); }
   .ro { align-items: flex-start; border-left: 0; padding: 0; }
   .work { display: flex; flex-direction: column; }
+  .lab { display: flex; flex-direction: column; }
+  .lab .col { overflow: visible; }
+  .lab-l { border-right: 0; border-bottom: 1px solid var(--line); }
+  .lab-r { border-left: 0; border-top: 1px solid var(--line); order: 1; }
+  .lab-c { order: 2; }
+  .lab-l { order: 3; }
   .col.live { order: 1; border-left: 0; border-bottom: 1px solid var(--line); overflow: visible; }
   .col.center { order: 2; overflow: visible; }
   .col.rail { order: 3; border-right: 0; border-top: 1px solid var(--line); }
@@ -498,6 +557,8 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 @media (max-width: 640px) {
   .bar, .strip { padding-left: var(--s4); padding-right: var(--s4); }
   .actions { order: 7; flex-basis: 100%; }
+  .views { order: 1; }
+  .lform input[type="number"] { width: 72px; }
   .actions .btn { flex: 1; }
   .util { margin-left: auto; border-left: 0; padding-left: 0; }
   .top.setup-open .setup { grid-template-columns: 1fr; }
@@ -526,6 +587,10 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 <header class="top" id="top">
   <div class="bar">
     <div class="brand"><span class="glyph" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="bt">CHaser 解析</span></div>
+    <div class="views seg" role="group" aria-label="画面">
+      <button type="button" id="viewMatch" data-view="match" aria-pressed="true">試合</button>
+      <button type="button" id="viewLab" data-view="lab" aria-pressed="false">学習<span class="vdot" id="labDot" hidden aria-label="学習中"></span></button>
+    </div>
     <ol class="flow" id="flow" aria-label="試合の流れ">
       <li data-step="prep"><span class="pip" aria-hidden="true"></span><span class="fl">準備</span></li>
       <li data-step="standby"><span class="pip" aria-hidden="true"></span><span class="fl">スタンバイ</span></li>
@@ -607,8 +672,8 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
       <div class="tools" id="tblTools">
         <div class="seg" role="group" aria-label="ターンの絞り込み（色: main=青・solver=黄土）">
           <button type="button" data-tf="all" aria-pressed="true">全て</button>
-          <button type="button" data-tf="main" aria-pressed="false"><span class="key"><i class="m"></i>main</span></button>
-          <button type="button" data-tf="solver" aria-pressed="false"><span class="key"><i class="s"></i>solver</span></button>
+          <button type="button" data-tf="main" aria-pressed="false"><span class="key"><i class="m"></i>LLM</span></button>
+          <button type="button" data-tf="solver" aria-pressed="false"><span class="key"><i class="s"></i>方策</span></button>
           <button type="button" data-tf="event" aria-pressed="false">イベント</button>
         </div>
       </div>
@@ -651,6 +716,79 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
         <div class="pane-tools"><span class="hint">次のフェーズへ引き継ぐメモ。メインは毎回前の会話なしで呼ばれる</span></div>
         <div class="scroll"><pre class="memo-body" id="memoBody"></pre></div>
       </div>
+    </section>
+  </aside>
+</div>
+
+<!-- 学習: 方策・シミュレータ・学習の記録（CHaser サーバには触れない） -->
+<div class="lab" id="lab" hidden>
+  <aside class="col lab-l" aria-labelledby="hPolicy">
+    <section class="block">
+      <div class="sec-h"><h2 id="hPolicy">方策</h2><div class="end faint" id="lpWhen"></div></div>
+      <div class="lpad" id="lpPolicy"><span class="faint">読み込み中…</span></div>
+    </section>
+    <section class="block grow">
+      <div class="sec-h"><h2 id="hParams">パラメータ</h2><div class="end hint">◆ 初期値</div></div>
+      <div class="lpad" id="lpParams"></div>
+    </section>
+  </aside>
+
+  <main class="col lab-c" aria-label="学習">
+    <section class="block">
+      <div class="sec-h"><h2>学習</h2><div class="end" id="ljState"></div></div>
+      <div class="lpad">
+        <div class="lform">
+          <div class="grp"><label for="ltRoom" title="半分の地図をこのルームに似せる（大きさ・ターン数・本物の地図）。空なら一般の地図だけ">ルーム</label><input id="ltRoom" type="number" min="1" inputmode="numeric" placeholder="全部" /></div>
+          <div class="grp"><label for="ltMin">時間</label><input id="ltMin" type="number" min="0.5" step="0.5" value="5" inputmode="decimal" /><span class="lb">分</span></div>
+          <label class="chk" title="学習しても var/policy/params.json に保存しない"><input type="checkbox" id="ltDry" />試すだけ</label>
+          <button class="btn primary" id="ltStart" type="button">学習を始める</button>
+          <button class="btn danger" id="ltStop" type="button" hidden>止める</button>
+        </div>
+        <label class="chk idle" title="試合をしていない間、TRAIN_IDLE_CHUNK_MIN 分ずつ学習を続ける。試合が始まると止まる（.env の TRAIN_IDLE に保存）"><input type="checkbox" id="ltIdle" />試合をしていない間も学習を続ける</label>
+        <span class="hint" id="ltIdleNote"></span>
+        <div id="ljJob" class="ljob" aria-live="polite"></div>
+        <div class="curve-wrap"><svg id="ljCurve" role="img" aria-label="学習曲線"></svg><div class="legend" id="ljLegend"></div></div>
+      </div>
+    </section>
+    <section class="block">
+      <div class="sec-h"><h2>比べる</h2><span class="hint">同じ地図で2つの方策を打たせ、1ターンあたりの得点を比べる</span></div>
+      <div class="lpad lform">
+        <div class="grp"><label for="lbA">A</label><select id="lbA"><option value="default">初期値の方策</option><option value="current">今の方策</option><option value="solver">前のソルバー</option></select></div>
+        <div class="grp"><label for="lbB">B</label><select id="lbB"><option value="current">今の方策</option><option value="default">初期値の方策</option><option value="solver">前のソルバー</option></select></div>
+        <div class="grp"><label for="lbN">地図</label><input id="lbN" type="number" min="4" max="400" value="24" inputmode="numeric" /><span class="lb">枚</span></div>
+        <div class="grp"><label for="lbRoom">ルーム</label><input id="lbRoom" type="number" min="1" inputmode="numeric" placeholder="全部" /></div>
+        <button class="btn" id="lbStart" type="button">比べる</button>
+      </div>
+    </section>
+    <section class="block grow">
+      <div class="sec-h"><h2>学習の記録</h2><div class="end hint" id="lhCount"></div></div>
+      <div class="lhist" id="lhist"></div>
+    </section>
+  </main>
+
+  <aside class="col lab-r" aria-labelledby="hSim">
+    <section class="block">
+      <div class="sec-h"><h2 id="hSim">シミュレータ</h2><div class="end hint">地図は毎回ランダム（seed が同じなら同じ地図）</div></div>
+      <div class="lpad">
+        <div class="lform">
+          <div class="grp"><label for="lsSeed">seed</label><input id="lsSeed" type="number" min="0" inputmode="numeric" /><button class="btn quiet" id="lsDice" type="button" title="別の地図">別の地図</button></div>
+          <div class="grp"><label for="lsRoom">ルーム</label><input id="lsRoom" type="number" min="1" inputmode="numeric" placeholder="一般" /></div>
+          <div class="grp"><label for="lsTurns">ターン</label><input id="lsTurns" type="number" min="5" value="200" inputmode="numeric" /></div>
+          <div class="grp"><label for="lsPol">方策</label><select id="lsPol"><option value="current">今の方策</option><option value="default">初期値の方策</option><option value="solver">前のソルバー</option></select></div>
+          <button class="btn primary" id="lsRun" type="button">打たせる</button>
+        </div>
+        <div class="simbox" id="simBox"><canvas id="simMap" aria-label="シミュレータの盤面"></canvas><div class="maptip" id="simTip" hidden></div></div>
+        <div class="simctl" id="simCtl" hidden>
+          <button class="btn" id="lsPlay" type="button" aria-label="再生">再生</button>
+          <input type="range" id="lsSlider" min="0" value="0" aria-label="ターン" />
+          <select id="lsSpeed" aria-label="速さ"><option value="4">×1</option><option value="12" selected>×3</option><option value="40">×10</option></select>
+        </div>
+        <div class="siminfo" id="simInfo"><span class="faint">「打たせる」で、作った地図で方策に1試合打たせて再生します。</span></div>
+      </div>
+    </section>
+    <section class="block grow">
+      <div class="sec-h"><h2>地図のもと</h2></div>
+      <div class="lpad" id="lmaps"></div>
     </section>
   </aside>
 </div>
@@ -709,7 +847,7 @@ const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValu
 const STATUS = {
   idle: ["待機中", ""], connecting: ["接続中", "on"], playing: ["対戦中", "on"], waiting: ["他プレイヤー待ち", "warn"], claude_in_game: ["メインが思考中", "think"],
   preparing: ["準備中", "think"], standby: ["スタンバイOK", "ok"],
-  evolving: ["振り返り中（ソルバー改修）", "evo"], cooldown: ["次の試合を準備中", "warn"], paused: ["一時停止", "warn"], error: ["エラー", "err"],
+  evolving: ["振り返り・学習中", "evo"], cooldown: ["次の試合を準備中", "warn"], paused: ["一時停止", "warn"], error: ["エラー", "err"],
 };
 const SERIES_VARS = ["--c1", "--c2", "--c3", "--c4", "--c5"];
 
@@ -759,10 +897,10 @@ function whoPart(t, n) {
   const src = srcOf(t, n); if (!src) return null;
   if (src === "main") {
     const a = actOf(t, n), m = ACT[a];
-    return { src, cls: m ? m[1] : "main", text: m ? `main(${m[0]})` : "main" };
+    return { src, cls: m ? m[1] : "main", text: m ? `LLM(${m[0]})` : "LLM" };
   }
   const note = noteOf(t, n), r = reasonJa(note);
-  return { src, cls: "solver", text: r ? `solver(${r})` : "solver", full: note || "" };
+  return { src, cls: "solver", text: r ? `方策(${r})` : "方策", full: note || "" };
 }
 function whoOf(t) {
   const a = srcOf(t, 1), b = srcOf(t, 2);
@@ -959,7 +1097,7 @@ function renderAlerts() {
   if (S.disconnected) out.push(["warn", "接続が切れました", "ダッシュボードのサーバに自動で再接続しています。続く場合は bun run start のターミナルを確かめてください。"]);
   if (prep.required && prep.state === "failed" && !st.running) out.push(["err", "準備できませんでした", `${prep.error || "原因不明"} — 設定を確かめて「準備」をやり直してください。`]);
   if (prep.versionChanged) out.push(["warn", "公式のバージョンが変わりました", `記録 ${prep.knownVersion ?? "-"} → 公式 ${prep.officialVersion ?? "-"}。アイテムID・コマンド・ルールが変わった可能性があります（agent/SETUP.md §4）。`]);
-  if (st.agentUsage?.limitReached) out.push(["warn", "トークンの上限に達しました", "この試合の残りはソルバーだけで打ちます。"]);
+  if (st.agentUsage?.limitReached) out.push(["warn", "トークンの上限に達しました", "この試合の残りは方策だけで打ちます。"]);
   const sig = JSON.stringify(out); if (sig === alertSig) return; alertSig = sig;
   $("#alerts").innerHTML = out.map(([k, t, m]) => `<div class="alert ${k}" role="${k === "err" ? "alert" : "status"}"><b>${esc(t)}</b><span>${esc(m)}</span></div>`).join("");
 }
@@ -1056,7 +1194,7 @@ function renderRail() {
     rows.push(`<div class="run${sel ? " is-sel" : ""}"><span class="ck"><input type="checkbox" checked disabled aria-label="いまの試合は常にグラフに表示" /></span>
       <button type="button" class="run-open" data-open="live" aria-current="${sel}">
         <span><span class="run-t"><b>いまの試合</b><span class="tag live">${st.running ? "進行中" : "直近"}</span></span>
-        <span class="run-m"><span>Room ${st.room}</span><span>${S.liveTurns.length}T</span>${ls ? `<span title="main 判断率"><span class="mbar"><i style="width:${(ls.mainRate || 0) * 100}%"></i></span> ${pct(ls.mainRate)}</span>` : ""}</span></span>
+        <span class="run-m"><span>Room ${st.room}</span><span>${S.liveTurns.length}T</span>${ls ? `<span title="LLM が手を決めた割合"><span class="mbar"><i style="width:${(ls.mainRate || 0) * 100}%"></i></span> ${pct(ls.mainRate)}</span>` : ""}</span></span>
         <span class="run-s"><b>${fmt(st.scores.estimatedTotal)}</b><small>推定</small></span></button></div>`);
   }
   const list = runsForView().filter((r) => !(liveShown && r.id === S.liveRunId));
@@ -1067,7 +1205,7 @@ function renderRail() {
     rows.push(`<div class="run${sel ? " is-sel" : ""}"><span class="ck"><input type="checkbox" data-ov="${esc(r.id)}" ${S.compare.includes(r.id) ? "checked" : ""} title="グラフに重ねる" aria-label="${esc(runLabel(r))} の試合をグラフに重ねる" /></span>
       <button type="button" class="run-open" data-open="${esc(r.id)}" aria-current="${sel}">
         <span><span class="run-t"><b>${esc(runLabel(r))}</b><span class="faint">Room ${r.room ?? "?"}</span>${best ? `<span class="tag best">最高</span>` : ""}${evolved(r.id) ? `<span class="tag evo" title="${r.evolution?.rolledBack ? "ソルバーを改修したが検証に失敗し巻き戻した" : "この試合の後にソルバー改修（進化）が行われた"}">進化${r.evolution?.rolledBack ? "（戻し）" : ""}</span>` : ""}</span>
-        <span class="run-m"><span>${r.turns}T</span><span title="main 判断率"><span class="mbar"><i style="width:${(s.mainRate || 0) * 100}%"></i></span> ${s.ready ? pct(s.mainRate ?? null) : "…"}</span><span title="main の平均応答時間">${s.ready ? sec(s.avgLat) : ""}</span></span></span>
+        <span class="run-m"><span>${r.turns}T</span><span title="LLM が手を決めた割合"><span class="mbar"><i style="width:${(s.mainRate || 0) * 100}%"></i></span> ${s.ready ? pct(s.mainRate ?? null) : "…"}</span><span title="main の平均応答時間">${s.ready ? sec(s.avgLat) : ""}</span></span></span>
         <span class="run-s"><b>${fmt(r.score)}</b><small>${r.isOfficial ? "公式" : "推定"}${d !== null ? ` <span class="${d >= 0 ? "up" : "down"}">${d >= 0 ? "+" : ""}${fmt(d)}</span>` : ""}</small></span></button></div>`);
   }
   keepFocus(box, () => { box.innerHTML = rows.join("") || `<div class="empty">この範囲の試合はまだありません。「準備」→「開始」で試合を始めると、ここに並びます。</div>`; });
@@ -1246,7 +1384,7 @@ function renderRunHead() {
     const p = r && prevOf(r); if (p && r.score !== null && p.score !== null) d = r.score - p.score;
   }
   const kv = (k, v, cls = "") => `<span class="kv"><span>${k}</span><b class="${cls}">${v}</b></span>`;
-  el.innerHTML = `<h2>${esc(title)}</h2>${kv("Room", room ?? "-")}${kv("公式", fmt(off))}${kv("推定", fmt(est))}${d !== null ? kv("前の試合比", (d >= 0 ? "+" : "") + fmt(d), d >= 0 ? "up" : "down") : ""}${kv("ターン", turns.length)}${kv("main 判断率", rr.ready ? pct(rr.mainRate ?? null) : "-")}${kv("main 平均応答", rr.ready ? sec(rr.avgLat) : "-")}${S.focus !== "live" && evolved(S.focus) ? `<span class="tag evo">この試合の後に進化あり</span>` : ""}${agentLine(S.focus === "live" ? null : focusRun())}`;
+  el.innerHTML = `<h2>${esc(title)}</h2>${kv("Room", room ?? "-")}${kv("公式", fmt(off))}${kv("推定", fmt(est))}${d !== null ? kv("前の試合比", (d >= 0 ? "+" : "") + fmt(d), d >= 0 ? "up" : "down") : ""}${kv("ターン", turns.length)}${kv("LLM の手", rr.ready ? pct(rr.mainRate ?? null) : "-")}${kv("LLM 平均応答", rr.ready ? sec(rr.avgLat) : "-")}${S.focus !== "live" && evolved(S.focus) ? `<span class="tag evo">この試合の後に進化あり</span>` : ""}${agentLine(S.focus === "live" ? null : focusRun())}`;
 }
 function agentLine(r) {
   let a;
@@ -1362,14 +1500,14 @@ function curPlan() {
 function decideBadge(st, p) {
   if (p.source === "main") {
     const m = ACT[p.mainAction];
-    return { cls: "b-" + (p.mainAction || "continue"), text: m ? m[0] : "main が決定" };
+    return { cls: "b-" + (p.mainAction || "continue"), text: m ? m[0] : "LLM が決定" };
   }
   if (p.source === "fallback") return { cls: "b-solver", text: "fallback" };
-  if (p.mainAction === "thinking") return { cls: "b-solver", text: "方策が決定（main は裏で作戦）" };
+  if (p.mainAction === "thinking") return { cls: "b-solver", text: "方策が決定（LLM は裏で作戦）" };
   if (p.mainAction === undefined && p.mainNote === undefined) {
-    return st.status === "claude_in_game" ? { cls: "b-wait", text: "main 思考中（solver 案）" } : { cls: "b-solver", text: "solver が決定" };
+    return st.status === "claude_in_game" ? { cls: "b-wait", text: "LLM 思考中（方策の案）" } : { cls: "b-solver", text: "方策が決定" };
   }
-  return { cls: "b-solver", text: "solver 代行" };
+  return { cls: "b-solver", text: "方策が代行" };
 }
 function renderDecide() {
   const st = S.st, p = st?.prediction, el = $("#decide");
@@ -1385,7 +1523,7 @@ function renderDecide() {
   let why = "";
   const bp = p.breakpointReasons?.length ? `停止点: ${p.breakpointReasons.join(", ")}` : "";
   if (p.mainAction === "thinking") {
-    why = `<div class="dline"><span class="k">main</span>${esc(p.mainNote || "考え中")}</div>`;
+    why = `<div class="dline"><span class="k">LLM</span>${esc(p.mainNote || "考え中")}</div>`;
   } else if (src === "solver" && (p.mainAction === null || (p.mainAction === undefined && p.mainNote))) {
     why = `<div class="dline"><span class="k">代行理由</span><b>${esc(reasonJa(p.mainNote) || "記録なし")}</b>${p.mainNote && reasonJa(p.mainNote) !== p.mainNote ? ` <span class="faint">(${esc(p.mainNote)})</span>` : ""}</div>`;
   }
@@ -1508,7 +1646,7 @@ function tileImg(v) {
   let rec = S.imgs.get(name);
   if (!rec) {
     rec = { ok: false, img: new Image() };
-    rec.img.onload = () => { rec.ok = true; mark("map"); };
+    rec.img.onload = () => { rec.ok = true; mark("map"); if (window.labOnTile) window.labOnTile(); };
     rec.img.onerror = () => { rec.ok = false; rec.failed = true; };
     rec.img.src = "/assets/tiles/" + name; S.imgs.set(name, rec);
   }
@@ -1870,6 +2008,7 @@ function connect() {
     if (S.st) S.st.turn = t.turn;
     mark("head", "rail", "chart", "runhead", "decide", "table");
   });
+  es.addEventListener("lab", (e) => { if (window.labOnState) window.labOnState(JSON.parse(e.data)); });
   es.addEventListener("claude", (e) => {
     if (!S.st) return; const ev = JSON.parse(e.data); S.st.claudeStream = [...(S.st.claudeStream || []).slice(-199), ev]; mark("log");
   });
@@ -1884,5 +2023,6 @@ function connect() {
   loadModels();
 })();
 </script>
+<script src="/lab.js"></script>
 </body>
 </html>

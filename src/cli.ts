@@ -251,7 +251,7 @@ async function simCommands(sub: "sim" | "bench" | "train", v: Record<string, str
       return;
     }
     const minutes = Number(v.minutes ?? 5);
-    const r = await trainPolicy({ pool, room, budgetMs: minutes * 60_000, maxTurns, dryRun: v["dry-run"] === true, log: (m) => console.log(m) });
+    const r = await trainPolicy({ pool, room, budgetMs: minutes * 60_000, maxTurns, dryRun: v["dry-run"] === true, trigger: "cli", log: (m) => console.log(m) });
     console.log(JSON.stringify({ accepted: r.accepted, generations: r.generations, episodes: r.episodes, comparison: r.comparison, after: r.after }, null, 2));
   } finally {
     pool.close();

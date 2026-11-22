@@ -8,6 +8,8 @@ export interface EpisodeJob {
   room: number | null;
   /** 試合のターン数の上限（学習を速くするため。null なら地図の設定どおり） */
   maxTurns: number | null;
+  /** 再生用の記録を返す */
+  trace?: boolean;
   policy:
     | { kind: "planner"; params: Params; /** 別の評価関数のファイル（エージェントの改修前後を比べる時） */ evaluatorPath?: string }
     | { kind: "solver"; solverPath?: string };

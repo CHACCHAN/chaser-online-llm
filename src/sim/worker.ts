@@ -29,7 +29,7 @@ self.onmessage = async (ev: MessageEvent<EpisodeJob>) => {
   const job = ev.data;
   try {
     const scn = makeScenario(makeRng(job.seed), { room: job.room });
-    const result = runEpisode(scn, await policyFor(job), job.maxTurns ? { maxTurns: job.maxTurns } : {});
+    const result = runEpisode(scn, await policyFor(job), { ...(job.maxTurns ? { maxTurns: job.maxTurns } : {}), trace: job.trace === true });
     postMessage({ ok: true, result });
   } catch (err) {
     postMessage({ ok: false, error: err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err) });

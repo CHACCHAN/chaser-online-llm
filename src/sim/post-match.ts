@@ -4,12 +4,12 @@ import { EVALUATOR_PATH, POLICY_DIR, PROJECT_ROOT } from "../paths";
 import { getSetting, numSetting } from "../settings";
 import { loadPolicyParams } from "../solver/policy";
 import { SimPool } from "./pool";
-import { comparePolicies, evaluatePolicy, makeEvalSet, notWorse, perTurn, trainPolicy, type Comparison, type TrainResult } from "./train";
+import { comparePolicies, evaluatePolicy, makeEvalSet, notWorse, perTurn, type Comparison } from "./train";
 
 /**
  * 試合後のシミュレータの仕事（evolve.ts から呼ぶ）。
  * - エージェントが評価関数（src/solver/evaluator.ts）を改修したら、改修前と同じ地図で比べ、弱くなっていれば元に戻す。
- * - 方策のパラメータを学習する（その試合の地図も混ぜる）。
+ * - 方策のパラメータの学習は lab.ts（WebUI の「学習」と同じ仕事の受け持ち）。
  * - 振り返りに渡すための、今の方策のシミュレータでの成績。
  */
 
@@ -93,16 +93,3 @@ export async function benchRoom(room: number, n = 16): Promise<RoomBench> {
     pool.close();
   }
 }
-
-/** 試合後の学習（TRAIN_AFTER_MATCH_MIN 分）。はっきり良くなった時だけ var/policy/params.json に保存 */
-export async function trainAfterMatch(room: number, opts: { shouldStop?: () => boolean; log?: (m: string) => void } = {}): Promise<TrainResult | null> {
-  const minutes = numSetting("TRAIN_AFTER_MATCH_MIN", { min: 0 });
-  if (minutes <= 0) return null;
-  const pool = new SimPool(workers());
-  try {
-    return await trainPolicy({ pool, room, budgetMs: minutes * 60_000, maxTurns: maxTurns(), shouldStop: opts.shouldStop, log: opts.log });
-  } finally {
-    pool.close();
-  }
-}
-

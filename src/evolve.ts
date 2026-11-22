@@ -8,7 +8,8 @@ import { logger } from "./tools";
 import { uiBus } from "./ui/event-bus";
 
 import { EVALUATOR_PATH, SOLVER_PATH } from "./paths";
-import { backupEvaluator, benchRoom, clearEvaluatorBackup, EVALUATOR_BACKUP_PATH, gateEvaluatorChange, trainAfterMatch, type GateResult } from "./sim/post-match";
+import { backupEvaluator, benchRoom, clearEvaluatorBackup, EVALUATOR_BACKUP_PATH, gateEvaluatorChange, type GateResult } from "./sim/post-match";
+import { lab } from "./sim/lab";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "./evolution/edit-guard";
 import { appendReview } from "./agent/harness-review";
 import { clearEvolutionPending, markEvolutionPending, recoverPendingEvolution } from "./evolution/pending";
@@ -262,13 +263,19 @@ export async function recoverInterruptedEvolution(): Promise<void> {
  */
 export async function runPostMatchTraining(summary: RunSummary): Promise<void> {
   const minTurns = numSetting("AGENT_EVOLVE_MIN_TURNS", { min: 0, integer: true });
-  if (summary.turns < minTurns || numSetting("TRAIN_AFTER_MATCH_MIN", { min: 0 }) <= 0) return;
-  uiBus.patchState({ status: "evolving", statusMessage: `Run ${summary.runId}: シミュレータで方策を学習中...` });
+  const minutes = numSetting("TRAIN_AFTER_MATCH_MIN", { min: 0 });
+  if (summary.turns < minTurns || minutes <= 0) return;
+  uiBus.patchState({ status: "evolving", statusMessage: `Run ${summary.runId}: シミュレータで方策を学習中（WebUI の「学習」で進み具合が見える）...` });
+  // 停止ボタンで学習も止める
+  const watch = setInterval(() => {
+    if (uiBus.getState().stopRequested) lab.stop();
+  }, 1000);
   try {
-    const r = await trainAfterMatch(summary.room, {
-      shouldStop: () => uiBus.getState().stopRequested,
-      log: (m) => uiBus.patchState({ statusMessage: `学習中: ${m}` }),
-    });
+    if (lab.busy && lab.state().job?.trigger !== "idle") {
+      uiBus.pushClaudeEvent({ context: "evolution", kind: "system", title: "方策の学習（シミュレータ）", content: "「学習」画面の仕事が動いているので、試合後の学習は行いませんでした" });
+      return;
+    }
+    const r = await lab.train({ room: summary.room, minutes, trigger: "post-match" });
     if (!r) return;
     const c = r.comparison;
     const text = `${r.generations} 世代・${r.episodes} 試合。学習に使っていない地図で ${c.a} → ${c.b} 点/ターン（差 ${c.diff}±${c.se}、勝ち ${c.wins}/${c.n}）→ ${r.accepted ? "保存した（次の試合から使う）" : "見送り（はっきり良くなっていない）"}`;
@@ -280,5 +287,7 @@ export async function runPostMatchTraining(summary: RunSummary): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn({ err: msg }, "方策の学習に失敗");
     uiBus.pushClaudeEvent({ context: "evolution", kind: "error", title: "方策の学習に失敗", content: msg });
+  } finally {
+    clearInterval(watch);
   }
 }

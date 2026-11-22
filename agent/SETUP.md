@@ -1,7 +1,7 @@
 # SETUP.md — セットアップ手順（エージェント専用）
 
 > このファイルはエージェントが**何をするか**を残す手順書。実行して変更が出たら、このファイルと `SELF_CHECK.md` の両方を更新する。
-> 最終更新: 2026-11-22 / v53（手は経路探索の方策、LLM は裏で作戦。シミュレータ・学習・偽サーバ）
+> 最終更新: 2026-11-22 / v54（WebUI の「学習」画面・試合をしていない間の学習）
 
 ## 0. 前提
 - Bun がインストール済み、`bun install` 済み
@@ -36,7 +36,7 @@
 1. `bun test` — 全通過
 2. `bun run typecheck` — エラー0
 3. `bun run verify-solver` — `replaySmokeTest.ok: true`
-4. `bun run start` → `http://127.0.0.1:3456` でマップが画像タイル (`/assets/tiles/*.gif`) で描画されること
+4. `bun run start` → `http://127.0.0.1:3456` でマップが画像タイル (`/assets/tiles/*.gif`) で描画されること。ヘッダの「学習」で、シミュレータの「打たせる」が再生され、短い学習（試すだけ）が進むこと
 5. シミュレータ: `bun src/cli.ts sim --n 16`（罠 0、数ミリ秒/手）。ハーネス全体は偽サーバで通す（`bun scripts/sim-server.ts` と `HOST_URL=http://127.0.0.1:3990/CHaserOnline003/user/ CHASER_USER=sim CHASER_PASS=sim CHASER_TEST_VAR_DIR=<一時フォルダ> AGENT_USE_MAIN=false bun run play --room 1`。本番サーバには触れない）
 6. オフライン判断テスト: 過去の `var/runs/<runId>/turns.jsonl` を WorldMap に再生し、数ターン分 `MainAgent.decide()` を呼ぶ → 全て `source=main`、合法手、予算内
 

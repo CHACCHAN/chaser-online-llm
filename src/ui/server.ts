@@ -12,6 +12,8 @@ import { logger } from "../tools";
 import { loadProjectEnvEntries, saveProjectEnvEntries, setProjectEnvValue } from "./env-store";
 import { activePolicyName, isValidPolicyName, listPolicies, readPolicy, writePolicy } from "../agent/policy";
 import { uiBus, type UiControlCommand } from "./event-bus";
+import { handleLabRequest } from "./lab-routes";
+import { lab } from "../sim/lab";
 
 const PUBLIC_INDEX_PATH = path.join(PUBLIC_DIR, "index.html");
 
@@ -80,6 +82,14 @@ export function startWebUiServer(port: number) {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
       }
+
+      // 画面のスクリプト（「学習」画面など）
+      if (url.pathname === "/lab.js") {
+        return new Response(Bun.file(path.join(PUBLIC_DIR, "lab.js")), { headers: { "Content-Type": "text/javascript; charset=utf-8" } });
+      }
+
+      const labRes = await handleLabRequest(req, url);
+      if (labRes) return labRes;
 
       // 公式タイル GIF 等の静的素材 (assets/)
       if (url.pathname.startsWith("/assets/")) {
@@ -313,9 +323,14 @@ export function startWebUiServer(port: number) {
               roomProfiles: loadRoomProfiles().rooms,
             });
 
-            cleanup = uiBus.subscribe((eventName, data) => {
+            const offBus = uiBus.subscribe((eventName, data) => {
               send(eventName, data);
             });
+            const offLab = lab.onChange((s) => send("lab", s));
+            cleanup = () => {
+              offBus();
+              offLab();
+            };
 
             pingTimer = setInterval(() => {
               try {
