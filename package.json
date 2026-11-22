@@ -9,7 +9,8 @@
     "test": "bun test",
     "cli": "bun src/cli.ts",
     "verify-solver": "bun src/verify.ts",
-    "play": "bun src/play.ts"
+    "play": "bun src/play.ts",
+    "claude-login": "bun scripts/claude-login.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

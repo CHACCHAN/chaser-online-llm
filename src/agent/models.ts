@@ -1,13 +1,32 @@
 import { numSetting } from "../settings";
-import { resolveLlmAuth } from "./llm-auth";
+import { CLAUDE_BINARY, buildClaudeEnv } from "./claude-env";
+import { resolveLlmAuth, SUBSCRIPTION_MODELS } from "./llm-auth";
+
+/** サブスクリプション: ハーネスの Claude Code（var/claude-home）がログイン済みか。トークンを入れていれば確かめない */
+export async function subscriptionLoginProblem(): Promise<string | null> {
+  if (Object.keys(resolveLlmAuth().claudeEnv).length > 0) return null;
+  try {
+    const p = Bun.spawn([CLAUDE_BINARY, "auth", "status", "--json"], { env: buildClaudeEnv({}), stdout: "pipe", stderr: "ignore" });
+    const timer = setTimeout(() => p.kill(), 20_000);
+    const out = await new Response(p.stdout).text();
+    clearTimeout(timer);
+    const st = JSON.parse(out) as { loggedIn?: boolean };
+    return st.loggedIn ? null : "サブスクリプションにログインしていない。LLM_OAUTH_TOKEN に `claude setup-token` のトークンを入れるか、`bun run claude-login` でログインする";
+  } catch (err) {
+    return `ログインの状態を確かめられない（${err instanceof Error ? err.message : String(err)}）`;
+  }
+}
+
 /**
- * LLM_API_URL のゲートウェイからモデル一覧を取得する (OpenAI 互換 / Anthropic 互換 /models の両方に対応)。
+ * モデルの一覧。api は LLM_API_URL の /models から取る（OpenAI 互換 / Anthropic 互換の両方に対応）。
+ * subscription は Claude Code の別名（opus / sonnet / haiku）。ほかのモデル ID も入力すれば使える。
  */
 export async function listGatewayModels(): Promise<{ models: string[]; error: string | null }> {
+  const auth = resolveLlmAuth();
+  if (auth.problem) return { models: auth.mode === "subscription" ? [...SUBSCRIPTION_MODELS] : [], error: auth.problem };
+  if (auth.mode === "subscription") return { models: [...SUBSCRIPTION_MODELS], error: await subscriptionLoginProblem() };
   // 空なら Anthropic API に直接（Claude Code の既定と同じ）
   const raw = (Bun.env.LLM_API_URL ?? "").trim() || "https://api.anthropic.com";
-  const auth = resolveLlmAuth();
-  if (auth.problem) return { models: [], error: auth.problem };
   const base = raw.replace(/\/+$/, "");
   const urls = base.endsWith("/v1") ? [`${base}/models`] : [`${base}/v1/models`, `${base}/models`];
 

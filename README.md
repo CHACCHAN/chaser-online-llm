@@ -35,8 +35,9 @@ bun run start          # Web ダッシュボードを起動
 | キー | 役割 |
 | :--- | :--- |
 | `HOST_URL`, `CHASER_USER`, `CHASER_PASS`, `CHASER_ROOM` | CHaserOnline003 の接続先・ログイン・ルーム（ルーム既定値 3） |
-| `LLM_API_URL`, `LLM_API_KEY` | Claude Code が使うゲートウェイ（Anthropic 互換。空なら Anthropic API に直接）と鍵 |
-| `LLM_API_AUTH` | 鍵の送り方: `gravitee`（既定）/ `x-api-key` / `bearer` / `header`（`LLM_API_KEY_HEADER` で名前を指定）/ `none`。`LLM_API_EXTRA_HEADERS` で追加のヘッダ（詳細は [docs/claude-evolution.md](docs/claude-evolution.md)） |
+| `LLM_AUTH_MODE` | `api`（Anthropic 互換 API）/ `subscription`（Claude のサブスクリプション）。詳細は [docs/claude-evolution.md](docs/claude-evolution.md) |
+| `LLM_API_URL`, `LLM_API_KEY`, `LLM_API_HEADERS` | api: 接続先（空なら Anthropic API に直接）・鍵・送るヘッダ（`"名前: 値; 名前: 値"`、`{KEY}` が鍵に置き換わる。既定 `x-api-key: {KEY}`） |
+| `LLM_OAUTH_TOKEN` | subscription: `claude setup-token` のトークン（空なら `bun run claude-login` でログインした情報） |
 | `LLM_MODEL_NAME` / `LLM_SUB_MODEL_NAME` | メインのモデル / サブのモデル（サブが空ならメインと同じ） |
 | `LLM_MODEL_EFFORT` / `LLM_SUB_MODEL_EFFORT` | `low` / `medium` / `high` / `xhigh` / `max`。既定は `medium`。サブが空ならメインと同じ |
 | `AGENT_TURN_BUDGET_SEC` | 1フェーズあたりの思考予算（既定 20 秒）。超えるとソルバー手を送る |

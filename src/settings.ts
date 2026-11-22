@@ -72,31 +72,31 @@ export const SETTINGS = {
   CHASER_LOGIN_RETRY_SEC: { group: "chaser", description: "ログイン再試行の間隔（秒）", defaultValue: "45" },
 
   // --- Claude Code ハーネス / エージェント ---
+  LLM_AUTH_MODE: {
+    group: "llm",
+    description: "LLM のつなぎ方: api（Anthropic 互換の API。LLM_API_URL・LLM_API_KEY・LLM_API_HEADERS）| subscription（Claude のサブスクリプション。LLM_OAUTH_TOKEN）",
+    defaultValue: "api",
+    options: ["api", "subscription"],
+  },
   LLM_API_URL: {
     group: "llm",
-    description: "LLM のゲートウェイの URL（Anthropic 互換の /v1/messages を持つもの。末尾の /v1 は有っても無くてもよい。空なら Anthropic API に直接）",
+    description: "api: Anthropic 互換 API の URL（/v1/messages を持つもの。末尾の /v1 は有っても無くてもよい。空なら Anthropic API に直接）",
     defaultValue: "",
   },
-  LLM_API_KEY: { group: "llm", description: "API キー（送り方は LLM_API_AUTH）", defaultValue: "", secret: true },
-  LLM_API_AUTH: {
+  LLM_API_KEY: { group: "llm", description: "api: API キー（LLM_API_HEADERS の {KEY} に入る）", defaultValue: "", secret: true },
+  LLM_API_HEADERS: {
     group: "llm",
     description:
-      "鍵の送り方: gravitee（x-api-key・Bearer・X-Gravitee-Api-Key の全部）| x-api-key（Anthropic API に直接など）| bearer（Authorization: Bearer。LiteLLM・OpenRouter など）| header（LLM_API_KEY_HEADER の名前のヘッダ）| none（送らない）",
-    defaultValue: "gravitee",
-    options: ["gravitee", "x-api-key", "bearer", "header", "none"],
+      "api: 送るヘッダ（\"名前: 値; 名前: 値\"。{KEY} は LLM_API_KEY に置き換わる）。例: Anthropic 直接 \"x-api-key: {KEY}\" / LiteLLM 等 \"Authorization: Bearer {KEY}\" / Gravitee \"x-api-key: {KEY}; X-Gravitee-Api-Key: {KEY}\"",
+    defaultValue: "x-api-key: {KEY}",
   },
-  LLM_API_KEY_HEADER: {
+  LLM_OAUTH_TOKEN: {
     group: "llm",
-    description: "LLM_API_AUTH=header の時に鍵を載せるヘッダ名（例: Ocp-Apim-Subscription-Key・apikey）",
-    defaultValue: "",
-  },
-  LLM_API_EXTRA_HEADERS: {
-    group: "llm",
-    description: "どの方式でも足して送るヘッダ（\"名前: 値; 名前: 値\"）。ゲートウェイがテナント・バージョンなどを求める時に使う",
+    description: "subscription: `claude setup-token` で作ったトークン（空なら `bun run claude-login` でログインした情報を使う）",
     defaultValue: "",
     secret: true,
   },
-  LLM_MODEL_NAME: { group: "llm", description: "メインエージェントのモデル（ゲートウェイの /models から選択）", defaultValue: "" },
+  LLM_MODEL_NAME: { group: "llm", description: "メインエージェントのモデル（api はゲートウェイの /models から、subscription は opus / sonnet / haiku など）", defaultValue: "" },
   LLM_SUB_MODEL_NAME: { group: "llm", description: "サブエージェントのモデル（空ならメインと同じ）", defaultValue: "" },
   LLM_MODEL_EFFORT: { group: "llm", description: "メインの effort: low | medium | high | xhigh | max", defaultValue: "medium" },
   LLM_SUB_MODEL_EFFORT: { group: "llm", description: "サブの effort（空ならメインと同じ）", defaultValue: "" },
@@ -170,7 +170,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "server", title: "サーバ接続", keys: ["HOST_URL", "CHASER_USER", "CHASER_PASS", "CHASER_ROOM", "CHASER_HTTP_TIMEOUT_SEC", "CHASER_RETRY_MS"] },
   { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
-  { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_API_URL", "LLM_API_KEY", "LLM_API_AUTH", "LLM_API_KEY_HEADER", "LLM_API_EXTRA_HEADERS", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },
+  { id: "model", title: "モデル・ゲートウェイ", keys: ["LLM_AUTH_MODE", "LLM_API_URL", "LLM_API_KEY", "LLM_API_HEADERS", "LLM_OAUTH_TOKEN", "LLM_MODEL_NAME", "LLM_SUB_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_SUB_MODEL_EFFORT", "LLM_MODELS_TIMEOUT_SEC"] },
   { id: "main", title: "メインエージェント", keys: ["AGENT_USE_MAIN", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
   { id: "sub", title: "サブエージェント", keys: ["AGENT_SUB_TODO_ITEMS", "AGENT_SUB_CONCURRENCY", "AGENT_SUB_TASK_TIMEOUT_MIN"] },

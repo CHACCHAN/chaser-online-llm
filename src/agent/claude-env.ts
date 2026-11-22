@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CLAUDE_HOME_DIR, PROJECT_ROOT } from "../paths";
-import { resolveLlmAuth } from "./llm-auth";
+import { applyLlmAuthEnv, resolveLlmAuth } from "./llm-auth";
 
 export const CLAUDE_BINARY = path.join(PROJECT_ROOT, "node_modules/.bin/claude");
 
@@ -39,35 +39,25 @@ export function buildClaudeEnv(settings: ClaudeModelSettings): Record<string, st
     if (!existsSync(f)) writeFileSync(f, onboarding, "utf-8");
   }
 
-  const baseUrl = (Bun.env.LLM_API_URL ?? "").trim().replace(/\/+$/, "").replace(/\/v1$/, "");
   const sub = settings.subModel || settings.model;
-  // 鍵の送り方は LLM_API_AUTH（src/agent/llm-auth.ts）。親の環境（開発者のシェル）の ANTHROPIC_* は使わない
+  // 認証は LLM_AUTH_MODE（src/agent/llm-auth.ts）。開発者のシェルの ANTHROPIC_*・CLAUDE_CODE_OAUTH_TOKEN は引き継がない
   const auth = resolveLlmAuth();
-  const inherited = { ...(process.env as Record<string, string>) };
-  for (const k of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_BASE_URL"]) delete inherited[k];
-  const authEnv: Record<string, string> = {};
-  for (const [k, v] of Object.entries(auth.claudeEnv)) if (v !== null) authEnv[k] = v;
+  const subscription = auth.mode === "subscription";
 
   return {
-    ...inherited,
+    ...applyLlmAuthEnv(process.env as Record<string, string>, auth),
     HOME: home,
     XDG_CONFIG_HOME: home,
     XDG_DATA_HOME: home,
     XDG_STATE_HOME: home,
     XDG_CACHE_HOME: path.join(home, ".cache"),
     CLAUDE_CONFIG_DIR: configDir,
-    ...authEnv,
-    ...(baseUrl ? { ANTHROPIC_BASE_URL: baseUrl } : {}),
     ...(settings.model ? { ANTHROPIC_MODEL: settings.model } : {}),
+    ...(sub ? { CLAUDE_CODE_SUBAGENT_MODEL: sub } : {}),
     // ゲートウェイに存在しない既定モデル (haiku 等) を裏で呼ばせないよう、エイリアスを全て差し替える
-    ...(sub
-      ? {
-          ANTHROPIC_DEFAULT_HAIKU_MODEL: sub,
-          ANTHROPIC_SMALL_FAST_MODEL: sub,
-          CLAUDE_CODE_SUBAGENT_MODEL: sub,
-        }
-      : {}),
-    ...(settings.model
+    // （サブスクリプションでは全モデルがあり、opus 等の別名を選ぶので差し替えない）
+    ...(sub && !subscription ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: sub, ANTHROPIC_SMALL_FAST_MODEL: sub } : {}),
+    ...(settings.model && !subscription
       ? { ANTHROPIC_DEFAULT_SONNET_MODEL: settings.model, ANTHROPIC_DEFAULT_OPUS_MODEL: settings.model }
       : {}),
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
