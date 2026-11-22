@@ -2,6 +2,8 @@
 
 ## 全体像
 
+> 2026-11-22〜: 手は経路探索の方策（`src/solver/planner.ts`）が出し、メインは裏で作戦（`plan`）だけを出す（`AGENT_ASYNC=true`、既定）。試合後はシミュレータで学習する。図と詳細は [learning.md](learning.md)。以下は `AGENT_ASYNC=false` の時の流れと共通部分。
+
 メインは毎フェーズ「作戦（continue / plan）」か「手（command）」を返す。手の計算はソルバーが行い、メインは作戦の目標を変えるか、ソルバーが想定していない局面だけに介入する。時間のかかる仕事はサブに渡し、結果は後のターンで受け取る。
 
 ```mermaid
@@ -66,13 +68,14 @@ flowchart LR
 3. **入室**: `Client` が `user/` にログインし、`RoomNumberCheck` で入室する。同一ユーザーの二重ログインは断られる（前の試合を停止・ターン上限で終えると約5分）ので、`CHASER_LOGIN_WAIT_MIN` の間 `CHASER_LOGIN_RETRY_SEC` ごとにやり直す（`src/client/login.ts`、停止ボタンで中断）。準備は入室できてから使い切る（入室できなければ残る）。
 4. **試合**: `runner.ts` が `playPhase` を CMD1 → CMD2 の順に回す（後述）。
 4b. **試合中の障害**: ソルバー・メインの処理が例外を投げても、そのフェーズは安全な手（`pickSafeFallback`）・ソルバーの手で続ける。通信の一時的な失敗は、まだ送っていないフェーズを安全な手で1回送り直す。それでも失敗したら試合を終え、画面に「試合がエラーで終わった」を出す。
-5. **試合後**: サブを止めて範囲外の編集を戻し、`summary.json` と `diagnosis.md` を書き、`evolve.ts` がメインに `postMatch` で改修させ、リプレイ検証する。
+5. **試合後**: サブを止めて範囲外の編集を戻し、`summary.json` と `diagnosis.md` を書き、`evolve.ts` がメインに `postMatch` で改修させ（シミュレータでの成績を添える）、リプレイ検証する。評価関数（`evaluator.ts`）が変わっていたら改修前と同じ地図で比べ、弱ければ戻す。続けて方策を学習する（`TRAIN_AFTER_MATCH_MIN` 分。振り返りをしない時も）。
 6. **終了**: `MainAgent.end()` で先行起動したプロセスとサブを止める。自動継続なら数秒待って次の試合へ。
 
 `bun run play` は同じ流れを WebUI なしで 1 試合だけ行う（`src/play.ts`）。
 
 ## 1フェーズの処理（runner.ts `playPhase`）
 
+0. `AGENT_ASYNC=true`（既定）では、方策（`PLAY_POLICY=planner`）がすぐ手を決め、メインには `startBackground` で裏の問い合わせを始めるだけ（考え中なら始めない）。返ってきた `plan` は次のフェーズから使う。以下の 2〜4 は `AGENT_ASYNC=false` の時。
 1. `active-solver.ts` を毎回動的 import し直す（`?t=` でキャッシュを回避）。読み込みに失敗したら静的 import 版を使い、UI にエラーを出す。
 2. ソルバーの候補を出す（現在の作戦 `plan` を渡す）。ただし 1 ターン目の CMD1 は `gr`（初期観測）に固定する。
 3. `evaluateBreakpoint` が「新種タイル」「ワープ」「移動不可」「敵が近い」などの理由を集める。止めるためではなく、メインへの情報として渡す。
@@ -103,7 +106,10 @@ flowchart LR
 | `src/agent/sub-worker.ts` | サブエージェント（`SubWorker`）。依頼を順に裏で処理し、結果を保持する |
 | `src/agent/models.ts` | ゲートウェイの `/models` 一覧と effort の定義 |
 | `src/agent/turn-events.ts` | ブレークポイント理由の評価（停止はしない） |
-| `src/solver/active-solver.ts` | 進化対象のソルバー。`decideTurnAction` を export する |
+| `src/solver/active-solver.ts` | 進化対象のソルバー。`decideTurnAction` を export する（`PLAY_POLICY=solver` の時の手） |
+| `src/solver/planner.ts`・`policy.ts` | 経路探索の方策（試合中の手）。`policy.ts` はパラメータ（`var/policy/params.json`）の読み書きと方策の組み立て |
+| `src/solver/evaluator.ts` | 方策の評価関数とパラメータの範囲（エージェントが試合後に直してよい。シミュレータで比べて採否） |
+| `src/sim/` | シミュレータ（`engine`・`mapgen`・`episode`）、並列実行（`pool`・`worker`）、学習（`train`）、試合後の仕事（`post-match`）、偽サーバ（`fake-server`） |
 | `src/memory/world-map.ts` | 盤面の座標系、観測の反映、候補評価、`firstStepTowards`、SLAM とセグメント統合 |
 | `src/memory/knowledge-store.ts` | `knowledge/tiles.json` と `var/room-profiles.json` の読み書き（一時ファイルに書いて置き換える。読めない時は前に読めた中身で続け、壊れた tiles.json には書かない。壊れた room-profiles.json は `.broken-<日時>` に控える） |
 | `src/perception/web-map-scraper.ts` | `MapView.jsp` / `listWorldvsresult` の取得とパース（HTTP のみ） |
@@ -138,4 +144,7 @@ flowchart LR
 | ルームごとの成績 | `var/room-profiles.json`（最高得点、Web マップの有無、最高得点時のソルバー） | 除外 |
 | 最高得点のソルバー | `var/best-solvers/room<N>.ts` | 除外 |
 | 隔離された Claude の HOME | `var/claude-home/` | 除外 |
+| シミュレータの地図の作り方 | `knowledge/sim-profiles.json` | git |
+| 本物の地図（試合中の最初の Webマップ） | `var/maps/room<N>/<runId>.json` | 除外 |
+| 方策のパラメータ・学習の記録 | `var/policy/params.json`, `var/policy/train-log.jsonl` | 除外 |
 | 直近の盤面 | `var/current/snapshot.json` | 除外 |

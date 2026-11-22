@@ -1,7 +1,7 @@
 # SELF_CHECK.md — 自己レビュー＆改善手順（エージェント専用）
 
 > SETUP で変更があったとき、またはコードを改修したときに実施する。**全項目合格まで「修正 → 再チェック」を繰り返す**。終わったらこのファイルと `SETUP.md` を更新する。
-> 最終更新: 2026-11-21 / v21（AGENTS.md と CLAUDE.md の分離、ハーネスへのレビュー、WebUI の準備ボタン・設定画面）
+> 最終更新: 2026-11-22 / v53（手は経路探索の方策、LLM は裏で作戦。シミュレータ・学習・偽サーバ）
 
 ## 1. 機械チェック（全て必須）
 - [ ] `bun run typecheck` エラー0
@@ -9,6 +9,8 @@
 - [ ] `bun run verify-solver` が ok
 - [ ] ソルバーの読み込み失敗を握りつぶしていない（失敗時はログ＋UIにエラー表示）
 - [ ] パスは `src/paths.ts` 経由（`import.meta.dir` からの組み立てを新たに増やしていない）
+- [ ] `bun src/cli.ts sim --n 16` で罠 0・方策の判断が数ミリ秒/手。方策や評価関数を変えたら `bench` で前と比べ、下がっていない
+- [ ] 偽サーバで1試合（`src/sim/fake-server.test.ts`、`bun test` に含まれる）: 最後まで打ち、位置がずれず、罠を踏まず、地図を `var/maps/` に保存する
 
 ## 2. スコア整合チェック（直近の試合ログ）
 - [ ] `bun agent/tools/score-model-check.ts` で `mismatches: 0`（推定と公式が完全一致）
@@ -27,6 +29,8 @@
 ## 4. 進化ループの健全性
 - [ ] 0〜2ターンで終わった試合（待機切れ・接続失敗）で振り返り・最高記録更新が走っていない（`AGENT_EVOLVE_MIN_TURNS`）
 - [ ] 振り返りで範囲外（ハーネス本体等）が変わっていない。戻した場合は `evolution-report.md` の `Reverted (out of scope)` に出る
+- [ ] 試合中: `AGENT_ASYNC=true` で手がメインを待っていない（`turns.jsonl` の手の時間がサーバの応答だけ）。メインの作戦（`mainActions` の plan）が届いて使われている
+- [ ] 試合後: 評価関数を直した試合で `evolution-report.md` に比較の結果（採用・戻した）が出る。`var/policy/train-log.jsonl` に学習が記録され、保存は検証ではっきり良くなった時だけ
 - [ ] 試合後の改修で `active-solver.ts` が実際に変化したか（`evolution-report.md` の `Solver Changed`）。変化なしが2回続いたら原因調査
 - [ ] メイン判断率（`turns.jsonl` の `cmd1Source/cmd2Source === "main"` の割合）が 80% 以上。作戦（`mainActions` の plan/command）とサブ依頼（`delegations`）の結果も確認。低ければ予算・effort・プロンプトを見直す
 - [ ] トークン: `summary.json` の `agent.usage.totalTokens` と `turns.jsonl` の `agentTokens` / `mainInputTokens`。メインの1回あたりの入力が試合を通して一定（数千トークン）で、後半で増えていないこと。`summary.json` の `agent.finalMemo` に意味のある引き継ぎ（狙い・分かったこと）が書かれていること
@@ -41,6 +45,7 @@
 - 1つでも ❌ → 修正して §1 からやり直す（同じ項目で3回失敗したら人間に相談）
 
 ## 6. 更新履歴
+- v53 (2026-11-22): 時間で進むルーム（room455、1ターン約5秒）で LLM の返答（24〜105秒）を待ち、手が間に合わなかった。手は経路探索の方策（planner.ts＋evaluator.ts＋params.json、数ミリ秒）が出し、メインは裏で作戦だけを出す（AGENT_ASYNC・PLAY_POLICY）。シミュレータ（地図は毎回ランダム、tiles.json の全タイルと本物の地図 var/maps/ を混ぜる）で試合後に学習（TRAIN_AFTER_MATCH_MIN）し、エージェントが直した評価関数は同じ地図で比べて弱ければ戻す。偽サーバ（src/sim/fake-server.ts）でハーネス全体を1試合通すテストを追加し、そこで見つけた「行ける目標が無い時に場外へ動く」を修正。docs/learning.md を追加
 - v0 (2026-11-20): 初版。コードレビュー・公式調査の結果から作成
 - v1 (2026-11-20): 常駐メインエージェント・ディレクトリ再編に合わせて更新。オフライン判断テストで、CLAUDE.md の古い gr ルールのせいでメインが誤った手に変更していたのを発見・修正したため、知識の矛盾チェックを追加
 - v2 (2026-11-20): メインを作戦係＋例外係（continue/plan/command＋delegate）にし、サブを常駐 SubWorker に。設定を `src/settings.ts`＋`.env` に一本化（直書き禁止の項目を追加）。マップの毎ターン更新と自機・敵マーカーを追加し、room10 の実ログ再生で表示を確認

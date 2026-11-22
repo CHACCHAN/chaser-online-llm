@@ -62,7 +62,8 @@ function botStep(game: SimGame, bot: SimPlayer): string | null {
   return null;
 }
 
-function botTurn(game: SimGame, bot: SimPlayer): void {
+/** 他プレイヤーの1ターン（偽サーバでも使う） */
+export function runBotTurn(game: SimGame, bot: SimPlayer): void {
   const d1 = botStep(game, bot);
   game.act(bot, "CMD1", d1 ? `gr${d1}` : "gr");
   const d2 = botStep(game, bot);
@@ -105,7 +106,7 @@ export function runEpisode(scn: Scenario, policy: PolicyFn, opts: { maxTurns?: n
   while (!game.over) {
     for (const p of game.players) {
       if (p !== me) {
-        botTurn(game, p);
+        runBotTurn(game, p);
         continue;
       }
       web();

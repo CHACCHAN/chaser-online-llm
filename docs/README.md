@@ -6,12 +6,14 @@
 
 1. [setup.md](setup.md): 起動方法（Bun / Docker）・コマンド・設定・ディレクトリ
 2. [architecture.md](architecture.md): 構成（メイン／サブ／ソルバーの関係）と試合のライフサイクル
-3. [claude-evolution.md](claude-evolution.md): メインエージェント・サブ・試合後の進化（本プロジェクトの中核）
-4. [webui.md](webui.md): ダッシュボードの操作と API
-5. [chaser-protocol.md](chaser-protocol.md): サーバ仕様・スコア・タイル（実測値の注記あり）
+3. [learning.md](learning.md): 試合中の手を出す方策・シミュレータ・試合後の学習（LLM は裏で作戦を出す）
+4. [claude-evolution.md](claude-evolution.md): メインエージェント・サブ・試合後の進化（本プロジェクトの中核）
+5. [webui.md](webui.md): ダッシュボードの操作と API
+6. [chaser-protocol.md](chaser-protocol.md): サーバ仕様・スコア・タイル（実測値の注記あり）
 
 ## 現状の要点
 
+- **手は方策、LLM は裏で作戦**（2026-11-22〜、[learning.md](learning.md)）: 毎フェーズの手は経路探索の方策（`planner.ts`＋`evaluator.ts`＋`var/policy/params.json`、数ミリ秒）が出し、メインの返答は待たない（`AGENT_ASYNC`、`PLAY_POLICY`）。時間で進むルーム（room 455）で LLM の返答が間に合わなかったため。試合後はシミュレータ（地図は毎回ランダム＋本物の地図）で学習し（`TRAIN_AFTER_MATCH_MIN`）、振り返りで直した評価関数は改修前と同じ地図で比べて弱ければ戻す。以下の「メインは毎フェーズ…作戦係＋例外係」は `AGENT_ASYNC=false` の時の動き。
 - 試合は `src/index.ts` のループが回す。1試合ごとに `MainAgent` を作り、入室前の `begin()` でメインの最初の問い合わせ用プロセスを先に起動し、サブを準備する（サブは依頼ごとにセッションを起動）。
 - **準備フェーズ**（「開始」より前、ルームには入らない。WebUI のボタンが「準備」→（準備中）→「開始」と変わり、「開始」で入室。`AGENT_PREP`、`agent/prompts/prep.md`）: 公式トップの `ver` を `knowledge/server.json` と比べ（変わっていれば警告し、メモにも注意を書かせる）、メインがツール（Read/Glob/Grep のみ）でルール・`var/room-profiles.json`・このルームの過去の試合（`AGENT_PREP_PAST_RUNS` 件、summary/diagnosis/MEMO/ASK_SUB/evolution-report）・作戦方針を読み、試合開始時のメモを作る。上限 `AGENT_PREP_TIMEOUT_SEC`。失敗したら「準備」をやり直す（スタンバイOK でないと開始できない）。ルーム・モデル・effort を変えると準備は無効。1回の準備は1試合で使い切り、連続モードの次の試合は入室前に自動で準備し直し、失敗したら（LLM の利用制限など）`AGENT_PREP_RETRY_MIN` 分（既定5）待ってやり直す。実測（room 555, gpt-6.2-astra medium）: 49秒・約6.8万トークン・728字。
 - **複数のルーム**（WebUI のルーム欄）: `719` のように1つ、`555-560` のように範囲、`555,568` のように並べて指定できる（組み合わせも可。範囲は100ルームまで）。複数なら「自動で次へ」の時に1試合ごとに次のルームへ進み、最後まで行ったら最初に戻る。次の試合の準備はそのルームでやり直す。試合中に変えたら次の試合から。
@@ -37,6 +39,7 @@ bun run typecheck        # 型エラー 0
 bun test                 # 単体テスト
 bun run verify-solver    # ソルバーが読み込めて合法手を返す
 bun src/cli.ts cells --room 719  # ルームのワープの実測とマスのメモ
+bun src/cli.ts sim --n 16        # 方策のシミュレータでの得点
 ```
 
 ソルバーを改修したら、必ず `bun src/cli.ts verify --run-dir var/runs/<runId>` で過去ログを再生して確かめてください。

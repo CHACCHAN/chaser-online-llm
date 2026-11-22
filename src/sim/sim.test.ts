@@ -96,3 +96,12 @@ describe("経路探索（planner）", () => {
     expect(r.score).toBeGreaterThan(0);
   });
 });
+
+test("地図には tiles.json の他のタイル（fill に無いもの）も混ざる", async () => {
+  const { fillWeights, loadProfile } = await import("./mapgen");
+  const p = { ...loadProfile(null), fill: { "2": 10 }, otherTiles: 0.3 };
+  const ids = fillWeights(p).map(([v]) => v);
+  expect(ids).toContain(9); // tiles.json にある得点アイテム
+  expect(ids.some((v) => v >= 1000 || (v >= 60 && v <= 63) || (v >= 20 && v <= 53))).toBe(false); // ワープ・ブラックスターは別に置く
+  expect(fillWeights({ ...p, otherTiles: 0 }).length).toBe(1);
+});

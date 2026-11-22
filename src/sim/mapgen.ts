@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { getRoomProfile, knownTotalTurns } from "../memory/knowledge-store";
+import { getRoomProfile, knownTotalTurns, loadTilesKnowledge } from "../memory/knowledge-store";
 import { getTileInfo } from "../memory/world-map";
 import { SIM_MAPS_DIR, SIM_PROFILES_PATH } from "../paths";
 import { isPortalTile, warpDelta } from "./engine";
@@ -22,6 +22,8 @@ export interface MapProfile {
   /** 本物の地図を使う割合（その部屋の本物が保存されている時） */
   realMapShare: number;
   fill: Record<string, number>;
+  /** knowledge/tiles.json にあって fill に無いタイル（新しく分かったアイテムなど）を混ぜる重み（0 なら混ぜない） */
+  otherTiles?: number;
   blobs: { tiles: number[]; count: Range; radius: Range; density: number }[];
   lines: { tiles: number[]; count: Range; length: Range; width: Range }[];
   warps: Range;
@@ -127,8 +129,22 @@ function placeStarts(rng: Rng, grid: number[][], n: number): { id: number; x: nu
 }
 
 /** 設定から新しい地図を作る */
-export function generateGrid(rng: Rng, profile: MapProfile, w: number, h: number): number[][] {
+/** 地図に置くタイルと重み。fill に加え、tiles.json の他のタイル（プレイヤー・ワープ・ブラックスターは別に置くので除く）も少し混ぜる */
+export function fillWeights(profile: MapProfile): (readonly [number, number])[] {
   const fill = Object.entries(profile.fill).map(([k, v]) => [Number(k), v] as const);
+  const other = profile.otherTiles ?? 0;
+  if (other <= 0) return fill;
+  const have = new Set(fill.map(([v]) => v));
+  for (const key of Object.keys(loadTilesKnowledge())) {
+    const v = Number(key);
+    if (!Number.isInteger(v) || v < 0 || v >= 1000 || have.has(v) || isPortalTile(v) || warpDelta(v) || (v >= 60 && v <= 63)) continue;
+    fill.push([v, other]);
+  }
+  return fill;
+}
+
+export function generateGrid(rng: Rng, profile: MapProfile, w: number, h: number): number[][] {
+  const fill = fillWeights(profile);
   const grid = Array.from({ length: h }, () => Array.from({ length: w }, () => pickWeighted(rng, fill)));
   const set = (x: number, y: number, v: number) => {
     if (x >= 0 && y >= 0 && x < w && y < h) grid[y]![x] = v;

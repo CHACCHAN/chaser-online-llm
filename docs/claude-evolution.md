@@ -102,8 +102,10 @@
    - 振り返りの前に `var/evolution-pending.json` と改修前のソルバー（`var/evolution-backup.ts`）を残し、終わったら消す。ハーネスの再起動・例外で途切れたら、次の起動（`bun run start` / `bun run play`）でリプレイ検証し直し、不合格なら改修前に戻す（`src/evolution/pending.ts`、`summary.json` の `evolution.interrupted`）。レビュー中に途切れた時は検証済みのソルバーへ戻す。
    - 試合中のサブは、試合が終わった直後（`runner.ts`、solver-snapshot を残す前）に止め、プロセスが終わるのを待ってから範囲外の編集を戻す（`MainAgent.stopSub`）。退避する「改修前のコード」にサブの編集は混ざらない。
 6. 最高得点を出した試合のソルバー（改修前の、実際に試合で使ったもの）は、試合直後に runner が `var/best-solvers/room<N>.ts` にコピーし、`room-profiles.json` を更新する（振り返りの有無・検証結果に関係なく）。
-7. `summary.json` に `evolution: { solverChanged, replayVerified, rolledBack }` を追記し、`evolution-report.md` を書く。
-8. **ハーネスへのレビュー**（`AGENT_REVIEW`）: 振り返りと同じ会話（経験を持ったまま）で、ハーネスの使いにくかった点・不具合らしきもの・欲しい機能・対応済みの確認を聞く（`reviewHarness`、上限 `AGENT_REVIEW_TIMEOUT_SEC`）。レビュー中の編集はソルバーも含めて元に戻す。返答は `agent/REVIEW.md`（新しい順、`AGENT_REVIEW_KEEP` 件まで）と `runs/<runId>/harness-review.md` に入る。開発者は開発前に読み、対応したら `[対応済み]` を付ける。
+7. **評価関数の比較**（[learning.md](learning.md)）: 振り返りの前に `src/solver/evaluator.ts` を `var/policy/evaluator-backup.ts` に控え、振り返りで変わっていたら、改修前と同じパラメータ・同じ地図（シミュレータ、`SIM_MAX_TURNS`）で比べる。弱くなった・読み込めない・例外なら元に戻す（`gateEvaluatorChange`）。振り返りには、今の方策のこのルームに似せた地図での成績（`benchRoom`）を渡す。
+8. `summary.json` に `evolution: { solverChanged, replayVerified, rolledBack, evaluatorChanged, evaluatorAccepted }` を追記し、`evolution-report.md` を書く。
+9. **方策の学習**（`runPostMatchTraining`、`TRAIN_AFTER_MATCH_MIN` 分、既定5。0 で無し）: 振り返りをしない時（`AGENT_EVOLVE=false`）も行う。はっきり良くなった時だけ `var/policy/params.json` に保存し、次の試合から使う。
+10. **ハーネスへのレビュー**（`AGENT_REVIEW`）: 振り返りと同じ会話（経験を持ったまま）で、ハーネスの使いにくかった点・不具合らしきもの・欲しい機能・対応済みの確認を聞く（`reviewHarness`、上限 `AGENT_REVIEW_TIMEOUT_SEC`）。レビュー中の編集はソルバーも含めて元に戻す。返答は `agent/REVIEW.md`（新しい順、`AGENT_REVIEW_KEEP` 件まで）と `runs/<runId>/harness-review.md` に入る。開発者は開発前に読み、対応したら `[対応済み]` を付ける。
 
 ## 6. リプレイ検証の意味 (`src/evolution/replay-verifier.ts`)
 

@@ -421,5 +421,15 @@ function scanOrFallback(
     if (unseen * ctx.params.scanValue > 40 && (!best || unseen > best.unseen)) best = { cmd, unseen };
   }
   if (best) return finish(best.cmd, `行ける目標が無い: ${best.cmd} で先を見る`, {}, { confidence: 0.5 });
+  // 分かっていて通れるマス（穴でもよい）へ一番安く動く。場外・未知のマスへは動かない（場外は -500）
+  let safest: { cmd: string; cost: number } | null = null;
+  for (const dir of DIRS) {
+    const cmd = `w${dir}`;
+    const [dx, dy] = DIR_DELTA[dir];
+    const li = board.idx(x + dx, y + dy);
+    if (li < 0 || !board.known[li] || board.cost[li] === INF) continue;
+    if (!safest || board.cost[li]! < safest.cost) safest = { cmd, cost: board.cost[li]! };
+  }
+  if (safest) return finish(safest.cmd, "行ける目標が無い: 分かっている安全なマスへ", {}, { confidence: 0.3, triggerHarness: true, triggerReason: "STUCK_IN_HOLES_NO_FRONTIER" });
   return finish(wm.pickSafeFallback("CMD2"), "行ける目標が無い: 安全な手", {}, { confidence: 0.3, triggerHarness: true, triggerReason: "STUCK_IN_HOLES_NO_FRONTIER" });
 }
