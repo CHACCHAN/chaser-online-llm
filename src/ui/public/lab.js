@@ -29,6 +29,7 @@
   /* ---------- 画面の切り替え ---------- */
   function setView(v) {
     L.view = v; save("view", v);
+    document.body.classList.toggle("view-lab", v === "lab");
     $(".work").hidden = v !== "match";
     $("#lab").hidden = v !== "lab";
     $("#viewMatch").setAttribute("aria-pressed", String(v === "match"));
@@ -71,6 +72,9 @@
     const play = p.play === "solver" ? "前のソルバー（active-solver.ts）" : "経路探索の方策（planner.ts＋evaluator.ts）";
     const bench = p.bench ? `${num(p.bench.previousPerTurn)} → <b>${num(p.bench.perTurn)}</b> 点/ターン（${p.bench.room === "all" ? "全部の地図" : `room ${esc(p.bench.room)} に似せた地図`}・${esc(p.bench.generations)} 世代）` : "-";
     $("#lpWhen").textContent = p.updatedAt ? when(p.updatedAt) : "";
+    $("#ltSummary").innerHTML = p.source === "train" && p.bench
+      ? `今の方策: <b class="mono">${num(p.bench.perTurn)}</b> 点/ターン <span class="faint">（${when(p.updatedAt)} に学習で保存）</span>`
+      : `今の方策: 初期値 <span class="faint">（学習で良くなるとここに成績が出ます）</span>`;
     $("#lpPolicy").innerHTML = `<dl class="kv">
       <dt>試合の手</dt><dd>${esc(play)}</dd>
       <dt>LLM</dt><dd>${p.async ? "裏で作戦を出す（手は待たない）" : "毎フェーズ返答を待つ（AGENT_ASYNC=false）"}</dd>
@@ -197,6 +201,8 @@
 
   async function runSim() {
     stopPlay();
+    // かんたん表示では毎回ちがう地図
+    if (document.body.classList.contains("simple")) seedEl.value = String(Math.floor(Math.random() * 1e6));
     const btn = $("#lsRun"); btn.disabled = true;
     $("#simInfo").innerHTML = `<span class="faint">地図を作って打たせています…</span>`;
     save("simSeed", seedEl.value);
@@ -246,7 +252,7 @@
     const score = fr.scores[me], others = fr.scores.filter((_, i) => i !== me);
     const kind = run.scenario.startsWith("real:") ? `本物の地図（${esc(run.scenario.slice(5))}）を少し変えたもの` : `作った地図 ${esc(run.scenario.replace(/^gen:/, ""))}`;
     $("#simInfo").innerHTML = `<div class="cmpline"><span>ターン <b class="mono">${fr.turn}</b>/${run.totalTurns}</span><span>得点 <b class="mono">${fmt(score)}</b></span>${others.length ? `<span class="dim">相手 ${others.map(fmt).join(" / ")}</span>` : ""}<span class="mono dim">${esc(fr.cmds.join(" "))}</span></div>
-      <div class="reason">${esc(fr.reason)}</div>
+      <div class="reason adv">${esc(fr.reason)}</div>
       <dl class="kv"><dt>地図</dt><dd>${kind}・${run.webMap ? "全体マップが見える" : "全体マップなし（見えたマスだけ）"}</dd>
       <dt>結果</dt><dd><b class="mono">${fmt(run.score)}</b> 点（${num(run.score / Math.max(1, run.totalTurns))} 点/ターン）・罠 ${run.hazardHits}・${run.msPerPhase} ms/手${run.policyErrors ? `・<span class="down">不正な手 ${run.policyErrors}</span>` : ""}</dd></dl>`;
   }
@@ -266,6 +272,7 @@
   function stopPlay() { L.playing = false; clearTimeout(L.timer); $("#lsPlay").textContent = "再生"; $("#lsPlay").setAttribute("aria-label", "再生"); }
   $("#lsPlay").addEventListener("click", () => (L.playing ? stopPlay() : startPlay()));
   $("#lsSlider").addEventListener("input", (e) => { stopPlay(); L.frame = Number(e.target.value); drawSim(); });
+  window.labOnMode = () => { if (L.view === "lab") { if (L.run) drawSim(); if (L.lab) drawCurve((L.lab.job || L.lab.last)?.generations || []); } };
   window.labOnTile = () => { if (L.view === "lab" && L.run && !L.playing) drawSim(); };
   {
     const cv = $("#simMap"), tip = $("#simTip");
