@@ -71,8 +71,9 @@
   /* ---------- 流れ（ヘッダ）・状態・統計 ---------- */
   function renderFlowLab() {
     const st = L.lab, job = st?.job, set = st?.set;
-    const cur = job ? (job.kind === "maps" ? "maps" : "train") : set?.after != null ? "stats" : set ? "train" : "maps";
-    const order = ["maps", "train", "stats"], ci = order.indexOf(cur);
+    const cur = job ? (job.kind === "maps" ? "maps" : job.coach?.state === "running" ? "coach" : "train") : set?.after != null ? "stats" : set ? "train" : "maps";
+    $("#labFlowCoach").hidden = !st?.coachEnabled;
+    const order = ["maps", "train", "coach", "stats"], ci = order.indexOf(cur);
     $$("#labFlow li").forEach((li) => {
       const i = order.indexOf(li.dataset.step), isCur = i === ci;
       li.classList.toggle("done", i < ci);
@@ -111,8 +112,28 @@
       } else s.push(`<span>今の方策 <b>${num(set.before)}</b> 点/ターン</span>`);
       parts.push(`<div class="stats">${s.join("")}</div>`);
     }
+    const coach = renderCoach(st);
+    if (coach) parts.push(coach);
     if (st.idle.enabled && st.idle.reason) parts.push(`<div class="msg">${esc(st.idle.reason)}</div>`);
     $("#labStatus").innerHTML = parts.join("");
+  }
+
+  /** 学習の LLM（学習が終わるたびに学習環境を直す）の動き・結果 */
+  const COACH_WHAT = { evaluator: "評価関数", profiles: "地図の作り方", trainConfig: "学習のやり方" };
+  const COACH_TRIGGER = { manual: "並べた地図の学習", idle: "空き時間の学習", "post-match": "試合後の学習" };
+  function renderCoach(st) {
+    const running = st.job?.coach?.state === "running";
+    if (running) {
+      const sec = (Date.now() - new Date(st.job.coach.startedAt)) / 1000;
+      return `<div class="coach"><div class="head"><b>学習の LLM が学習環境を直しています</b><span class="dim">${Math.floor(sec / 60)}分${Math.round(sec % 60)}秒</span></div><div class="msg">結果を読んで評価関数・地図の作り方・学習のやり方を直し、直したものは確かめて、弱くなっていれば戻します</div></div>`;
+    }
+    const c = st.lastCoach;
+    if (!c) return st.coachEnabled ? "" : `<div class="msg">学習の LLM は切っています（設定の「学習の LLM」）</div>`;
+    const when = new Date(c.finishedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    const status = { ok: "", timeout: "（時間切れ）", dead: "（止まった）", stopped: "（試合が始まったので止めて、改修は戻した）" }[c.status] ?? "";
+    const items = c.changes.map((x) => `<li class="${x.accepted ? "ok" : "ng"}">${esc(COACH_WHAT[x.what] || x.what)}: ${x.accepted ? "採用" : "戻した"} — ${esc(x.detail.replace(/^(採用|戻した)[:：]\s*/, ""))}</li>`);
+    if (c.reverted?.length) items.push(`<li class="ng">範囲の外の変更を戻した: ${esc(c.reverted.join("、"))}</li>`);
+    return `<div class="coach"><div class="head"><b>学習の LLM${esc(status)}</b><span class="dim">${esc(when)}・${esc(COACH_TRIGGER[c.trigger] || c.trigger)}の後・記録 ${esc(c.dir)}</span></div>${c.summary ? `<div class="say">${esc(c.summary)}</div>` : ""}${items.length ? `<ul>${items.join("")}</ul>` : `<div class="dim">直したものは無し</div>`}</div>`;
   }
 
   $("#lmMake").addEventListener("click", async () => {

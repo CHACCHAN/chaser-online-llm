@@ -29,6 +29,8 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 | 試合中の今 | `var/current/`（`snapshot.json`、`MEMO.md`、`ASK_SUB.md`） |
 | シミュレータの地図の作り方 | `knowledge/sim-profiles.json`（本物の地図 `var/maps/` と見比べて直してよい） |
 | 方策の学習の記録 | `var/policy/params.json`（今のパラメータ）、`var/policy/train-log.jsonl` |
+| 方策の学習のやり方 | `knowledge/train-config.json`（候補・地図・確かめの数、探す幅） |
+| 学習の LLM の記録 | `var/lab-coach/`（学習ごとの統計 report.md・再生 traces.json・結果 log.jsonl）。学習の LLM の手順は `agent/prompts/lab-coach.md` |
 | 作業用の置き場 | `var/tmp/`（試合の写しで試す時などはここに。`var/runs/` に置くと過去の試合として数えられる） |
 
 ## CLI（`bun src/cli.ts <サブコマンド>`）

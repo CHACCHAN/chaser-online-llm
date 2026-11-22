@@ -484,6 +484,11 @@ body.view-lab #labFlow { display: flex; }
 .lab-status { padding: 10px var(--s4); border-bottom: 1px solid var(--line2); display: grid; gap: 6px; font-size: var(--t-s); }
 .lab-status:empty { display: none; }
 .lab-status .msg { color: var(--ink2); overflow-wrap: anywhere; }
+.coach { border-left: 3px solid var(--main); padding: 4px 0 4px 10px; display: grid; gap: 4px; }
+.coach .head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.coach .say { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.coach ul { margin: 0; padding-left: 1.2em; display: grid; gap: 2px; }
+.coach .ok { color: var(--main); } .coach .ng { color: var(--ink2); }
 .lab-status .stats { display: flex; gap: 8px 20px; flex-wrap: wrap; align-items: baseline; }
 .lab-status .stats b { font-size: var(--t-l); font-family: var(--mono); }
 .progress { height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; border: 1px solid var(--line2); max-width: 480px; }
@@ -596,6 +601,7 @@ body.view-lab #labFlow { display: flex; }
     <ol class="flow" id="labFlow" aria-label="学習の流れ">
       <li data-step="maps"><span class="pip" aria-hidden="true"></span><span class="fl">地図</span></li>
       <li data-step="train"><span class="pip" aria-hidden="true"></span><span class="fl">学習</span></li>
+      <li data-step="coach" id="labFlowCoach"><span class="pip" aria-hidden="true"></span><span class="fl">学習の LLM</span></li>
       <li data-step="stats"><span class="pip" aria-hidden="true"></span><span class="fl">統計</span></li>
     </ol>
     <div class="util">

@@ -11,6 +11,7 @@ CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/
 - **試合中（メイン）**: 毎フェーズ使い捨ての `claude -p`（前の会話なし・ツールなし）。引き継ぎはメモ・直近の経過・全体マップ。`AGENT_ASYNC=true`（既定）では手を待たせず裏で考え、届いた `plan` を作戦にする（`agent/prompts/main-async.md`）。`false` なら `continue` / `plan` / `command` を返すのを待つ（`agent/prompts/main.md`）。直接指定が罠・通行不可ならハーネスが却下。
 - **試合中（サブ）**: メインの `delegate` を依頼ごとに新しいセッションで処理（`agent/prompts/sub.md`）。
 - **試合後**: メイン（ツールあり）が振り返り、`src/solver/evaluator.ts`（シミュレータで改修前と比べ、弱ければ戻す）か `active-solver.ts`（リプレイ検証に失敗したら自動ロールバック）を改修。続けてシミュレータ（`src/sim/`、地図は毎回ランダム＋本物の地図）で方策を学習する（`TRAIN_AFTER_MATCH_MIN`）。その後、ハーネスの使い勝手をレビューし、`agent/REVIEW.md` に追記される。
+- **学習の LLM**: 試合中の LLM とは別のセッション。学習が終わるたびに統計を読み、評価関数・地図の作り方（`knowledge/sim-profiles.json`）・学習のやり方（`knowledge/train-config.json`）を直す。直したものは確かめて、弱ければ／本物の地図から遠ざかれば／範囲外なら戻す（`src/sim/lab-coach.ts`、`agent/prompts/lab-coach.md`、`LAB_COACH`）。
 - **起動**: `bun run start`（Web ダッシュボード。ヘッダで「試合」と「学習」を切り替える。「学習」は地図を作って並べ（全部同時に再生）→ その地図で学習 → 地図ごとの学習前→後の統計。試合の合間も学習を続けられる `TRAIN_IDLE`）／ `bun run play --room N`（WebUI なしで1試合）。
 - 詳細仕様: [docs/README.md](docs/README.md)
 
