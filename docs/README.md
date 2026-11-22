@@ -4,7 +4,7 @@
 
 ## 読む順番
 
-1. [../README.md](../README.md): 起動方法と設定
+1. [setup.md](setup.md): 起動方法（Bun / Docker）・コマンド・設定・ディレクトリ
 2. [architecture.md](architecture.md): 構成（メイン／サブ／ソルバーの関係）と試合のライフサイクル
 3. [claude-evolution.md](claude-evolution.md): メインエージェント・サブ・試合後の進化（本プロジェクトの中核）
 4. [webui.md](webui.md): ダッシュボードの操作と API
