@@ -51,6 +51,9 @@ export interface LlmReply {
   model?: string;
   target?: [number, number];
   ms?: number | null;
+  /** 返答の note・文（600 字まで） */
+  note?: string;
+  text?: string;
 }
 
 export interface AfterStat {

@@ -86,7 +86,13 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
       content: `振り返りで変更できるのは evaluator.ts・knowledge/・agent/tools/ のみ:\n${reverted.join("\n")}`,
     });
   }
-  const outputText = res.status === "ok" ? res.text : `(${res.status}${res.status === "dead" ? `: ${res.error}` : ""})`;
+  // 時間切れでも、それまでに出た文とツールの回数は残す（REVIEW 2026-11-23: 振り返りの本文が残らない）
+  const outputText =
+    res.status === "ok"
+      ? res.text
+      : res.status === "timeout"
+        ? `(時間切れ ${Math.round(res.durationMs / 60000)} 分・ツール ${res.toolUses ?? 0} 回。AGENT_POST_MATCH_TIMEOUT_MIN を延ばすか、振り返りの範囲を絞る)\n\n${res.partial ? `時間切れまでに出た文（最後の部分）:\n${res.partial}` : "（文は出ていなかった）"}`
+        : `(${res.status}${res.status === "dead" ? `: ${res.error}` : ""})`;
 
   // 評価関数を改修していたら: 試合の記録の盤面で確かめ（例外・罠へ動く手が増えていないか）、シミュレータで改修前と比べる。どちらかに落ちたら戻す
   const evaluatorChanged = evaluatorBefore !== null && existsSync(EVALUATOR_PATH) && readFileSync(EVALUATOR_PATH, "utf-8") !== evaluatorBefore;
@@ -129,7 +135,7 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
       verification ? `- **Replay Verified**: ${verification.ok} (Turns Tested: ${verification.turnsTested}, hazards ${verification.baselineHazardLandings ?? "-"} → ${verification.hazardLandings ?? "-"})` : "",
       evaluatorGate?.comparison ? `- **Simulator**: ${evaluatorGate.comparison.a} → ${evaluatorGate.comparison.b} pts/turn, diff ${evaluatorGate.comparison.diff}±${evaluatorGate.comparison.se}` : evaluatorGate?.error ? `- **Simulator**: ${evaluatorGate.error}` : "",
       simInfo ? `\n${simInfo}\n` : "",
-      `- **Tokens Used (post-match)**: ${(mainAgent.usage().totalTokens - tokensBefore).toLocaleString()}`,
+      `- **Tokens Used (post-match)**: ${res.status === "timeout" ? "不明（時間切れで使用量が報告されない）" : (mainAgent.usage().totalTokens - tokensBefore).toLocaleString()}`,
       reverted.length > 0 ? `- **Reverted (out of scope)**: ${reverted.join(", ")}` : "",
       verification && verification.errors.length > 0 ? `- **Errors**: ${verification.errors.join("; ")}` : "",
       "",

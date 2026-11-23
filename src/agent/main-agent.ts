@@ -1,3 +1,4 @@
+import type { PlanInsight } from "../solver/planner";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { CMD1_COMMANDS, CMD1_SPECS, CMD2_COMMANDS, CMD2_SPECS, type WorldMap } from "../memory/world-map";
@@ -50,6 +51,15 @@ export interface MainDecision {
   planStatus?: "followed" | "no_route" | "other";
   /** LLM が選んだモデル（切り替える時だけ。知らない id は入らない） */
   model?: string;
+  /** LLM の返答の note と、返答の文（JSON の前の考え。後から理由を追えるように turns.jsonl に残す。600 字まで） */
+  llmNote?: string;
+  llmText?: string;
+}
+
+function median(xs: number[]): number | null {
+  if (xs.length < 3) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)]!;
 }
 
 /** 作戦目標に対して、送る手が向かっているか */
@@ -59,7 +69,9 @@ function planFollowStatus(worldMap: WorldMap, plan: AgentPlan | null, command: s
   if (step === null) return "no_route";
   if (step === "here") return "followed";
   const spec = (CMD1_SPECS as Record<string, { walkDir?: string }>)[command] ?? (CMD2_SPECS as Record<string, { walkDir?: string }>)[command];
-  return spec?.walkDir === step.dir ? "followed" : "other";
+  // 動かない手（見る・置く）は判定しない（CMD1 の gr* だけで「別の手」になっていた。REVIEW 2026-11-23）
+  if (!spec?.walkDir) return undefined;
+  return spec.walkDir === step.dir ? "followed" : "other";
 }
 
 const PLAN_STATUS_LABEL = { followed: "目標へ向かう手", no_route: "目標へ経路なし→方策の手", other: "方策は目標と別の手" } as const;
@@ -134,6 +146,10 @@ export class MainAgent {
   private estimatedTimeoutTokens = 0;
   private limitNotified = false;
   private hedgeCount = 0;
+  /** 直近の正常な返答にかかった時間（ヘッジを送るまでの待ち・返答が届くまでのターン数の見込み） */
+  private latencies: number[] = [];
+  /** 聞いたターンと時刻（1ターンにかかる時間の見込み） */
+  private turnClock: { turn: number; at: number }[] = [];
   /** 前のフェーズの座標系（ワープで変わったら作戦目標・メモの座標が無効になる） */
   private frameVersion: number | null = null;
   /** 準備で決めた試合の設定（最初のモデル・きっかけ・判断の目安） */
@@ -235,6 +251,11 @@ export class MainAgent {
    * 毎フェーズ呼ぶ: 座標系の変化・作戦目標への到達を反映する（考え中でも、手は今の作戦で決めるため）。
    */
   syncFrame(worldMap: WorldMap): void {
+    const turn = worldMap.getStats().turnsObserved;
+    if (this.turnClock[this.turnClock.length - 1]?.turn !== turn) {
+      this.turnClock.push({ turn, at: Date.now() });
+      if (this.turnClock.length > 30) this.turnClock.shift();
+    }
     this.checkFrameChange(worldMap);
     this.refreshPlanStatus(worldMap);
   }
@@ -422,6 +443,8 @@ export class MainAgent {
     call = winner;
     if (hedged) this.hedgeCount += 1;
     if (res.status === "ok") {
+      this.latencies.push(res.durationMs);
+      if (this.latencies.length > 9) this.latencies.shift();
       const u = call.usage;
       this.mainUsage = addUsage(this.mainUsage, u);
       this.lastCallInputTokens = u.inputTokens + u.cacheReadTokens + u.cacheCreationTokens;
@@ -451,8 +474,8 @@ export class MainAgent {
     if (reply.action === "plan" && reply.target) {
       this.plan = { target: reply.target, note: reply.note };
       decision = ctx.solve(this.plan);
-      const st = planFollowStatus(ctx.worldMap, this.plan, decision.command)!;
-      note = `作戦変更 → 目標 (${reply.target.join(",")})：${PLAN_STATUS_LABEL[st]}`;
+      const st = planFollowStatus(ctx.worldMap, this.plan, decision.command);
+      note = `作戦変更 → 目標 (${reply.target.join(",")})${st ? `：${PLAN_STATUS_LABEL[st]}` : ""}`;
     }
     const planStatus = planFollowStatus(ctx.worldMap, this.plan, decision.command);
     if (reply.action === "continue" && planStatus) note = `作戦どおり（${PLAN_STATUS_LABEL[planStatus]}）`;
@@ -466,6 +489,8 @@ export class MainAgent {
       durationMs: res.durationMs,
       note,
       ...(planStatus ? { planStatus } : {}),
+      ...(reply.note ? { llmNote: reply.note.slice(0, 600) } : {}),
+      llmText: res.text.slice(0, 600),
     };
   }
 
@@ -608,7 +633,11 @@ export class MainAgent {
    * 先に正常に返った方を使い、もう一方は止める（ゲートウェイの詰まりで 60 秒の時間切れになり、作戦・メモがまとめて失われていた）
    */
   private async askWithHedge(call: ClaudeSession, message: string): Promise<{ res: AskResult; winner: ClaudeSession; hedged: boolean }> {
-    const hedgeMs = numSetting("AGENT_HEDGE_SEC", { min: 0 }) * 1000;
+    // 2つ目を送るのは、ふだんの返答時間（直近の中央値の 1.3 倍）を過ぎても返らない時だけ（AGENT_HEDGE_SEC はその下限）。
+    // 既定の 15 秒がふだんの返答（40〜60 秒）より短く、ほぼ毎回二重に送っていた（REVIEW 2026-11-23）
+    const base = numSetting("AGENT_HEDGE_SEC", { min: 0 }) * 1000;
+    const med = median(this.latencies);
+    const hedgeMs = base <= 0 ? 0 : Math.max(base, med !== null ? med * 1.3 : 0);
     const first = call.ask(message, this.turnBudgetMs).then((res) => ({ res, s: call }));
     if (hedgeMs <= 0 || hedgeMs >= this.turnBudgetMs - 1000) {
       const r = await first;
@@ -634,7 +663,8 @@ export class MainAgent {
     const loser = winnerResult!.s === call ? second : call;
     // 負けた方は止める。入力は送信済みなので、直近の入力量で見積もって使用量に含める
     const est = this.lastCallInputTokens ?? 0;
-    this.mainUsage = addUsage(this.mainUsage, { ...emptyUsage(), calls: 1, inputTokens: est });
+    // 呼んだ回数には数えない（calls は返答を受けた問い合わせの数。二重に送った数は hedges）
+    this.mainUsage = addUsage(this.mainUsage, { ...emptyUsage(), inputTokens: est });
     loser.kill();
     void t0;
     return { res: winnerResult!.res, winner: winnerResult!.s, hedged: true };
@@ -643,6 +673,35 @@ export class MainAgent {
   private async writeSnapshot(worldMap: WorldMap): Promise<void> {
     mkdirSync(path.dirname(CURRENT_SNAPSHOT_PATH), { recursive: true });
     await Bun.write(CURRENT_SNAPSHOT_PATH, JSON.stringify(worldMap.toSnapshot()));
+  }
+
+  /**
+   * この返答が届くまでのターン数の見込みと、そのころの方策の予定の位置（REVIEW 2026-11-23: 返答は 8〜18 ターン後に届き、
+   * 聞いた時の位置で選んだ目標が届く頃には外れていた）。見込みが立たない（返答・ターンの記録が少ない）間は上限だけ出す
+   */
+  private delayLines(turn: number, solverNow: SolverDecision): string[] {
+    const lat = median(this.latencies);
+    const clock = this.turnClock;
+    const limit = `返答の上限は ${Math.round(this.turnBudgetMs / 1000)} 秒（超えた返答は捨てる）。`;
+    if (lat === null || clock.length < 2) return ["## 返答が届くまで", `${limit}考えている間も方策が手を打ち続けるので、返答が効くのは数ターン後になる。`];
+    const a = clock[0]!;
+    const b = clock[clock.length - 1]!;
+    const perTurn = b.turn > a.turn ? (b.at - a.at) / (b.turn - a.turn) : null;
+    if (!perTurn || perTurn <= 0) return ["## 返答が届くまで", `${limit}ふだんの返答は約 ${Math.round(lat / 1000)} 秒。`];
+    const k = Math.max(1, Math.round(lat / perTurn));
+    const route = (solverNow as SolverDecision & { insight?: PlanInsight }).insight?.route ?? [];
+    const done = route.filter((r) => r.steps <= k);
+    const next = route.find((r) => r.steps > k);
+    const where =
+      route.length === 0
+        ? "今の位置のあたり（予定の経路が無い）"
+        : done.length === 0
+          ? `最初の目標 (${route[0]!.x},${route[0]!.y}) へ向かう途中（あと約 ${route[0]!.steps - k} 歩）`
+          : `${done.map((r) => `(${r.x},${r.y})`).join("・")} を取り終えて${next ? `、次の (${next.x},${next.y}) へ向かう途中` : "、予定の経路の終わり"}`;
+    return [
+      "## 返答が届くまで",
+      `ふだんの返答は約 ${Math.round(lat / 1000)} 秒、1 ターンは約 ${(perTurn / 1000).toFixed(1)} 秒なので、この返答が効くのは約 ${k} ターン後（T${turn + k} ごろ）。そのころ方策は、予定どおりなら ${where}。目標はそれを見越して選ぶ（届いた時に経路が無い目標は使われない）。${limit}`,
+    ];
   }
 
   private buildTurnMessage(
@@ -658,6 +717,7 @@ export class MainAgent {
     ];
     const lines = [
       `[TURN ${ctx.turn}${this.totalTurns ? `/${this.totalTurns}（このターンを含め残り${Math.max(0, this.totalTurns - ctx.turn + 1)}）` : ""} / ${ctx.phase}]`,
+      ...this.delayLines(ctx.turn, solverNow),
       `## メモ（前のフェーズまでの自分から。${this.memo.length}/${numSetting("AGENT_MEMO_MAX_CHARS", { min: 100, integer: true })}字）`,
       this.memo ? this.memo.split("\n").map((l, i) => `${i + 1}| ${l}`).join("\n") : "(まだない)",
       "## 直近の経過",

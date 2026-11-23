@@ -435,6 +435,8 @@ export async function runAgentMatch(
                 ...(res.model ? { model: res.model } : {}),
                 ...(res.action === "plan" && mainAgent.currentPlan ? { target: mainAgent.currentPlan.target } : {}),
                 ms: res.durationMs,
+                ...(res.llmNote ? { note: res.llmNote } : {}),
+                ...(res.llmText ? { text: res.llmText } : {}),
               });
               asyncMainActions.push(`${askedAt}${by.length ? `[${by.join(",")}]` : ""}:${res.source === "main" ? res.action : `solver(${res.note})`}${res.planStatus ? `(${res.planStatus})` : ""}${res.model ? `(model→${res.model})` : ""}`);
               if (res.durationMs !== null) asyncMainLatency.push(res.durationMs);

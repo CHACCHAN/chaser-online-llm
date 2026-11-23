@@ -35,7 +35,8 @@ export type ClaudeContext = "in_game" | "evolution" | "system";
 
 export type AskResult =
   | { status: "ok"; text: string; durationMs: number }
-  | { status: "timeout"; durationMs: number }
+  /** partial = 時間切れまでに出た文（最後の 4000 字）、toolUses = 使ったツールの回数（振り返りの報告に残す） */
+  | { status: "timeout"; durationMs: number; partial?: string; toolUses?: number }
   | { status: "busy" }
   | { status: "dead"; error: string };
 
@@ -175,11 +176,17 @@ export class ClaudeSession {
     if (!this.options.quietLifecycle) this.emit("system", "Session Started", `model=${this.options.model ?? "default"} effort=${this.options.effort ?? "default"}`);
   }
 
+  /** 今の問い合わせで出た文・使ったツールの数（時間切れの時に返す） */
+  private partialText = "";
+  private partialTools = 0;
+
   ask(text: string, timeoutMs: number): Promise<AskResult> {
     if (!this.proc || this.deadReason) return Promise.resolve({ status: "dead", error: this.deadReason ?? "not started" });
     if (this.busyFlag) return Promise.resolve({ status: "busy" });
 
     this.busyFlag = true;
+    this.partialText = "";
+    this.partialTools = 0;
     const startedAt = Date.now();
     return new Promise<AskResult>((resolve) => {
       const entry = { resolve, startedAt, timedOut: false };
@@ -187,7 +194,7 @@ export class ClaudeSession {
       setTimeout(() => {
         if (this.pending === entry && !entry.timedOut) {
           entry.timedOut = true;
-          resolve({ status: "timeout", durationMs: Date.now() - startedAt });
+          resolve({ status: "timeout", durationMs: Date.now() - startedAt, ...(this.partialText ? { partial: this.partialText.slice(-4000) } : {}), toolUses: this.partialTools });
         }
       }, timeoutMs);
       try {
@@ -252,8 +259,11 @@ export class ClaudeSession {
     if (ev.type === "assistant" && Array.isArray(ev.message?.content)) {
       for (const b of ev.message.content) {
         if (b.type === "thinking" && b.thinking) this.emit("thinking", "Reasoning", b.thinking.slice(0, 2000));
-        else if (b.type === "text" && b.text) this.emit("text", "Claude", b.text.slice(0, 2000));
-        else if (b.type === "tool_use") {
+        else if (b.type === "text" && b.text) {
+          this.emit("text", "Claude", b.text.slice(0, 2000));
+          this.partialText = `${this.partialText}${this.partialText ? "\n" : ""}${b.text}`.slice(-8000);
+        } else if (b.type === "tool_use") {
+          this.partialTools += 1;
           this.emit("tool_use", b.name ?? "Tool", JSON.stringify(b.input ?? {}, null, 2).slice(0, 1200));
           logToolUse(this.context, this.options.label ?? null, b.name ?? "Tool", b.input);
         }
