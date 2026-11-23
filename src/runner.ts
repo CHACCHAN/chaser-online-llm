@@ -28,6 +28,23 @@ import { TRIGGER_DEFS } from "./agent/triggers";
 import type { AgentPlan, SolverDecision } from "./solver/types";
 import { type UiPredictionState, uiBus } from "./ui/event-bus";
 
+/** 当てた・当てられた1回分（Webマップの P:・PD: が変わったターン。Webマップは1ターンほど遅れる） */
+export interface HitEvent {
+  turn: number;
+  webTurn: number;
+  /** 当てた得点の増分（+）・当てられた得点の増分（−） */
+  put: number;
+  putDamage: number;
+  /** その前の自分の推定得点（当てられの大きさが得点に比例するかを見る） */
+  totalBefore: number;
+  /** その時の公式の合計（Webマップの T:） */
+  officialTotal: number | null;
+  /** 直近 3 ターンに見た敵 */
+  enemies: { x: number; y: number; tileId: number; lastSeenTurn: number }[];
+  self: [number, number];
+  model: string;
+}
+
 export interface TurnRecord {
   turn: number;
   cmd1: string | null;
@@ -67,6 +84,8 @@ export interface TurnRecord {
   landed?: Record<string, number>;
   /** このターンの間に届いた Webマップの公式のアイテム得点（届いた時だけ） */
   webScore?: ScoreSample;
+  /** このターンに Webマップで分かった、当てた（+）・当てられた（−）得点の増減（Webマップは1ターンほど遅れる） */
+  putChange?: { put: number; putDamage: number };
   /** ワープを踏んだ直後に Webマップでの位置合わせを待った時間（aligned=false なら間に合わなかった） */
   warpWaits?: { phase: string; ms: number; aligned: boolean }[];
   /** このターンの間の Webマップでの位置合わせ（あった時だけ。corrected があれば、それまでの位置合わせがずれていた） */
@@ -95,6 +114,8 @@ export interface RunSummary {
   matchPlan?: { model: string | null; triggers: unknown; guide: Record<string, string>; notes: string[] } | null;
   /** 試合中に LLM がモデルを切り替えた記録 */
   modelSwitches?: { turn: number; askedTurn?: number; phase: string; from: string; to: string; by: string[] }[];
+  /** 当てた・当てられた（Webマップの P:・PD: が変わったターン） */
+  hits?: HitEvent[];
   /** 試合の終わりに使っていたモデル */
   finalModel?: string;
   webMapDetected: boolean;
@@ -266,6 +287,8 @@ export async function runAgentMatch(
   const modelNameOf = (id: string) => modelNames[id] ?? id;
   let planner: PolicyFn = models.find((m) => m.id === policyModel)?.policy ?? makePlannerPolicy(matchParams, evaluator);
   const modelSwitches: { turn: number; askedTurn?: number; phase: string; from: string; to: string; by: string[] }[] = [];
+  /** 当てた・当てられた（Webマップの P:・PD: が変わったターン）。当てられた時点の自分の得点・近くの敵も残す（REVIEW 2026-11-23） */
+  const hitEvents: HitEvent[] = [];
   /** 今のターン（裏の問い合わせの返答が届いた時に、いつ効いたかを記録する） */
   let nowTurn = 0;
   const switchModel = (to: string, turn: number, phase: string, by: string[]) => {
@@ -565,6 +588,19 @@ export async function runAgentMatch(
       incCommand(cmd1);
       incCommand(cmd2);
 
+      // 当てた・当てられた（Webマップの P:・PD:）を推定得点に入れる。増減は行動ログ・記録に出す
+      const webNow = webMap.lastScore;
+      let putChange: { put: number; putDamage: number } | null = null;
+      if (webNow && (webNow.putPoint !== undefined || webNow.putDamage !== undefined)) {
+        const before = worldMap.getStats();
+        const put = webNow.putPoint ?? before.putPoint;
+        const dmg = webNow.putDamage ?? before.putDamage;
+        if (put !== before.putPoint || dmg !== before.putDamage) {
+          putChange = { put: put - before.putPoint, putDamage: dmg - before.putDamage };
+          hitEvents.push({ turn, webTurn: webNow.webTurn, put: putChange.put, putDamage: putChange.putDamage, totalBefore: before.estimatedTotalScore, officialTotal: webNow.totalScore ?? null, enemies: worldMap.getEnemySightings().filter((e) => e.lastSeenTurn >= turn - 3).map((e) => ({ x: e.x, y: e.y, tileId: e.tileId, lastSeenTurn: e.lastSeenTurn })), self: worldMap.getPosition(), model: activeModel });
+        }
+        worldMap.setPutScores(put, dmg);
+      }
       const curStats = worldMap.getStats();
       const landed: Record<string, number> = {};
       for (const [v, c] of Object.entries(curStats.pickups)) if (c > (pickupsBefore[v] ?? 0)) landed[v] = c - (pickupsBefore[v] ?? 0);
@@ -625,6 +661,7 @@ export async function runAgentMatch(
         webMapTurn: webMap.lastTurn,
         landed,
         ...(newScore ? { webScore: newScore } : {}),
+        ...(putChange ? { putChange } : {}),
         ...(newAlign ? { webAlign: newAlign } : {}),
         ...(warpWaits.length > 0 ? { warpWaits } : {}),
         positionAfter: worldMap.getPosition(),
@@ -735,6 +772,7 @@ export async function runAgentMatch(
     matchPlan: matchPlan ? { model: matchPlan.model, triggers: matchPlan.triggers, guide: matchPlan.guide, notes: matchPlan.notes } : null,
     modelSwitches,
     finalModel: activeModel,
+    hits: hitEvents,
     webMapDetected: webMap.available,
     webMapUrl: webMap.sourceUrl,
     turns: turnLogs.length,

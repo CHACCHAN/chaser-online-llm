@@ -192,6 +192,8 @@ input[type="checkbox"] { accent-color: var(--ink); width: 15px; height: 15px; ma
 .strip.err { background: var(--neg-bg); }
 .strip.err .status b { color: var(--neg); }
 .strip.err .status-msg { color: var(--ink); }
+.ev.hit-bad { color: var(--neg, #c0392b); border-color: currentColor; }
+.ev.hit-good { color: var(--pos, #1e8449); border-color: currentColor; }
 .bg-task { font-size: var(--t-xs); color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; flex: 0 1 auto; border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; display: inline-flex; gap: 6px; align-items: center; }
 .bg-task::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--main); animation: pulse 1.6s infinite; flex: none; }
 .prep-info { font-size: var(--t-s); color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34ch; flex: 0 1 auto; }
@@ -1669,7 +1671,7 @@ function renderActLog() {
   const turns = S.liveTurns || [];
   const names = S.st?.matchModel?.names || {};
   const mname = (id) => names[id] || id;
-  const isLlm = (t) => (t.triggers && t.triggers.length) || (t.llmReplies && t.llmReplies.length) || t.cmd1Source === "main" || t.cmd2Source === "main";
+  const isLlm = (t) => (t.triggers && t.triggers.length) || (t.llmReplies && t.llmReplies.length) || t.cmd1Source === "main" || t.cmd2Source === "main" || t.putChange;
   const list = S.af === "llm" ? turns.filter(isLlm) : turns;
   $("#actCount").textContent = turns.length ? (S.af === "llm" ? `${list.length} / ${turns.length}` : String(turns.length)) : "";
   $$("[data-af]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.af === S.af)));
@@ -1688,6 +1690,9 @@ function renderActLog() {
     const chips = [
       ...(t.triggers || []).map((f) => `<span class="ev trig" title="${esc(f.detail || "")}">${esc(f.label || f.id)}</span>`),
       ...(t.llmReplies || []).map((r) => `<span class="reply">LLM（T${r.asked} ${esc(r.phase)}${r.by?.length ? `・${esc(r.by.join(","))}` : ""}）: ${r.action === null ? "返答なし" : r.action === "plan" ? `目標${r.target ? ` (${r.target.join(",")})` : ""}` : "そのまま"}${r.model ? `・モデル→${esc(mname(r.model))}` : ""}</span>`),
+      t.putChange?.put ? `<span class="ev hit-good" title="Webマップの P:（1ターンほど遅れて届く）">当てた +${fmt(t.putChange.put)}</span>` : "",
+      t.putChange?.putDamage ? `<span class="ev hit-bad" title="Webマップの PD:（1ターンほど遅れて届く）">当てられた ${fmt(t.putChange.putDamage)}</span>` : "",
+      /^p[udlr][23]/.test(t.cmd2 || "") ? `<span class="ev">置いた</span>` : "",
       t.usedFallback ? `<span class="ev">安全手</span>` : "",
       t.gameOverReason ? `<span class="ev">終了: ${esc(String(t.gameOverReason).slice(0, 40))}</span>` : "",
     ].filter(Boolean).join("");

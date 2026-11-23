@@ -6,7 +6,8 @@ import type { RunSummary, TurnRecord } from "../runner";
 
 export interface DiagnosticIssue {
   code:
-    | "HOLE_REVISIT_LOSS"
+    | "HOLE_STEPS"
+    | "PUT_DAMAGE_TAKEN"
     | "HIGH_FATIGUE_OVERUSE"
     | "MISSED_DOUBLE_COLLECT"
     | "CMD1_HOLE_STEP"
@@ -46,13 +47,14 @@ export function analyzeMatchRun(
   if (summary.holeRevisits > 0) {
     const holeLoss = summary.holeRevisits * 20;
     issues.push({
-      code: "HOLE_REVISIT_LOSS",
-      severity: holeLoss >= 200 ? "high" : "medium",
+      // 穴は踏むたびに -20（初めてでも同じ。「再訪の損」ではない。REVIEW 2026-11-23）
+      code: "HOLE_STEPS",
+      severity: holeLoss >= 600 ? "medium" : "low",
       estimatedPointLoss: holeLoss,
-      description: `Stepped on visited hole (0) tiles ${summary.holeRevisits} times (-20 pts each + action cost).`,
+      description: `Stepped on hole (0) tiles ${summary.holeRevisits} times (-20 pts every time, first visit included).`,
       affectedTurns: [],
       recommendation:
-        "In src/solver/evaluator.ts, raise the cost of stepping on visited holes (tile 0) so the planner prefers one-way sweeps through unexplored frontiers.",
+        "Holes cost -20 on every step. Avoid them only when the detour costs less (a detour step is -10 action plus a turn of time); compare with holeCost in src/solver/evaluator.ts.",
     });
   }
 
@@ -126,12 +128,14 @@ export function analyzeMatchRun(
     itemPointDiff = official.itemPoint - summary.estimatedScore.estimatedItemScore;
     actionPointDiff = official.actionPoint - summary.estimatedScore.estimatedActionScore;
 
+    // アイテムと動作の内訳がずれても、合計が合っていれば（Webマップの遅れ・ワープの着地の数え方）見かけの差
+    const splitOnly = Math.abs(itemPointDiff + actionPointDiff) <= 50;
     if (Math.abs(itemPointDiff) > 5) {
       issues.push({
         code: "ITEM_SCORE_DISCREPANCY",
-        severity: Math.abs(itemPointDiff) >= 100 ? "high" : "medium",
+        severity: splitOnly ? "low" : Math.abs(itemPointDiff) >= 100 ? "high" : "medium",
         estimatedPointLoss: Math.max(0, -itemPointDiff),
-        description: `Official itemPoint (${official.itemPoint}) differs from estimatedItemScore (${summary.estimatedScore.estimatedItemScore}) by ${itemPointDiff}.`,
+        description: `Official itemPoint (${official.itemPoint}) differs from estimatedItemScore (${summary.estimatedScore.estimatedItemScore}) by ${itemPointDiff}.${splitOnly ? ` Item+action together differ by only ${itemPointDiff + actionPointDiff}, so this is a split difference (web map lag / warp landing counted differently), not lost points.` : ""}`,
         affectedTurns: [],
         recommendation:
           "Check pickups for unknown tiles or warp landing score discrepancies and update knowledge/tiles.json.",
@@ -197,6 +201,23 @@ export function analyzeMatchRun(
     });
   }
 
+  // 当てられた（Webマップの PD: が変わったターン）。当てられた時点の得点・近くの敵を添える（REVIEW 2026-11-23: diagnosis に当てられの行が無かった）
+  const hits = (summary.hits ?? []).filter((h) => h.putDamage < 0);
+  if (hits.length > 0) {
+    const loss = -hits.reduce((a, h) => a + h.putDamage, 0);
+    issues.push({
+      code: "PUT_DAMAGE_TAKEN",
+      severity: loss >= 5000 ? "high" : "medium",
+      estimatedPointLoss: loss,
+      description: `Hit by an enemy put ${hits.length} time(s), ${-loss} in total: ${hits
+        .map((h) => `T${h.turn} ${h.putDamage} (our est. total before ${h.totalBefore}, ratio ${h.totalBefore > 0 ? (-h.putDamage / h.totalBefore).toFixed(2) : "-"}; model ${h.model}; self (${h.self.join(",")}); enemies ${h.enemies.map((e) => `${e.tileId}@(${e.x},${e.y}) T${e.lastSeenTurn}`).join(" ") || "none seen in the last 3 turns"})`)
+        .join("; ")}. The web map arrives about 1 turn late, so the hit happened at or just before that turn.`,
+      affectedTurns: hits.map((h) => h.turn),
+      recommendation:
+        "Read turns.jsonl around these turns (enemy sightings, model, reasons). Raise dangerCost / dangerDist in src/solver/evaluator.ts, switch to a cautious model earlier (match plan modelRules), or lower the enemyNear trigger distance threshold so the LLM is asked before the enemy is adjacent.",
+    });
+  }
+
   const profile = getRoomProfile(summary.room);
   profile.matchesPlayed += 1;
   if (official && official.acquiredTurns + official.remainingTurns > 0) {
@@ -220,7 +241,7 @@ export function analyzeMatchRun(
   const mdLines: string[] = [
     `# Match Root-Cause Diagnosis (${summary.runId})`,
     `- **Room**: ${summary.room} | **Turns**: ${summary.turns} | **Game Over Reason**: ${summary.gameOverReason ?? "N/A"}`,
-    `- **Official Total Score**: ${official?.totalScore ?? "N/A"} (Action: ${official?.actionPoint ?? "N/A"}, Item: ${official?.itemPoint ?? "N/A"}, Put: ${official?.putPoint ?? "N/A"})`,
+    `- **Official Total Score**: ${official?.totalScore ?? "N/A"} (Action: ${official?.actionPoint ?? "N/A"}, Item: ${official?.itemPoint ?? "N/A"}, Put: ${official?.putPoint ?? "N/A"}, Put Damage: ${official?.putDamage ?? "N/A"})`,
     `- **Estimated Total Score**: ${summary.estimatedScore.estimatedTotalScore} (Action: ${summary.estimatedScore.estimatedActionScore}, Item: ${summary.estimatedScore.estimatedItemScore})`,
     `- **Room High Score So Far**: ${profile.highScore ?? "N/A"} (Best Run: ${profile.bestRunId ?? "N/A"})`,
     `- **Pickups**: ${JSON.stringify(summary.tilePickups)}`,

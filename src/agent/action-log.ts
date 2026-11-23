@@ -18,7 +18,21 @@ export interface ActionLogTurn {
   llmReplies?: { asked: number; phase: string; by: string[]; action: string | null; model?: string; target?: [number, number] }[];
   model?: string;
   gameOverReason?: string | null;
+  /** Webマップで分かった、当てた（+）・当てられた（−）得点の増減 */
+  putChange?: { put: number; putDamage: number };
 }
+
+/** 当てた・当てられたの文（Webマップは1ターンほど遅れて届くので「Webマップで」） */
+export function putChangeText(c: { put: number; putDamage: number } | undefined): string {
+  if (!c) return "";
+  const parts: string[] = [];
+  if (c.put) parts.push(`当てた ${c.put > 0 ? "+" : ""}${c.put}`);
+  if (c.putDamage) parts.push(`当てられた ${c.putDamage}`);
+  return parts.length ? `${parts.join("・")}（Webマップで分かった分）` : "";
+}
+
+/** 置く手（敵に当たれば得点を奪える） */
+export const isPutCommand = (cmd: string | null | undefined) => !!cmd && /^p[udlr][23]/.test(cmd);
 
 const short = (s: string | null | undefined, n: number) => {
   const t = (s ?? "").replace(/\s+/g, " ").trim();
@@ -39,6 +53,9 @@ export function formatActionLine(t: ActionLogTurn, prevEst: number, modelName: (
     short(t.cmd2Reason ?? t.cmd1Reason, 70),
   ];
   const extra: string[] = [];
+  const put = putChangeText(t.putChange);
+  if (put) extra.push(put);
+  if (isPutCommand(t.cmd2)) extra.push(`置いた（${t.cmd2}）`);
   if (t.triggers?.length) extra.push(`きっかけ: ${t.triggers.map((f) => f.label ?? f.id).join("・")}`);
   for (const r of t.llmReplies ?? []) {
     const what = r.action === null ? "返答なし" : r.action === "plan" ? `目標${r.target ? ` (${r.target.join(",")})` : ""}` : "そのまま";

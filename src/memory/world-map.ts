@@ -357,6 +357,9 @@ export class WorldMap {
 
   private actionScore = 0;
   private itemScore = 0;
+  /** 公式のプット得点・プットダメージ（Webマップの P:・PD:。ハーネスは当てた・当てられたを自分では数えられないので、Webマップの値を使う） */
+  private putPoint = 0;
+  private putDamage = 0;
   private holeRevisits = 0;
   private hazardHits = 0;
   private pickups: Record<string, number> = {};
@@ -883,12 +886,23 @@ export class WorldMap {
     return false;
   }
 
+  /**
+   * Webマップの公式のプット得点・プットダメージを推定得点に入れる（REVIEW 2026-11-23: 推定得点が当てられを含まず、公式より約 14.5k 高かった）。
+   * Webマップは1ターンほど遅れて届く
+   */
+  public setPutScores(putPoint: number, putDamage: number): void {
+    if (Number.isFinite(putPoint)) this.putPoint = putPoint;
+    if (Number.isFinite(putDamage)) this.putDamage = putDamage;
+  }
+
   public getStats() {
     return {
       turnsObserved: this.lastTurn,
-      estimatedTotalScore: 300 * this.lastTurn + this.actionScore + this.itemScore,
+      estimatedTotalScore: 300 * this.lastTurn + this.actionScore + this.itemScore + this.putPoint + this.putDamage,
       estimatedActionScore: this.actionScore,
       estimatedItemScore: this.itemScore,
+      putPoint: this.putPoint,
+      putDamage: this.putDamage,
       holeRevisits: this.holeRevisits,
       hazardHits: this.hazardHits,
       pickups: { ...this.pickups },
