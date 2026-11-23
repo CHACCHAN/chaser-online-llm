@@ -19,7 +19,7 @@ import { saveRealMap } from "./sim/mapgen";
 import * as defaultEvaluator from "./solver/evaluator";
 import type { EvaluatorModule } from "./solver/planner";
 import { type FiredTrigger, loadAllModels, TriggerMonitor, votersFrom } from "./agent/triggers";
-import { summarizeMatchPlan } from "./agent/match-plan";
+import { ModelRuleWatcher, summarizeMatchPlan } from "./agent/match-plan";
 import { formatActionLine } from "./agent/action-log";
 import { type LlmReply, renderTriggerReview, reviewRun } from "./agent/trigger-review";
 import { getStyle, loadModelParams, playModelId } from "./solver/models";
@@ -301,6 +301,24 @@ export async function runAgentMatch(
     triggerMonitor.setVoters(votersFrom(models, to));
     uiBus.patchState({ matchModel: { id: to, name: m.name, callMode: mainAgent ? callMode : null, switches: modelSwitches.length, names: modelNames } });
   };
+  // モデルの切り替えの決まり（作戦方針から準備の LLM が決める）。LLM の返事を待たずにハーネスが切り替える
+  const ruleWatcher = new ModelRuleWatcher(matchPlan?.modelRules ?? null);
+  const applyModelRules = (wm: WorldMap, turn: number, phase: "CMD1" | "CMD2") => {
+    if (!matchPlan?.modelRules) return;
+    const [px, py] = wm.getPosition();
+    let nearest: number | null = null;
+    for (const e of wm.getEnemySightings()) {
+      if (e.lastSeenTurn < turn - 1) continue;
+      const d = Math.abs(e.x - px) + Math.abs(e.y - py);
+      if (nearest === null || d < nearest) nearest = d;
+    }
+    const hit = ruleWatcher.check(turn, nearest);
+    if (!hit || hit.model === activeModel) return;
+    const from = activeModel;
+    nowTurn = turn;
+    switchModel(hit.model, turn, phase, [`rule:${hit.rule}`]);
+    uiBus.pushClaudeEvent({ context: "in_game", kind: "system", title: `モデルを切り替えた（決まり）`, content: `T${turn} ${phase}: ${modelNameOf(from)} → ${modelNameOf(hit.model)}（${hit.detail}。作戦方針から準備で決めた切り替えの決まり）` });
+  };
   // 試合中の LLM を呼ぶきっかけ（準備の LLM が選んだ設定）。ほかの特性のモデルにも同じ盤面で手を出させて比べる
   const triggerMonitor = new TriggerMonitor(votersFrom(models, policyModel), matchPlan?.triggers);
   /** trigger = きっかけが鳴った時だけ LLM を呼ぶ / every = 毎回（前の動き） */
@@ -405,6 +423,11 @@ export async function runAgentMatch(
       /** ソルバー候補 → メインエージェント判断 → 送信 → 観測反映 を1フェーズ分行う */
       const playPhase = async (phase: "CMD1" | "CMD2"): Promise<{ command: string; reason: string; values: number[] | null; source: "main" | "solver" }> => {
         uiBus.patchState({ turn, phase: phase === "CMD1" ? "READY_CMD1" : "READY_CMD2" });
+        try {
+          applyModelRules(worldMap, turn, phase);
+        } catch (err) {
+          logger.warn({ turn, phase, err: err instanceof Error ? err.message : String(err) }, "切り替えの決まりを見られなかった");
+        }
         const solverDecision: SolverDecision =
           decideSolver(worldMap, phase, turn, mainAgent?.currentPlan ?? null);
         const events = evaluateBreakpoint({ turn, worldMap, solverDecision }).reasons;

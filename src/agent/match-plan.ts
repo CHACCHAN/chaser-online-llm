@@ -12,21 +12,36 @@ export interface MatchPlan {
   triggers: TriggerConfig;
   /** きっかけごとの判断の目安（試合中の LLM に、そのきっかけで呼んだ時に見せる） */
   guide: Partial<Record<TriggerId, string>>;
+  /**
+   * モデルの切り替えの決まり（作戦方針の「敵がいる時はハンター」など）。ハーネスが毎フェーズ見て、LLM の返事を待たずに切り替える
+   * （返事は 40〜90 秒遅れるので、敵が近づいてから聞いても間に合わない。room460 T62）。切り替えるのは状態が変わった時だけ
+   * （敵が radius マス以内に入った時・離れて afterTurns ターン経った時）。その間は LLM の切り替えも効く
+   */
+  modelRules: ModelRules | null;
   /** 読んだ時に直したこと（範囲に収めた・知らないモデルなど） */
   notes: string[];
 }
 
+export interface ModelRules {
+  /** 直近（このターンか前のターン）に見た敵が radius マス（上下左右の歩数）以内に入ったら model にする */
+  enemy?: { model: string; radius: number };
+  /** 敵が radius の外に出て afterTurns ターン経ったら model にする */
+  calm?: { model: string; afterTurns: number };
+}
+
+export const MODEL_RULE_LIMITS = { radius: { min: 1, max: 12, default: 5 }, afterTurns: { min: 1, max: 50, default: 5 } } as const;
+
 const GUIDE_MAX = 160;
 
 export function defaultMatchPlan(): MatchPlan {
-  return { model: null, triggers: defaultTriggerConfig(), guide: {}, notes: [] };
+  return { model: null, triggers: defaultTriggerConfig(), guide: {}, modelRules: null, notes: [] };
 }
 
 /** 準備の返答の JSON（memo と同じ行）から試合の設定を読む */
 export function parseMatchPlan(obj: unknown): MatchPlan {
   const plan = defaultMatchPlan();
   if (!obj || typeof obj !== "object") return plan;
-  const o = obj as { model?: unknown; triggers?: unknown; guide?: unknown };
+  const o = obj as { model?: unknown; triggers?: unknown; guide?: unknown; modelRules?: unknown };
   if (typeof o.model === "string" && o.model.trim()) {
     const id = o.model.trim();
     if (loadStyles().some((s) => s.id === id)) plan.model = id;
@@ -47,7 +62,72 @@ export function parseMatchPlan(obj: unknown): MatchPlan {
       plan.guide[d.id] = v.trim().slice(0, GUIDE_MAX);
     }
   }
+  if (o.modelRules && typeof o.modelRules === "object") plan.modelRules = parseModelRules(o.modelRules as Record<string, unknown>, plan.notes);
   return plan;
+}
+
+const clampInt = (v: unknown, lim: { min: number; max: number; default: number }) =>
+  typeof v === "number" && Number.isFinite(v) ? Math.min(lim.max, Math.max(lim.min, Math.round(v))) : lim.default;
+
+function parseModelRules(o: Record<string, unknown>, notes: string[]): ModelRules | null {
+  const known = (id: unknown): string | null => {
+    if (typeof id !== "string" || !id.trim()) return null;
+    if (loadStyles().some((s) => s.id === id.trim())) return id.trim();
+    notes.push(`切り替えの決まりの知らないモデル "${String(id).slice(0, 32)}" は使わなかった`);
+    return null;
+  };
+  const out: ModelRules = {};
+  const e = o.enemy as { model?: unknown; radius?: unknown } | undefined;
+  const em = e && typeof e === "object" ? known(e.model) : null;
+  if (em) out.enemy = { model: em, radius: clampInt(e!.radius, MODEL_RULE_LIMITS.radius) };
+  const c = o.calm as { model?: unknown; afterTurns?: unknown } | undefined;
+  const cm = c && typeof c === "object" ? known(c.model) : null;
+  if (cm) out.calm = { model: cm, afterTurns: clampInt(c!.afterTurns, MODEL_RULE_LIMITS.afterTurns) };
+  return out.enemy || out.calm ? out : null;
+}
+
+/** 切り替えの決まりの文（画面・試合中の LLM に見せる） */
+export function modelRulesText(r: ModelRules | null): string {
+  if (!r) return "";
+  return [
+    r.enemy ? `敵が ${r.enemy.radius} マス以内に入ったら ${getStyle(r.enemy.model).name}` : "",
+    r.calm ? `敵が離れて ${r.calm.afterTurns} ターン経ったら ${getStyle(r.calm.model).name}` : "",
+  ]
+    .filter(Boolean)
+    .join("、");
+}
+
+/**
+ * 切り替えの決まりを毎フェーズ見る。状態が変わった時だけ切り替えるモデルを返す（ずっと同じ状態の間は返さないので、LLM の切り替えを上書きしない）
+ */
+export class ModelRuleWatcher {
+  private inRange = false;
+  private lastInRangeTurn: number | null = null;
+  private calmApplied = true;
+  constructor(private readonly rules: ModelRules | null) {}
+
+  /** nearest = 直近に見た一番近い敵までの歩数（いなければ null） */
+  check(turn: number, nearest: number | null): { model: string; rule: "enemy" | "calm"; detail: string } | null {
+    const r = this.rules;
+    if (!r) return null;
+    const radius = r.enemy?.radius ?? MODEL_RULE_LIMITS.radius.default;
+    const now = nearest !== null && nearest <= radius;
+    if (now) {
+      this.lastInRangeTurn = turn;
+      this.calmApplied = false;
+      if (!this.inRange) {
+        this.inRange = true;
+        if (r.enemy) return { model: r.enemy.model, rule: "enemy", detail: `敵まで ${nearest} マス（${radius} マス以内）` };
+      }
+      return null;
+    }
+    this.inRange = false;
+    if (r.calm && !this.calmApplied && this.lastInRangeTurn !== null && turn - this.lastInRangeTurn >= r.calm.afterTurns) {
+      this.calmApplied = true;
+      return { model: r.calm.model, rule: "calm", detail: `敵が ${radius} マスの外に出て ${turn - this.lastInRangeTurn} ターン` };
+    }
+    return null;
+  }
 }
 
 /** 画面・記録に出す1行 */
@@ -59,6 +139,7 @@ export function summarizeMatchPlan(plan: MatchPlan): string {
     off.length ? `使わない: ${off.join("・")}` : "",
     changed.length ? `しきい値: ${changed.join("・")}` : "",
     Object.keys(plan.guide).length ? `目安 ${Object.keys(plan.guide).length} 件` : "",
+    plan.modelRules ? `切り替え: ${modelRulesText(plan.modelRules)}` : "",
   ]
     .filter(Boolean)
     .join(" / ");
