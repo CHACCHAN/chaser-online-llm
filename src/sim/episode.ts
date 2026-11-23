@@ -4,6 +4,7 @@ import { makePlannerPolicy, type PolicyFn } from "../solver/policy";
 import { runBotTurn, runHunterTurn } from "./bots";
 import { DEFAULT_RULES, SimGame, totalScore, type SimPlayer } from "./engine";
 import { type Scenario, simTurns } from "./mapgen";
+import type { TacticsStats } from "../solver/tactics-runtime";
 import { opponentLabel, type OpponentSetup } from "./opponents";
 
 /**
@@ -34,6 +35,8 @@ export interface EpisodeResult {
   won: boolean | null;
   /** 再生用の記録（trace を頼んだ時だけ） */
   trace?: EpisodeTrace;
+  /** 作戦スクリプトで打った時の回数（切り替え・例外など） */
+  tactics?: TacticsStats;
 }
 
 /** 1試合の再生用の記録（WebUI の「学習」画面で再生する） */

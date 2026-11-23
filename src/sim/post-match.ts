@@ -1,10 +1,11 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { EVALUATOR_PATH, POLICY_DIR, PROJECT_ROOT } from "../paths";
+import { EVALUATOR_PATH, POLICY_DIR, PROJECT_ROOT, TACTICS_PATH } from "../paths";
 import { getSetting, numSetting } from "../settings";
-import { loadModelParams, playModelId } from "../solver/models";
+import { loadModelParams, loadStyles, playModelId } from "../solver/models";
+import { loadOpponentPlan } from "./opponents";
 import { SimPool } from "./pool";
-import { comparePolicies, evaluatePolicy, makeEvalSet, notWorse, perTurn, type Comparison } from "./train";
+import { compareResults, comparePolicies, evaluatePolicy, makeEvalSet, notWorse, perTurn, type Comparison } from "./train";
 
 /**
  * 試合後のシミュレータの仕事（evolve.ts から呼ぶ）。
@@ -39,6 +40,57 @@ export function backupEvaluator(code: string | null): void {
 
 export function clearEvaluatorBackup(): void {
   rmSync(EVALUATOR_BACKUP_PATH, { force: true });
+  rmSync(TACTICS_BACKUP_PATH, { force: true });
+}
+
+/** 作戦スクリプト: 改修前の写し（比べる用）と、振り返りの途中で止まった時に戻すための控え */
+const TACTICS_BASELINE_PATH = path.join(POLICY_DIR, "tactics-baseline.ts");
+export const TACTICS_BACKUP_PATH = path.join(POLICY_DIR, "tactics-backup.ts");
+
+export function backupTactics(code: string | null): void {
+  if (code === null) return;
+  mkdirSync(POLICY_DIR, { recursive: true });
+  writeFileSync(TACTICS_BACKUP_PATH, code);
+}
+
+/** 作戦スクリプトで打つ時の、特性ごとのモデルのパラメータと最初のモデル（試合と同じ） */
+export function tacticsSpec(file?: string): { models: Record<string, ReturnType<typeof loadModelParams>>; start: string; path?: string } {
+  return { models: Object.fromEntries(loadStyles().map((s) => [s.id, loadModelParams(s.id)])), start: playModelId(), ...(file ? { path: file } : {}) };
+}
+
+export interface TacticsGateResult extends GateResult {
+  /** 改修後の作戦スクリプトの例外・おかしな値の回数（全部の地図の合計）・モデルの切り替えの回数 */
+  errors: number;
+  switches: { before: number; after: number };
+  lastError: string | null;
+}
+
+/**
+ * 作戦スクリプトの改修を確かめる: 同じ地図・同じ相手で、改修前と改修後の作戦スクリプトでモデルを切り替えながら打たせて比べる。
+ * 例外・おかしな値が1回でもあるか、はっきり悪くなっていれば不合格
+ */
+export async function gateTacticsChange(baselineCode: string, room: number | null, n = 24): Promise<TacticsGateResult> {
+  writeImportable(baselineCode, TACTICS_BASELINE_PATH);
+  const pool = new SimPool(workers());
+  try {
+    const set = makeEvalSet(710_000, n, room, maxTurns());
+    const opponents = loadOpponentPlan();
+    const params = loadModelParams(playModelId());
+    const [ra, rb] = await Promise.all([
+      evaluatePolicy(pool, { kind: "planner", params, tactics: tacticsSpec(TACTICS_BASELINE_PATH) }, set, opponents),
+      evaluatePolicy(pool, { kind: "planner", params, tactics: tacticsSpec(TACTICS_PATH) }, set, opponents),
+    ]);
+    const c = compareResults(ra, rb);
+    const errors = rb.reduce((a, r) => a + (r.tactics?.errors ?? 0), 0);
+    const switches = { before: ra.reduce((a, r) => a + (r.tactics?.switches ?? 0), 0), after: rb.reduce((a, r) => a + (r.tactics?.switches ?? 0), 0) };
+    const lastError = rb.map((r) => r.tactics?.lastError).find((e) => !!e) ?? null;
+    return { ok: errors === 0 && notWorse(c), comparison: c, error: errors > 0 ? `作戦スクリプトの例外・おかしな値 ${errors} 回（${lastError}）` : null, errors, switches, lastError };
+  } catch (err) {
+    return { ok: false, comparison: null, error: err instanceof Error ? err.message.split("\n")[0]! : String(err), errors: 0, switches: { before: 0, after: 0 }, lastError: null };
+  } finally {
+    pool.close();
+    rmSync(TACTICS_BASELINE_PATH, { force: true });
+  }
 }
 
 export interface GateResult {

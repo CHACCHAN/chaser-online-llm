@@ -48,6 +48,9 @@ async function main() {
       policy: { type: "string" },
       model: { type: "string" },
       evaluator: { type: "string" },
+      tactics: { type: "string" },
+      file: { type: "string" },
+      init: { type: "boolean" },
       "dry-run": { type: "boolean" },
       workers: { type: "string" },
     },
@@ -133,6 +136,14 @@ async function main() {
     return;
   }
 
+  if (subcommand === "tactics-check") {
+    // 作戦スクリプトを短い試合で動かす（例外・おかしな値・時間）。止まらない時に備えて、呼ぶ側（checkTacticsFile）は別プロセスで時間を切る
+    const { checkTacticsInProcess } = await import("./sim/tactics-check");
+    const res = await checkTacticsInProcess(typeof values.file === "string" ? path.resolve(values.file) : undefined);
+    console.log(JSON.stringify(res, null, 2));
+    if (!res.ok) process.exit(1);
+    return;
+  }
   if (subcommand === "verify") {
     const runDir =
       typeof values["run-dir"] === "string"
@@ -242,12 +253,13 @@ async function main() {
       "Subcommands:",
       "  reference    [--query <q>] [--tile <id>]       Consult official CHaserOnline reference & tile DB",
       "  upsert-tile  --id <id> --score <s> ...         Register or update tile knowledge in tiles.json",
+      "  tactics-check [--file <tactics.ts>]           作戦スクリプトを短い試合で動かして確かめる（例外・おかしな値・1フェーズの時間）",
       "  verify       [--run-dir <dir>]                 試合の記録（turns.jsonl）の盤面で方策（planner＋evaluator.ts）を動かして確かめる",
       "  tile-scores  --run-dir <dir>  Tile scores measured from the official item score on the Web map (read only)",
       "  cells        --room <n> [--near x,y] [--radius r] [--abs]  Known warps and cell notes (coords = snapshot pos frame unless --abs)",
       "  cell-note    --room <n> --x <x> --y <y> --note <text> [--abs]  Add a note to a cell (empty --note clears)",
       "  sim          [--room <n>] [--n 8] [--seed s] [--max-turns t] [--model id]  シミュレータで試合をして成績を出す（--model: knowledge/styles.json のモデル。既定は試合で使うモデル）",
-      "  bench        [--room <n>] [--n 24] [--evaluator <file> [--init]] [--model id]  シミュレータで比べる（--evaluator: 今の evaluator.ts とそのファイル。両方とも学習したパラメータで打つので init の違いは出ない。--init: それぞれの init で打つ。無し: 既定のパラメータと学習したパラメータ）",
+      "  bench        [--room <n>] [--n 24] [--evaluator <file> [--init] | --tactics <file>] [--model id]  シミュレータで比べる（--evaluator: 今の evaluator.ts とそのファイル。両方とも学習したパラメータで打つので init の違いは出ない。--init: それぞれの init で打つ。--tactics: 今の tactics.ts とそのファイルを、モデルを切り替えながら比べる。無し: 既定のパラメータと学習したパラメータ）",
       "  gap          [--room <n>] [--n 12] [--model id]  理論値の目安（全部のワープの行き先を知っている・深く考える方策）との差を同じ地図・同じ相手で測る",
       "  triggers     [--room <n>] [--n 12] [--model id]  シミュレータで、試合中の LLM を呼ぶきっかけが 100 ターンあたり何回鳴るかを数える",
       "  train        [--room <n>] [--minutes 5] [--dry-run] [--model id]  そのモデルのパラメータを、そのモデルの目的で学習する（はっきり良くなった時だけ保存）",
@@ -281,6 +293,21 @@ async function simCommands(sub: "sim" | "bench" | "train" | "gap", v: Record<str
       const g = await measureGap(pool, set.seeds.map((seed, i) => ({ seed, room: set.rooms[i] ?? null, maxTurns: set.maxTurns, policy: { kind: "planner" as const, params } })));
       console.log(`モデル ${model}・${g.maps.length} 地図`);
       for (const line of renderGap(g)) console.log(line);
+      return;
+    }
+    if (sub === "bench" && typeof v.tactics === "string") {
+      // 作戦スクリプトの比べ方: 今の tactics.ts とそのファイルで、モデルを切り替えながら同じ地図・同じ相手で打たせる
+      const { tacticsSpec } = await import("./sim/post-match");
+      const { TACTICS_PATH } = await import("./paths");
+      const set = makeEvalSet(Number(v.seed ?? 500_000), Number(v.n ?? 24), room, maxTurns);
+      const params = loadModelParams(model);
+      const [ra, rb] = await Promise.all([
+        evaluatePolicy(pool, { kind: "planner", params, tactics: tacticsSpec(TACTICS_PATH) }, set),
+        evaluatePolicy(pool, { kind: "planner", params, tactics: tacticsSpec(path.resolve(v.tactics)) }, set),
+      ]);
+      const { compareResults } = await import("./sim/train");
+      const sum = (rs: typeof ra, k: "switches" | "errors") => rs.reduce((a, r) => a + (r.tactics?.[k] ?? 0), 0);
+      console.log(JSON.stringify({ policyA: "今の tactics.ts", policyB: v.tactics, ...compareResults(ra, rb), switches: [sum(ra, "switches"), sum(rb, "switches")], errors: [sum(ra, "errors"), sum(rb, "errors")] }, null, 2));
       return;
     }
     if (sub === "bench") {

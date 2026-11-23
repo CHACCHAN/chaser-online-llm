@@ -3,6 +3,9 @@ import * as defaultEvaluator from "../solver/evaluator";
 import { PARAM_SPACE } from "../solver/evaluator";
 import type { EvaluatorModule } from "../solver/planner";
 import { makePlannerPolicy, type PolicyFn } from "../solver/policy";
+import { loadStyles } from "../solver/models";
+import * as defaultTactics from "../solver/tactics";
+import { makeTacticalPolicy, type TacticsModule } from "../solver/tactics-runtime";
 import { runEpisode } from "./episode";
 import { makeScenario } from "./mapgen";
 import { assignOpponents, loadOpponentPlan } from "./opponents";
@@ -19,6 +22,17 @@ const load = <T>(file: string): Promise<T> => {
 
 async function policyFor(job: EpisodeJob): Promise<PolicyFn> {
   const ev = job.policy.evaluatorPath ? await load<EvaluatorModule>(job.policy.evaluatorPath) : defaultEvaluator;
+  const t = job.policy.tactics;
+  if (t) {
+    // 作戦スクリプトがモデルを切り替えながら打つ（LLM はいない）
+    const mod = t.path ? await load<TacticsModule>(t.path) : defaultTactics;
+    const styles = loadStyles();
+    const models = Object.entries(t.models).map(([id, params]) => {
+      const st = styles.find((s) => s.id === id);
+      return { id, name: st?.name ?? id, trait: st?.trait ?? "", policy: makePlannerPolicy(params, ev) };
+    });
+    return makeTacticalPolicy(models, t.start, mod);
+  }
   const params = job.oracle === "deep" ? { ...job.policy.params, candidates: PARAM_SPACE.candidates.max, depth: PARAM_SPACE.depth.max, beam: PARAM_SPACE.beam.max } : job.policy.params;
   return makePlannerPolicy(params, ev);
 }
@@ -29,7 +43,10 @@ self.onmessage = async (ev: MessageEvent<EpisodeJob>) => {
     const made = makeScenario(makeRng(job.seed), { room: job.room });
     const scn = job.oracle ? { ...made, webMap: true } : made;
     const opponents = assignOpponents(job.seed, scn.starts.length - 1, job.opponents ?? loadOpponentPlan());
-    const result = runEpisode(scn, await policyFor(job), { ...(job.maxTurns ? { maxTurns: job.maxTurns } : {}), trace: job.trace === true, opponents, knowAllWarps: !!job.oracle });
+    const policy = await policyFor(job);
+    const result = runEpisode(scn, policy, { ...(job.maxTurns ? { maxTurns: job.maxTurns } : {}), trace: job.trace === true, opponents, knowAllWarps: !!job.oracle });
+    const rt = (policy as Partial<ReturnType<typeof makeTacticalPolicy>>).tactics;
+    if (rt) result.tactics = { ...rt.stats };
     postMessage({ ok: true, result });
   } catch (err) {
     postMessage({ ok: false, error: err instanceof Error ? `${err.message}\n${err.stack ?? ""}` : String(err) });

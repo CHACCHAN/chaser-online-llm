@@ -11,7 +11,18 @@ export interface EpisodeJob {
   maxTurns: number | null;
   /** 再生用の記録を返す */
   trace?: boolean;
-  policy: { kind: "planner"; params: Params; /** 別の評価関数のファイル（エージェントの改修前後を比べる時） */ evaluatorPath?: string };
+  policy: {
+    kind: "planner";
+    params: Params;
+    /** 別の評価関数のファイル（エージェントの改修前後を比べる時） */
+    evaluatorPath?: string;
+    /**
+     * 作戦スクリプトでモデルを切り替えながら打つ（試合と同じ。src/solver/tactics-runtime.ts の makeTacticalPolicy）。
+     * models = 特性ごとのモデルのパラメータ、start = 最初のモデル、path = 別の作戦スクリプトのファイル（無ければ今の tactics.ts）。
+     * params は使わない
+     */
+    tactics?: { models: Record<string, Params>; start: string; path?: string };
+  };
   /**
    * 理論値の目安（同じ地図・同じ相手）: know = 全体マップを毎ターン見て、全部のワープの行き先を知っている。
    * deep = それに加えて、目標の数・先読み・ビーム幅を一番大きくする
