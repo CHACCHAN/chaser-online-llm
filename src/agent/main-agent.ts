@@ -553,7 +553,17 @@ export class MainAgent {
     return true;
   }
 
+  /**
+   * 試合後の仕事を裏に渡した時に呼ぶ。次の試合の LLM が画面のメモ・使用量と var/current/MEMO.md を使うので、
+   * この試合の LLM（裏の振り返り）はもう書かない
+   */
+  detachFromUi(): void {
+    this.detached = true;
+  }
+  private detached = false;
+
   private publish(): void {
+    if (this.detached) return;
     uiBus.patchState({ agentUsage: this.usage(), agentMemo: this.memo });
     try {
       mkdirSync(path.dirname(CURRENT_MEMO_PATH), { recursive: true });

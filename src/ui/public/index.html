@@ -192,6 +192,8 @@ input[type="checkbox"] { accent-color: var(--ink); width: 15px; height: 15px; ma
 .strip.err { background: var(--neg-bg); }
 .strip.err .status b { color: var(--neg); }
 .strip.err .status-msg { color: var(--ink); }
+.bg-task { font-size: var(--t-xs); color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40ch; flex: 0 1 auto; border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; display: inline-flex; gap: 6px; align-items: center; }
+.bg-task::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--main); animation: pulse 1.6s infinite; flex: none; }
 .prep-info { font-size: var(--t-s); color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34ch; flex: 0 1 auto; }
 .prep-info:empty { display: none; }
 .prep-info.ok { color: var(--pos); }
@@ -698,6 +700,7 @@ details.coach > summary .more { text-decoration: underline; }
 
   <div class="strip">
     <div class="status" role="status" aria-live="polite"><span class="dot" id="dot" aria-hidden="true"></span><b id="statusLabel">接続中</b><span class="status-msg" id="statusMsg"></span></div>
+    <span class="bg-task" id="bgTask" hidden></span>
     <span class="prep-info" id="prepInfo"></span>
     <div class="readout" aria-label="スコア">
       <div class="ro lead"><span>推定スコア</span><b id="nEst" class="num">0</b></div>
@@ -1122,6 +1125,14 @@ function render_status() {
   // サーバの文言は「待機中 — …」のように状態名から始まることが多いので、重ねて出さない
   const msg = String(st.statusMessage || "").replace(new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[—–-]\\s*`), "");
   $("#statusMsg").textContent = msg; $("#statusMsg").title = st.statusMessage || "";
+  // 裏で進めている試合後の仕事（POST_MATCH_BACKGROUND）
+  const bg = st.background, el = $("#bgTask");
+  el.hidden = !bg;
+  if (bg) {
+    const min = Math.floor((Date.now() - new Date(bg.startedAt)) / 60000);
+    el.textContent = `裏で: ${bg.message.replace(/^Run \S+:?\s*/, "")}${bg.pending ? `（ほかに ${bg.pending} 試合分が待っている）` : ""}`;
+    el.title = `試合後の仕事（${bg.runId} の後）を裏で進めています。${min} 分前から。振り返り・ハーネスのレビュー・方策の学習・学習の LLM を順に行い、直したものは次の次の試合から効きます（POST_MATCH_BACKGROUND）`;
+  }
 }
 function renderHead() {
   const st = S.st; if (!st) return;

@@ -320,6 +320,7 @@ async function main() {
       const background = boolSetting("POST_MATCH_BACKGROUND") && !uiBus.getState().stopRequested;
       if (background) {
         handedOff = true;
+        mainAgent?.detachFromUi();
         enqueuePostMatch(summary.runId, async (say) => {
           try {
             await postWork(say);
