@@ -9,6 +9,7 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 |---|---|
 | `knowledge/`、`agent/tools/` | 試合後の振り返り・学習の LLM |
 | `src/solver/evaluator.ts`（方策の評価関数） | 試合後の振り返り・学習の LLM。試合の記録の盤面での確かめと、改修前と同じ地図での比較に落ちたら自動で元に戻る |
+| `src/solver/tactics.ts`（作戦スクリプト） | 試合後の振り返り・学習の LLM。試合中は毎フェーズの初めにハーネスが `onPhase` を呼び、返した行動（モデルの切り替え・目標・通らないマス・LLM を呼ぶか）をすぐ反映する（LLM の返事を待たない）。シミュレータでも同じように動く。状態・行動の形は `src/solver/tactics-runtime.ts`。**作戦方針（`agent/policies/`）はここに書き表す。** 短い試合での確かめ（例外・1フェーズ 50ms まで）と、改修前と同じ地図での比較に落ちたら自動で元に戻る |
 | `var/` | 読むだけ（CLI の `cell-note` での記録は可） |
 | それ以外（`src/`、`agent/prompts/`、`agent/policies/`、`agent/AGENTS.md`、`agent/REVIEW.md`、`CLAUDE.md`、`.env`） | 禁止（自動で元に戻される） |
 
@@ -43,7 +44,8 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 | `cell-note` | `--room N --x X --y Y --note "…"` | マスにメモを足す（`--note ""` で消す。1件160字まで） |
 | `verify` | `--run-dir var/runs/<runId>` | その試合の盤面で今の方策を動かして確かめる（例外・合法手。その試合の評価関数と比べて罠へ動く手が増えていないか） |
 | `sim` | `--room N --n 8 [--seed S --max-turns 200]` | 方策をシミュレータで打たせる（地図は毎回ランダム＋本物の地図） |
-| `bench` | `--room N --n 24 [--evaluator <file> [--init]]` | 同じ地図で比べる（`--evaluator` で今の evaluator.ts と別ファイル。改修を試す時は `var/tmp/` に写して直し、ここで比べる。両方とも学習したパラメータで打つので、**`PARAM_SPACE` の `init` だけを変えた改修は差が出ない**（試合でも学習した値が使われる）。init を比べるなら `--init`。無しなら既定のパラメータと学習したパラメータ） |
+| `tactics-check` | `[--file <tactics.ts>]` | 作戦スクリプトを短い試合で動かす（例外・おかしな値・1フェーズの時間・切り替えの回数） |
+| `bench` | `--room N --n 24 [--evaluator <file> [--init] \| --tactics <file>]` | 同じ地図で比べる（`--evaluator` で今の evaluator.ts と別ファイル。改修を試す時は `var/tmp/` に写して直し、ここで比べる。両方とも学習したパラメータで打つので、**`PARAM_SPACE` の `init` だけを変えた改修は差が出ない**（試合でも学習した値が使われる）。init を比べるなら `--init`。`--tactics` で今の tactics.ts と別ファイルを、モデルを切り替えながら比べる。無しなら既定のパラメータと学習したパラメータ） |
 | `train` | `--room N --minutes 5 [--dry-run]` | 方策のパラメータを学習（はっきり良くなった時だけ保存） |
 
 `cells`・`cell-note` の座標は `var/current/snapshot.json` の `position` と同じ座標（今の区画）。ハーネスが絶対座標（Webマップの列・行）に直して保存するので、試合をまたいで使える。過去の試合のログ（`turns.jsonl` の `globalPositionAfter` など）の絶対座標を使う時は `--abs`。Webマップで位置合わせできていない時は記録できない。

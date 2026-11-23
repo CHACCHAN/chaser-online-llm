@@ -237,9 +237,7 @@ export class MainAgent {
       rules ? `\n## ゲームのルール（knowledge/official-rules.md）\n${rules.replace(/^# .*\n/, "")}` : "",
       commands ? `\n## ゲームのコマンド（knowledge/commands.md）\n${commands.replace(/^# .*\n/, "")}` : "",
       `\n## この試合\n${this.matchInfo}`,
-      prepared?.plan?.modelRules
-        ? `\nモデルの切り替えの決まり（準備で作戦方針から決めた。ハーネスがあなたの返事を待たずに切り替える）: ${modelRulesText(prepared.plan.modelRules)}。決まりが切り替えた後も、あなたは model で切り替えてよい（決まりは状態が変わった時だけ動く）`
-        : "",
+      `\n作戦スクリプト（src/solver/tactics.ts）が毎フェーズ動き、あなたの返事を待たずにモデルを切り替え・目標を出すことがある。あなたを呼ぶのもスクリプトが決める（鳴ったきっかけを見て）。あなたが model・plan を返せば、それも効く（あなたの目標はスクリプトの目標より先）。${prepared?.plan?.modelRules ? `準備で決めた切り替えの決まり: ${modelRulesText(prepared.plan.modelRules)}` : ""}`,
       policy ? `\n${policy}` : "",
       strategy ? `\n## 戦略知識（knowledge/strategy.md）\n${strategy}` : "",
     ].join("\n");
@@ -357,8 +355,9 @@ export class MainAgent {
         "1. ログを読み、失点原因と、作戦（plan）が効いた/効かなかった場面を特定する。",
         "2. 方策を改修する。手を決めたのは方策（経路探索 planner.ts ＋ 評価関数 evaluator.ts ＋ 学習したパラメータ）。",
         "   - `src/solver/evaluator.ts`（マスの価値・通る手間・学習する重み PARAM_SPACE）を直す。探索の仕組み（planner.ts）は変えられない。新しい特徴は PARAM_SPACE に重みを足して使う（学習が値を合わせる）。`bun src/cli.ts bench --room <n> --evaluator <改修前の写し>` で比べられる。改修後はハーネスが、この試合の記録の盤面で確かめ（例外・罠へ動く手が増えていないか）、シミュレータで改修前と比べ、どちらかに落ちたら元に戻す。",
+        "   - `src/solver/tactics.ts`（作戦スクリプト）: 試合中に毎フェーズ、モデルの切り替え・目標・通らないマス・LLM を呼ぶか（askLlm）を決める。あなた（試合中の LLM）の返事は 40〜90 秒遅れるので、すぐ反応すべきこと（敵が近い時のモデル・逃げる・追う）と作戦方針はここに書く。turns.jsonl の tactics・summary.json の tactics（切り替え・例外の回数）を見る。`bun src/cli.ts bench --room <n> --tactics <改修前の写し>` で比べ、`bun src/cli.ts tactics-check` で確かめる。改修後はハーネスが短い試合とシミュレータで改修前と比べ、落ちたら元に戻す。",
         "   - シミュレータが本物と違う所（地図の作り方 `knowledge/sim-profiles.json`、ルール）に気づいたら、sim-profiles.json を直すか報告に書く。",
-        "   編集してよいのは evaluator.ts・knowledge/・agent/tools/ だけ。それ以外（runner.ts・planner.ts 等のハーネス）を変えても自動で元に戻される。ハーネスの改善案は報告に書くこと。",
+        "   編集してよいのは evaluator.ts・tactics.ts・knowledge/・agent/tools/ だけ。それ以外（runner.ts・planner.ts 等のハーネス）を変えても自動で元に戻される。ハーネスの改善案は報告に書くこと。",
         "3. 判明したタイル得点・ルールは knowledge/ に残す。",
         `4. \`bun src/cli.ts verify --run-dir ${runDir}\` と \`bun run typecheck\` が通るまで直す。`,
         "5. 最後に、何を変えたかを3行以内で報告する。",

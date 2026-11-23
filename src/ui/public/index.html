@@ -1671,7 +1671,7 @@ function renderActLog() {
   const turns = S.liveTurns || [];
   const names = S.st?.matchModel?.names || {};
   const mname = (id) => names[id] || id;
-  const isLlm = (t) => (t.triggers && t.triggers.length) || (t.llmReplies && t.llmReplies.length) || t.cmd1Source === "main" || t.cmd2Source === "main" || t.putChange;
+  const isLlm = (t) => (t.triggers && t.triggers.length) || (t.llmReplies && t.llmReplies.length) || t.cmd1Source === "main" || t.cmd2Source === "main" || t.putChange || Object.values(t.tactics || {}).some((a) => a.model || a.target);
   const list = S.af === "llm" ? turns.filter(isLlm) : turns;
   $("#actCount").textContent = turns.length ? (S.af === "llm" ? `${list.length} / ${turns.length}` : String(turns.length)) : "";
   $$("[data-af]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.af === S.af)));
@@ -1693,6 +1693,10 @@ function renderActLog() {
       t.putChange?.put ? `<span class="ev hit-good" title="Webマップの P:（1ターンほど遅れて届く）">当てた +${fmt(t.putChange.put)}</span>` : "",
       t.putChange?.putDamage ? `<span class="ev hit-bad" title="Webマップの PD:（1ターンほど遅れて届く）">当てられた ${fmt(t.putChange.putDamage)}</span>` : "",
       /^p[udlr][23]/.test(t.cmd2 || "") ? `<span class="ev">置いた</span>` : "",
+      ...Object.entries(t.tactics || {}).flatMap(([ph, a]) => [
+        a.model ? `<span class="ev" title="作戦スクリプト（src/solver/tactics.ts）が ${ph} で切り替えた${a.note ? `: ${esc(a.note)}` : ""}">作戦: ${esc(mname(a.model))}</span>` : "",
+        a.target ? `<span class="ev" title="作戦スクリプトの目標${a.note ? `: ${esc(a.note)}` : ""}">作戦: 目標 (${a.target.join(",")})</span>` : "",
+      ]),
       t.usedFallback ? `<span class="ev">安全手</span>` : "",
       t.gameOverReason ? `<span class="ev">終了: ${esc(String(t.gameOverReason).slice(0, 40))}</span>` : "",
     ].filter(Boolean).join("");

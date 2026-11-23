@@ -20,6 +20,26 @@ export interface ActionLogTurn {
   gameOverReason?: string | null;
   /** Webマップで分かった、当てた（+）・当てられた（−）得点の増減 */
   putChange?: { put: number; putDamage: number };
+  /** 作戦スクリプトの行動（何かしたフェーズだけ） */
+  tactics?: Partial<Record<"CMD1" | "CMD2", { model?: string; target?: [number, number] | null; avoid?: [number, number][]; askLlm?: string | null; note?: string }>>;
+}
+
+/** 作戦スクリプトの行動の文 */
+export function tacticsText(t: ActionLogTurn["tactics"], modelName: (id: string) => string = (id) => id): string {
+  if (!t) return "";
+  const parts: string[] = [];
+  for (const [phase, a] of Object.entries(t)) {
+    if (!a) continue;
+    const xs = [
+      a.model ? `モデル→${modelName(a.model)}` : "",
+      a.target ? `目標 (${a.target.join(",")})` : "",
+      a.avoid?.length ? `避ける ${a.avoid.length} マス` : "",
+      a.askLlm ? `LLM を呼ぶ（${a.askLlm.slice(0, 40)}）` : "",
+      a.note && (a.model || a.target) ? a.note.slice(0, 40) : "",
+    ].filter(Boolean);
+    if (xs.length) parts.push(`${phase} ${xs.join("・")}`);
+  }
+  return parts.length ? `作戦スクリプト: ${parts.join(" / ")}` : "";
 }
 
 /** 当てた・当てられたの文（Webマップは1ターンほど遅れて届くので「Webマップで」） */
@@ -56,6 +76,8 @@ export function formatActionLine(t: ActionLogTurn, prevEst: number, modelName: (
   const put = putChangeText(t.putChange);
   if (put) extra.push(put);
   if (isPutCommand(t.cmd2)) extra.push(`置いた（${t.cmd2}）`);
+  const tac = tacticsText(t.tactics, modelName);
+  if (tac) extra.push(tac);
   if (t.triggers?.length) extra.push(`きっかけ: ${t.triggers.map((f) => f.label ?? f.id).join("・")}`);
   for (const r of t.llmReplies ?? []) {
     const what =
