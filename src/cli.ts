@@ -236,7 +236,7 @@ async function main() {
       "  cells        --room <n> [--near x,y] [--radius r] [--abs]  Known warps and cell notes (coords = snapshot pos frame unless --abs)",
       "  cell-note    --room <n> --x <x> --y <y> --note <text> [--abs]  Add a note to a cell (empty --note clears)",
       "  sim          [--room <n>] [--n 8] [--seed s] [--max-turns t] [--model id]  シミュレータで試合をして成績を出す（--model: knowledge/styles.json のモデル。既定は試合で使うモデル）",
-      "  bench        [--room <n>] [--n 24] [--evaluator <file>] [--model id]  シミュレータで比べる（--evaluator: 今の evaluator.ts とそのファイル。無し: 既定のパラメータと学習したパラメータ）",
+      "  bench        [--room <n>] [--n 24] [--evaluator <file> [--init]] [--model id]  シミュレータで比べる（--evaluator: 今の evaluator.ts とそのファイル。両方とも学習したパラメータで打つので init の違いは出ない。--init: それぞれの init で打つ。無し: 既定のパラメータと学習したパラメータ）",
       "  gap          [--room <n>] [--n 12] [--model id]  理論値の目安（全部のワープの行き先を知っている・深く考える方策）との差を同じ地図・同じ相手で測る",
       "  triggers     [--room <n>] [--n 12] [--model id]  シミュレータで、試合中の LLM を呼ぶきっかけが 100 ターンあたり何回鳴るかを数える",
       "  train        [--room <n>] [--minutes 5] [--dry-run] [--model id]  そのモデルのパラメータを、そのモデルの目的で学習する（はっきり良くなった時だけ保存）",
@@ -276,12 +276,24 @@ async function simCommands(sub: "sim" | "bench" | "train" | "gap", v: Record<str
       const n = Number(v.n ?? 24);
       const set = makeEvalSet(Number(v.seed ?? 500_000), n, room, maxTurns);
       const params = loadModelParams(model);
-      const { defaultParams } = await import("./solver/evaluator");
-      const a = typeof v.evaluator === "string" ? ({ kind: "planner", params } as const) : ({ kind: "planner", params: defaultParams() } as const);
-      const b = typeof v.evaluator === "string" ? ({ kind: "planner", params, evaluatorPath: path.resolve(v.evaluator) } as const) : ({ kind: "planner", params } as const);
+      const { defaultParams, PARAM_SPACE } = await import("./solver/evaluator");
+      // --init: 両方とも学習したパラメータではなく、それぞれの評価関数の init で打たせる（init だけの改修を比べる。REVIEW 2026-11-23）
+      const useInit = v.init === true || v.init === "true";
+      let otherInit: Record<string, number> | null = null;
+      let initNote: string | null = null;
+      if (typeof v.evaluator === "string") {
+        const other = (await import(path.resolve(v.evaluator))) as { defaultParams?: () => Record<string, number>; PARAM_SPACE?: Record<string, { init: number }> };
+        otherInit = other.defaultParams?.() ?? null;
+        const changed = Object.keys({ ...PARAM_SPACE, ...(other.PARAM_SPACE ?? {}) }).filter((k) => (PARAM_SPACE as Record<string, { init: number }>)[k]?.init !== other.PARAM_SPACE?.[k]?.init);
+        const trained = changed.filter((k) => k in (PARAM_SPACE as object) && k in (other.PARAM_SPACE ?? {}));
+        if (!useInit && trained.length > 0)
+          initNote = `init が違うパラメータ ${trained.join(", ")} は、学習したパラメータ（モデル ${model}）の値で上書きされるので、この比べ方には出ない。init の違いを比べるなら --init（両方ともそれぞれの init で打たせる）。試合の挙動を変えたいなら、学習したパラメータの値（var/policy/）か範囲 min/max を直す`;
+      }
+      const a = typeof v.evaluator === "string" ? ({ kind: "planner", params: useInit ? defaultParams() : params } as const) : ({ kind: "planner", params: defaultParams() } as const);
+      const b = typeof v.evaluator === "string" ? ({ kind: "planner", params: useInit && otherInit ? (otherInit as typeof params) : params, evaluatorPath: path.resolve(v.evaluator) } as const) : ({ kind: "planner", params } as const);
       const c = await comparePolicies(pool, a, b, set);
-      const label = typeof v.evaluator === "string" ? ["今の evaluator.ts", v.evaluator] : ["既定のパラメータ", `学習したパラメータ（モデル ${model}）`];
-      console.log(JSON.stringify({ policyA: label[0], policyB: label[1], ...c }, null, 2));
+      const label = typeof v.evaluator === "string" ? [`今の evaluator.ts${useInit ? "（init）" : ""}`, `${v.evaluator}${useInit ? "（init）" : ""}`] : ["既定のパラメータ", `学習したパラメータ（モデル ${model}）`];
+      console.log(JSON.stringify({ policyA: label[0], policyB: label[1], ...c, ...(initNote ? { note: initNote } : {}) }, null, 2));
       return;
     }
     const minutes = Number(v.minutes ?? 5);

@@ -3,6 +3,7 @@ import path from "node:path";
 import { AGENT_WORK_TOOLS, type AskResult, ClaudeSession } from "../agent/claude-session";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "../evolution/edit-guard";
 import { beginEvaluatorEdit, endEvaluatorEdit } from "../evolution/post-match-queue";
+import { activePolicyPrompt } from "../agent/policy";
 import { appendReview } from "../agent/harness-review";
 import { OBJECTIVE_KEYS } from "../solver/models";
 import { PARAM_SPACE } from "../solver/evaluator";
@@ -453,6 +454,7 @@ async function runLabCoachInner(input: CoachInput, deps: CoachDeps): Promise<Coa
   const guard = deps.guard === false ? null : snapshotProtectedFiles();
   const rel = (f: string) => path.relative(PROJECT_ROOT, f);
 
+  const policy = activePolicyPrompt();
   const prompt = [
     "[LAB] 方策の学習が終わった。あなたは学習の LLM（試合中の LLM とは別）。学習の結果を読み、学習環境を直せ。",
     `統計: ${rel(path.join(dir, "report.md"))}（下に同じ内容）/ 再生の記録: ${rel(path.join(dir, "traces.json"))}`,
@@ -460,10 +462,11 @@ async function runLabCoachInner(input: CoachInput, deps: CoachDeps): Promise<Coa
     report,
     "",
     "## 直してよいもの",
-    `- 評価関数 \`${rel(files.evaluator)}\`（方策が何を狙い、どれだけ遠回りするか。新しい特徴は PARAM_SPACE に重みを足す）。比べ方: \`bun src/cli.ts bench --room <n> --evaluator <改修前の写し>\``,
+    `- 評価関数 \`${rel(files.evaluator)}\`（方策が何を狙い、どれだけ遠回りするか。新しい特徴は PARAM_SPACE に重みを足す）。比べ方: \`bun src/cli.ts bench --room <n> --evaluator <改修前の写し>\`（両方とも学習したパラメータで打つので、init だけの改修は差が出ない。init を比べるなら --init）`,
     `- 地図の作り方 \`${rel(files.profiles)}\`（本物の地図・実測に似せる。易しくするための変更はしない）`,
     `- 学習のやり方 \`${rel(files.trainConfig)}\`（候補・地図・確かめの数、探す幅）`,
     `- モデル \`${rel(files.styles)}\`（特性ごとのモデルを足す・目的を直す。前からあるモデルは消さない。${MAX_STYLES} 個まで）`,
+    ...(policy ? ["", policy, "モデル（styles.json の目的・動かさないパラメータ）と学習のやり方は、この方針で試合が良くなる向きに直す（例: 敵に当てに行く方針なら、ハンターが寄って当てられるか・当てられすぎないかを見る）。", ""] : []),
     "ほか（src/ のハーネス）を変えても元に戻される。ハーネスの不具合・ハーネスでしか直らないことに気づいたら、直さずに報告の「## ハーネスへの要望」に書く（agent/REVIEW.md に載り、開発者が直す）。",
     "",
     "## 最後に",

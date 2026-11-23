@@ -12,7 +12,7 @@ import { AGENT_WORK_TOOLS, type AskResult, ClaudeSession } from "./claude-sessio
 import { activePolicyPrompt } from "./policy";
 import { addUsage, emptyUsage, totalTokens, type UsageTotals } from "./usage";
 import { checkOfficialVersion, type OfficialVersionCheck } from "../perception/official-check";
-import { defaultMatchPlan, type MatchPlan, matchPlanChoicesText, parseMatchPlan } from "./match-plan";
+import { defaultMatchPlan, type MatchPlan, matchPlanChoicesText, modelRulesText, parseMatchPlan } from "./match-plan";
 import type { FiredTrigger } from "./triggers";
 import { roomTriggerHistoryText } from "./trigger-review";
 
@@ -227,6 +227,9 @@ export class MainAgent {
       rules ? `\n## ゲームのルール（knowledge/official-rules.md）\n${rules.replace(/^# .*\n/, "")}` : "",
       commands ? `\n## ゲームのコマンド（knowledge/commands.md）\n${commands.replace(/^# .*\n/, "")}` : "",
       `\n## この試合\n${this.matchInfo}`,
+      prepared?.plan?.modelRules
+        ? `\nモデルの切り替えの決まり（準備で作戦方針から決めた。ハーネスがあなたの返事を待たずに切り替える）: ${modelRulesText(prepared.plan.modelRules)}。決まりが切り替えた後も、あなたは model で切り替えてよい（決まりは状態が変わった時だけ動く）`
+        : "",
       policy ? `\n${policy}` : "",
       strategy ? `\n## 戦略知識（knowledge/strategy.md）\n${strategy}` : "",
     ].join("\n");
@@ -844,7 +847,7 @@ export async function runPrepPhase(settings: ClaudeModelSettings, room: number, 
       "",
       policy || "(ユーザー定義の作戦方針なし)",
       "",
-      "## 試合の設定で選べるもの（返答の JSON の model・triggers・guide）",
+      "## 試合の設定で選べるもの（返答の JSON の model・triggers・guide・modelRules）",
       matchPlanChoicesText(),
       "",
       roomTriggerHistoryText(room) || "## このルームのきっかけの成績\n(まだない。きっかけを記録した試合が無い。既定から始め、試合後の評価を次に使う)",

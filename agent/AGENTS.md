@@ -43,7 +43,7 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 | `cell-note` | `--room N --x X --y Y --note "…"` | マスにメモを足す（`--note ""` で消す。1件160字まで） |
 | `verify` | `--run-dir var/runs/<runId>` | その試合の盤面で今の方策を動かして確かめる（例外・合法手。その試合の評価関数と比べて罠へ動く手が増えていないか） |
 | `sim` | `--room N --n 8 [--seed S --max-turns 200]` | 方策をシミュレータで打たせる（地図は毎回ランダム＋本物の地図） |
-| `bench` | `--room N --n 24 [--evaluator <file>]` | 同じ地図で比べる（`--evaluator` で今の evaluator.ts と別ファイル。改修を試す時は `var/tmp/` に写して直し、ここで比べる。無しなら既定のパラメータと学習したパラメータ） |
+| `bench` | `--room N --n 24 [--evaluator <file> [--init]]` | 同じ地図で比べる（`--evaluator` で今の evaluator.ts と別ファイル。改修を試す時は `var/tmp/` に写して直し、ここで比べる。両方とも学習したパラメータで打つので、**`PARAM_SPACE` の `init` だけを変えた改修は差が出ない**（試合でも学習した値が使われる）。init を比べるなら `--init`。無しなら既定のパラメータと学習したパラメータ） |
 | `train` | `--room N --minutes 5 [--dry-run]` | 方策のパラメータを学習（はっきり良くなった時だけ保存） |
 
 `cells`・`cell-note` の座標は `var/current/snapshot.json` の `position` と同じ座標（今の区画）。ハーネスが絶対座標（Webマップの列・行）に直して保存するので、試合をまたいで使える。過去の試合のログ（`turns.jsonl` の `globalPositionAfter` など）の絶対座標を使う時は `--abs`。Webマップで位置合わせできていない時は記録できない。
