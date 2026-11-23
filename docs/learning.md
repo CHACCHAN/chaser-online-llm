@@ -44,6 +44,7 @@ flowchart LR
 | `train.ts` | 学習（ES、対称サンプリング）。目的は 1ターンあたりの得点。候補の順位は地図ごとの順位の平均で決める（`rankFitness`。当て合いの大きな点が1枚あるだけで順位が決まらないように）。学習に使わない地図で確かめ、差（地図ごとの差の上下 1 割ずつを除いた刈り込み平均 `trimmedStats`）が標準誤差の `acceptZ` 倍（既定 1.5）より大きく、罠が前の (1+`hazardRatio`) 倍 + `hazardSlack` 回（既定 1.1 倍 + 3）を超えない時だけ保存。この厳しさは `knowledge/train-config.json` にあり、学習の LLM が直せる（範囲 acceptZ 1〜3 など）。ふつうの平均の差は `meanDiff` に参考で残す。保存しなかったが差がプラスなら `var/policy/candidates/<モデル>.json` に続きとして残し、保存してあるパラメータが同じ間は次の学習がそこから始める（比べる相手は保存してあるパラメータのまま。保存した・差がマイナスなら消す） |
 | `post-match.ts` | 試合後: 評価関数の改修の比較（弱くなっていない＝`notWorse` で合格）・ルームでの成績（振り返りに渡す） |
 | `lab.ts` | 学習の仕事の受け持ち（WebUI の「地図を作る → 並べた地図で学習 → 統計」、試合後の学習 `TRAIN_AFTER_MATCH_MIN`、空いている間の学習 `TRAIN_IDLE`。試合中も続ける `TRAIN_DURING_MATCH`）。同時に1つ |
+| `tactics-check.ts` | 作戦スクリプト（`src/solver/tactics.ts`）の確かめ: 短い試合で例外・時間を見る（別プロセスで時間を切る）、改修前との比べ（`judgeTacticsChange`）。シミュレータでは `EpisodeJob.policy.tactics` を渡すと、作戦スクリプトが特性ごとのモデルを切り替えながら打つ（`makeTacticalPolicy`。LLM はいない）。学習（ES）は1つのモデルのパラメータを育てるので、作戦スクリプトは使わない |
 | `fake-server.ts` | シミュレータを CHaser サーバの形で出す偽サーバ。ハーネス全体（ログイン〜Webマップ〜記録）を手元で通す（本番サーバに触れない）。`src/sim/fake-server.test.ts` が `bun src/play.ts` で1試合通す |
 
 ### 新しいマップに出会ったら
