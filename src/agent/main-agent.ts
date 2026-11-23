@@ -467,7 +467,9 @@ export class MainAgent {
       call = this.spawnCall();
     }
     this.next = this.spawnCall();
+    const askStarted = Date.now();
     const { res, winner, hedged } = await this.askWithHedge(call, message);
+    const waitedMs = Date.now() - askStarted;
     call = winner;
     if (hedged) this.hedgeCount += 1;
     if (res.status === "ok") {
@@ -487,7 +489,8 @@ export class MainAgent {
       }
     }
 
-    if (res.status === "timeout") return fallback(`timeout ${res.durationMs}ms`, res.durationMs);
+    // 待った時間は聞いてからの全体（ヘッジした時、res.durationMs は2本目の分だけ。REVIEW 2026-11-23: 58112ms と出て実際は約 120 秒）
+    if (res.status === "timeout") return fallback(`timeout（聞いてから ${Math.round(waitedMs / 1000)} 秒${hedged ? `、2本目は ${Math.round(res.durationMs / 1000)} 秒` : ""}）`, waitedMs);
     if (res.status !== "ok") return fallback(res.status === "dead" ? res.error : res.status, null);
 
     const reply = parseMainReply(res.text, ctx.turn, ctx.phase, legal, ctx.models?.list.map((m) => m.id));
