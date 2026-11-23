@@ -141,7 +141,18 @@ async function main() {
     // その試合で使った評価関数（evaluator-snapshot.ts）があれば、罠へ動く手の回数を比べる
     const snap = path.join(runDir, "evaluator-snapshot.ts");
     const res = await verifyPolicyWithReplay(runDir, { baselineEvaluatorCode: existsSync(snap) ? readFileSync(snap, "utf-8") : null });
-    console.log(JSON.stringify(res, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          ...res,
+          // 数の意味（REVIEW 2026-11-23: changedCmd1・changedCmd2 が何を数えるか出力から分からなかった）
+          legend:
+            "turnsTested = 記録の盤面で方策を動かしたターン数。changedCmd1Count / changedCmd2Count = 試合で打った手と違う手を今の方策が選んだフェーズの数（違うこと自体は不合格ではない。改修が効いた量の目安）。hazardLandings = 罠と分かっているマスへ動く手を選んだ回数（baselineHazardLandings より多ければ不合格）。ok = 例外・合法でない手が無く、罠へ動く手が増えていない",
+        },
+        null,
+        2,
+      ),
+    );
     if (!res.ok) process.exit(1);
     return;
   }

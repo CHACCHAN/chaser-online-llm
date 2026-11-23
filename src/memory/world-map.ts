@@ -1604,6 +1604,7 @@ export class WorldMap {
   public renderAscii(radius = 7): string {
     const r = Math.max(2, Math.min(20, radius));
     const lines: string[] = [];
+    const used = new Map<string, Map<number, number>>();
     for (let dy = -r; dy <= r; dy++) {
       let row = "";
       for (let dx = -r; dx <= r; dx++) {
@@ -1615,12 +1616,18 @@ export class WorldMap {
         if (!rec) {
           row += "?";
         } else {
-          row += getTileInfo(rec.value).symbol;
+          const info = getTileInfo(rec.value);
+          row += info.symbol;
+          const ids = used.get(info.symbol) ?? new Map<number, number>();
+          ids.set(rec.value, info.score);
+          used.set(info.symbol, ids);
         }
       }
       lines.push(row);
     }
-    lines.push("Legend: @=You .=0(-20) ,=2(+10) *=3(+30) T=1(+50) A=9(+100) F=5-8(+125..200) G=70-79(+400) W=Warp B=BlackStar #=10Wall !=4Geode X=12Abyss ?=Unseen");
+    // 凡例は地図に出た記号だけを tiles.json から作る（REVIEW 2026-11-23: 決め打ちの凡例に ~（奈落）が無かった）
+    const legend = [...used.entries()].map(([sym, ids]) => `${sym}=${[...ids.entries()].map(([v, sc]) => `${v}(${sc >= 0 ? "+" : ""}${sc})`).join("/")}`);
+    lines.push(`Legend: @=You ${legend.join(" ")} ?=Unseen`);
     return lines.join("\n");
   }
 
