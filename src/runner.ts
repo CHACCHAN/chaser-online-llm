@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "no
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { EVALUATOR_PATH, RUNS_DIR } from "./paths";
-import { evaluatorPathForMatch } from "./evolution/post-match-queue";
+import { evaluatorPathForMatch, tacticsPathForMatch } from "./evolution/post-match-queue";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
 import { isResultForRun } from "./client/result";
 import type { AgentConfig } from "./config";
@@ -19,7 +19,9 @@ import { saveRealMap } from "./sim/mapgen";
 import * as defaultEvaluator from "./solver/evaluator";
 import type { EvaluatorModule } from "./solver/planner";
 import { type FiredTrigger, loadAllModels, TriggerMonitor, votersFrom } from "./agent/triggers";
-import { ModelRuleWatcher, summarizeMatchPlan } from "./agent/match-plan";
+import { summarizeMatchPlan } from "./agent/match-plan";
+import { type TacticsAction, type TacticsModule, TacticsRuntime, type TacticsStats } from "./solver/tactics-runtime";
+import * as defaultTactics from "./solver/tactics";
 import { formatActionLine } from "./agent/action-log";
 import { type LlmReply, renderTriggerReview, reviewRun } from "./agent/trigger-review";
 import { getStyle, loadModelParams, playModelId } from "./solver/models";
@@ -84,6 +86,8 @@ export interface TurnRecord {
   landed?: Record<string, number>;
   /** このターンの間に届いた Webマップの公式のアイテム得点（届いた時だけ） */
   webScore?: ScoreSample;
+  /** 作戦スクリプトの行動（何かしたフェーズだけ） */
+  tactics?: Partial<Record<"CMD1" | "CMD2", TacticsAction>>;
   /** このターンに Webマップで分かった、当てた（+）・当てられた（−）得点の増減（Webマップは1ターンほど遅れる） */
   putChange?: { put: number; putDamage: number };
   /** ワープを踏んだ直後に Webマップでの位置合わせを待った時間（aligned=false なら間に合わなかった） */
@@ -118,6 +122,8 @@ export interface RunSummary {
   hits?: HitEvent[];
   /** 鳴ったが、LLM に渡す前に古くなって捨てたきっかけ（考え中は捨てない） */
   droppedTriggers?: { turn: number; id: string; firedTurn: number }[];
+  /** 作戦スクリプトの回数（フェーズ・例外・切り替え・LLM を呼んだ・目標） */
+  tactics?: TacticsStats;
   /** 試合の終わりに使っていたモデル */
   finalModel?: string;
   webMapDetected: boolean;
@@ -167,6 +173,21 @@ function makeRunId(room: number): string {
 
 /** 評価関数（エージェントが試合後に改修する）を試合開始時に読み込む。読めなければ同梱の版 */
 let evaluatorCache: { file: string; mtimeMs: number; mod: EvaluatorModule } | null = null;
+/** 作戦スクリプトを読む（書き換え中なら書き換える前の写し）。読めなければ同梱の版 */
+async function loadTactics(): Promise<TacticsModule> {
+  try {
+    const file = tacticsPathForMatch();
+    const mod = (await import(`${file}?t=${statSync(file).mtimeMs}`)) as TacticsModule;
+    if (typeof mod.onPhase === "function") return mod;
+    throw new Error("onPhase を export していない");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.error({ err: msg }, "tactics.ts の読み込みに失敗。同梱の版で続ける");
+    uiBus.pushClaudeEvent({ context: "system", kind: "error", title: "作戦スクリプトの読み込みに失敗", content: msg });
+    return defaultTactics;
+  }
+}
+
 async function loadEvaluator(): Promise<EvaluatorModule> {
   try {
     // 裏の振り返り・学習の LLM が評価関数を書き換えている間は、書き換える前の写し（確かめ済み）を使う
@@ -303,23 +324,34 @@ export async function runAgentMatch(
     triggerMonitor.setVoters(votersFrom(models, to));
     uiBus.patchState({ matchModel: { id: to, name: m.name, callMode: mainAgent ? callMode : null, switches: modelSwitches.length, names: modelNames } });
   };
-  // モデルの切り替えの決まり（作戦方針から準備の LLM が決める）。LLM の返事を待たずにハーネスが切り替える
-  const ruleWatcher = new ModelRuleWatcher(matchPlan?.modelRules ?? null);
-  const applyModelRules = (wm: WorldMap, turn: number, phase: "CMD1" | "CMD2") => {
-    if (!matchPlan?.modelRules) return;
-    const [px, py] = wm.getPosition();
-    let nearest: number | null = null;
-    for (const e of wm.getEnemySightings()) {
-      if (e.lastSeenTurn < turn - 1) continue;
-      const d = Math.abs(e.x - px) + Math.abs(e.y - py);
-      if (nearest === null || d < nearest) nearest = d;
+  // 作戦スクリプト（src/solver/tactics.ts。LLM が書く）: 毎フェーズの初めに呼び、モデルの切り替え・目標・通らないマス・LLM を呼ぶかを
+  // すぐ反映する（LLM の返事を待たない）。準備の切り替えの決まり（modelRules）はスクリプトに渡す
+  const tactics = new TacticsRuntime(await loadTactics(), {
+    models: models.map((m) => ({ id: m.id, name: m.name, trait: getStyle(m.id).trait })),
+    startModel: policyModel,
+    rules: matchPlan?.modelRules ?? null,
+    inSim: false,
+  });
+  let llmCalls = 0;
+  let lastAskedTurn: number | null = null;
+  const runTactics = (turn: number, phase: "CMD1" | "CMD2"): TacticsAction => {
+    const { action } = tactics.step({
+      wm: worldMap,
+      phase,
+      turn,
+      totalTurns,
+      model: activeModel,
+      llmTarget: mainAgent?.currentPlan?.target ?? null,
+      llm: { available: !!mainAgent, thinking: mainAgent?.thinking ?? false, lastAskedTurn, calls: llmCalls },
+      signals: pendingTriggers.map((f) => ({ id: f.id, label: f.label ?? f.id, detail: f.detail })),
+    });
+    if (action.model) {
+      const from = activeModel;
+      nowTurn = turn;
+      switchModel(action.model, turn, phase, ["tactics"]);
+      uiBus.pushClaudeEvent({ context: "in_game", kind: "system", title: "モデルを切り替えた（作戦スクリプト）", content: `T${turn} ${phase}: ${modelNameOf(from)} → ${modelNameOf(action.model)}${action.note ? `（${action.note}）` : ""}` });
     }
-    const hit = ruleWatcher.check(turn, nearest);
-    if (!hit || hit.model === activeModel) return;
-    const from = activeModel;
-    nowTurn = turn;
-    switchModel(hit.model, turn, phase, [`rule:${hit.rule}`]);
-    uiBus.pushClaudeEvent({ context: "in_game", kind: "system", title: `モデルを切り替えた（決まり）`, content: `T${turn} ${phase}: ${modelNameOf(from)} → ${modelNameOf(hit.model)}（${hit.detail}。作戦方針から準備で決めた切り替えの決まり）` });
+    return action;
   };
   // 試合中の LLM を呼ぶきっかけ（準備の LLM が選んだ設定）。ほかの特性のモデルにも同じ盤面で手を出させて比べる
   const triggerMonitor = new TriggerMonitor(votersFrom(models, policyModel), matchPlan?.triggers);
@@ -358,7 +390,8 @@ export async function runAgentMatch(
   let solverErrors = 0;
   const decideSolver = (wm: WorldMap, phase: "CMD1" | "CMD2", turn: number, plan: AgentPlan | null): SolverDecision => {
     try {
-      return planner(wm, phase, turn, { totalTurns, directive: plan ? { target: plan.target, note: plan.note } : null });
+      // LLM の作戦目標があればそれ、無ければ作戦スクリプトの目標。通らないマスは作戦スクリプトから
+      return planner(wm, phase, turn, { totalTurns, directive: tactics.directive(plan?.target ?? null, plan?.note) });
     } catch (err) {
       solverErrors += 1;
       const msg = err instanceof Error ? err.message : String(err);
@@ -430,15 +463,12 @@ export async function runAgentMatch(
       /** このターンに LLM を呼んだきっかけ（フェーズごと） */
       const calledBy: Partial<Record<"CMD1" | "CMD2", string[]>> = {};
       const modelVotes: Partial<Record<"CMD1" | "CMD2", Record<string, string>>> = {};
+      /** このターンの作戦スクリプトの行動（何かした時だけ） */
+      const tacticsThisTurn: Partial<Record<"CMD1" | "CMD2", TacticsAction>> = {};
 
       /** ソルバー候補 → メインエージェント判断 → 送信 → 観測反映 を1フェーズ分行う */
       const playPhase = async (phase: "CMD1" | "CMD2"): Promise<{ command: string; reason: string; values: number[] | null; source: "main" | "solver" }> => {
         uiBus.patchState({ turn, phase: phase === "CMD1" ? "READY_CMD1" : "READY_CMD2" });
-        try {
-          applyModelRules(worldMap, turn, phase);
-        } catch (err) {
-          logger.warn({ turn, phase, err: err instanceof Error ? err.message : String(err) }, "切り替えの決まりを見られなかった");
-        }
         const solverDecision: SolverDecision =
           decideSolver(worldMap, phase, turn, mainAgent?.currentPlan ?? null);
         const events = evaluateBreakpoint({ turn, worldMap, solverDecision }).reasons;
@@ -462,18 +492,30 @@ export async function runAgentMatch(
         } catch (err) {
           logger.warn({ turn, phase, err: err instanceof Error ? err.message : String(err) }, "きっかけを計算できなかった");
         }
+        // 作戦スクリプト（鳴ったきっかけも見て、モデル・目標・LLM を呼ぶかを決める）
+        let tacticsAction: TacticsAction = {};
+        try {
+          tacticsAction = runTactics(turn, phase);
+        } catch (err) {
+          logger.warn({ turn, phase, err: err instanceof Error ? err.message : String(err) }, "作戦スクリプトを動かせなかった");
+        }
+        if (Object.keys(tacticsAction).length > 0) tacticsThisTurn[phase] = tacticsAction;
+        const tacticsMoved = !!tacticsAction.model || tacticsAction.target !== undefined || tacticsAction.avoid !== undefined;
         syncUiPredictionAndMap(worldMap, turn, phase, solverDecision, "solver", events, { triggers: uiTriggers });
 
-        let decision = solverDecision;
+        let decision = tacticsMoved && !mainAgent ? decideSolver(worldMap, phase, turn, null) : solverDecision;
         let source: "main" | "solver" = "solver";
         if (mainAgent) {
           // LLM は待たない。座標系の変化・目標への到達を反映してから今の作戦で手を決め直し、LLM が空いていれば裏で聞く
           mainAgent.syncFrame(worldMap);
           decision = decideSolver(worldMap, phase, turn, mainAgent.currentPlan);
           const askedAt = `T${turn} ${phase}`;
-          // trigger: 鳴ったきっかけがある時だけ呼ぶ（考え中なら次に持ち越す）。every: 空いていれば毎回
-          const callNow = !mainAgent.thinking && (callMode === "every" || pendingTriggers.length > 0);
-          const by = pendingTriggers.map((f) => f.id);
+          // trigger: 作戦スクリプトが呼ぶと決めた時（鳴ったきっかけを見て）だけ呼ぶ（考え中なら次に持ち越す）。
+          // 止まり続けた時の安全網（noGain）はスクリプトによらず呼ぶ。every: 空いていれば毎回
+          const callNow = !mainAgent.thinking && (callMode === "every" || !!tacticsAction.askLlm || pendingTriggers.some((f) => f.id === "noGain"));
+          const askTriggers: FiredTrigger[] =
+            pendingTriggers.length > 0 || !tacticsAction.askLlm ? pendingTriggers : [{ id: "tactics" as FiredTrigger["id"], label: "作戦スクリプト", value: 0, detail: tacticsAction.askLlm }];
+          const by = askTriggers.map((f) => f.id);
           const started = callNow && mainAgent.startBackground(
             {
               turn,
@@ -481,7 +523,7 @@ export async function runAgentMatch(
               worldMap,
               events,
               solve: (plan) => decideSolver(worldMap, phase, turn, plan),
-              triggers: pendingTriggers,
+              triggers: askTriggers,
               models: { active: activeModel, list: models.map((m) => ({ id: m.id, name: m.name, trait: getStyle(m.id).trait })), votes: lastVotes },
             },
             (res, error) => {
@@ -517,6 +559,8 @@ export async function runAgentMatch(
           if (started) {
             calledBy[phase] = by;
             pendingTriggers = [];
+            llmCalls += 1;
+            lastAskedTurn = turn;
           }
           syncUiPredictionAndMap(worldMap, turn, phase, decision, "solver", events, {
             mainAction: started ? "thinking" : mainAgent.thinking ? "thinking" : null,
@@ -692,6 +736,7 @@ export async function runAgentMatch(
         ...(firedThisTurn.length > 0 ? { triggers: firedThisTurn } : {}),
         ...(Object.keys(modelVotes).length > 0 ? { modelVotes } : {}),
         ...(Object.keys(calledBy).length > 0 ? { calledBy } : {}),
+        ...(Object.keys(tacticsThisTurn).length > 0 ? { tactics: tacticsThisTurn } : {}),
         ...(activeModel !== policyModel || modelSwitches.length > 0 ? { model: activeModel } : {}),
         webMapTurn: webMap.lastTurn,
         landed,
@@ -809,6 +854,7 @@ export async function runAgentMatch(
     finalModel: activeModel,
     hits: hitEvents,
     droppedTriggers: droppedPending,
+    tactics: { ...tactics.stats },
     webMapDetected: webMap.available,
     webMapUrl: webMap.sourceUrl,
     turns: turnLogs.length,

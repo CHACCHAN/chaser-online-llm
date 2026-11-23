@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { CURRENT_DIR, EVALUATOR_PATH } from "../paths";
+import { CURRENT_DIR, EVALUATOR_PATH, TACTICS_PATH } from "../paths";
 import { logger } from "../tools";
 import { uiBus } from "../ui/event-bus";
 
@@ -80,16 +80,28 @@ export async function settlePostMatch(timeoutMs = Infinity): Promise<void> {
  */
 let editing = 0;
 export const VERIFIED_EVALUATOR_PATH = path.join(CURRENT_DIR, "evaluator-verified.ts");
+/** 作戦スクリプト（src/solver/tactics.ts）も同じ扱い */
+export const VERIFIED_TACTICS_PATH = path.join(CURRENT_DIR, "tactics-verified.ts");
+
+/** 相対の import を絶対パスに直して写す（別の場所から import できるように） */
+function copyImportable(src: string, dest: string): void {
+  const dir = path.dirname(src);
+  const code = readFileSync(src, "utf-8").replace(/(from\s+["'])(\.{1,2}\/[^"']+)(["'])/g, (_m, a: string, rel: string, b: string) => `${a}${path.resolve(dir, rel)}${b}`);
+  mkdirSync(path.dirname(dest), { recursive: true });
+  writeFileSync(dest, code);
+}
 
 export function beginEvaluatorEdit(): void {
   if (editing === 0) {
-    try {
-      const dir = path.dirname(EVALUATOR_PATH);
-      const code = readFileSync(EVALUATOR_PATH, "utf-8").replace(/(from\s+["'])(\.{1,2}\/[^"']+)(["'])/g, (_m, a: string, rel: string, b: string) => `${a}${path.resolve(dir, rel)}${b}`);
-      mkdirSync(path.dirname(VERIFIED_EVALUATOR_PATH), { recursive: true });
-      writeFileSync(VERIFIED_EVALUATOR_PATH, code);
-    } catch (err) {
-      logger.warn({ err: err instanceof Error ? err.message : String(err) }, "書き換える前の評価関数を写せなかった");
+    for (const [src, dest] of [
+      [EVALUATOR_PATH, VERIFIED_EVALUATOR_PATH],
+      [TACTICS_PATH, VERIFIED_TACTICS_PATH],
+    ] as const) {
+      try {
+        copyImportable(src, dest);
+      } catch (err) {
+        logger.warn({ file: src, err: err instanceof Error ? err.message : String(err) }, "書き換える前の写しを作れなかった");
+      }
     }
   }
   editing += 1;
@@ -102,5 +114,10 @@ export function endEvaluatorEdit(): void {
 /** 試合の始めに読む評価関数のファイル（書き換え中なら、書き換える前の写し） */
 export function evaluatorPathForMatch(): string {
   return editing > 0 ? VERIFIED_EVALUATOR_PATH : EVALUATOR_PATH;
+}
+
+/** 試合の始めに読む作戦スクリプトのファイル（書き換え中なら、書き換える前の写し） */
+export function tacticsPathForMatch(): string {
+  return editing > 0 ? VERIFIED_TACTICS_PATH : TACTICS_PATH;
 }
 

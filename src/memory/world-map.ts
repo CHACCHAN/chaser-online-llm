@@ -698,6 +698,11 @@ export class WorldMap {
     return [...this.enemySightings.values()].map((e) => ({ ...e }));
   }
 
+  /** テスト用: 敵を見たことにする（今の座標） */
+  public recordEnemySightingForTest(tileId: number, x: number, y: number, turn: number): void {
+    this.enemySightings.set(tileId, { x, y, tileId, lastSeenTurn: turn });
+  }
+
   public getEnemySightings(): { x: number; y: number; tileId: number; lastSeenTurn: number }[] {
     const byId = new Map([...this.enemySightings.values()].map((e) => [e.tileId, { ...e }]));
     // Web マップに載っている敵も（位置合わせ済みならローカル座標に直して）含める。新しい方を採用

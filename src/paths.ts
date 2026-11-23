@@ -63,6 +63,8 @@ export const POLICY_LEAGUE_PATH = path.join(POLICY_DIR, "league.json");
 export const POLICY_TRAIN_LOG_PATH = path.join(POLICY_DIR, "train-log.jsonl");
 /** 経路探索の評価関数（エージェントが試合後に改修してよい。シミュレータの成績で採否を決める） */
 export const EVALUATOR_PATH = path.join(PROJECT_ROOT, "src/solver/evaluator.ts");
+/** 作戦スクリプト（試合中に毎フェーズ、モデルの切り替え・目標・LLM を呼ぶかを決める。LLM が書く。src/solver/tactics-runtime.ts） */
+export const TACTICS_PATH = path.join(PROJECT_ROOT, "src/solver/tactics.ts");
 export const CLAUDE_HOME_DIR = path.join(VAR_DIR, "claude-home");
 /** 試合中の現在の状態（毎フェーズ更新。試合後に var/runs/<runId>/ へコピー） */
 export const CURRENT_DIR = path.join(VAR_DIR, "current");

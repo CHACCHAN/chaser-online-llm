@@ -13,9 +13,8 @@ export interface MatchPlan {
   /** きっかけごとの判断の目安（試合中の LLM に、そのきっかけで呼んだ時に見せる） */
   guide: Partial<Record<TriggerId, string>>;
   /**
-   * モデルの切り替えの決まり（作戦方針の「敵がいる時はハンター」など）。ハーネスが毎フェーズ見て、LLM の返事を待たずに切り替える
-   * （返事は 40〜90 秒遅れるので、敵が近づいてから聞いても間に合わない。room460 T62）。切り替えるのは状態が変わった時だけ
-   * （敵が radius マス以内に入った時・離れて afterTurns ターン経った時）。その間は LLM の切り替えも効く
+   * モデルの切り替えの決まり（作戦方針の「敵がいる時はハンター」など）。作戦スクリプト（src/solver/tactics.ts）が s.rules で受け取り、
+   * 毎フェーズ LLM の返事を待たずに切り替える（返事は 40〜90 秒遅れるので、敵が近づいてから聞いても間に合わない。room460 T62）
    */
   modelRules: ModelRules | null;
   /** 読んだ時に直したこと（範囲に収めた・知らないモデルなど） */
@@ -95,39 +94,6 @@ export function modelRulesText(r: ModelRules | null): string {
   ]
     .filter(Boolean)
     .join("、");
-}
-
-/**
- * 切り替えの決まりを毎フェーズ見る。状態が変わった時だけ切り替えるモデルを返す（ずっと同じ状態の間は返さないので、LLM の切り替えを上書きしない）
- */
-export class ModelRuleWatcher {
-  private inRange = false;
-  private lastInRangeTurn: number | null = null;
-  private calmApplied = true;
-  constructor(private readonly rules: ModelRules | null) {}
-
-  /** nearest = 直近に見た一番近い敵までの歩数（いなければ null） */
-  check(turn: number, nearest: number | null): { model: string; rule: "enemy" | "calm"; detail: string } | null {
-    const r = this.rules;
-    if (!r) return null;
-    const radius = r.enemy?.radius ?? MODEL_RULE_LIMITS.radius.default;
-    const now = nearest !== null && nearest <= radius;
-    if (now) {
-      this.lastInRangeTurn = turn;
-      this.calmApplied = false;
-      if (!this.inRange) {
-        this.inRange = true;
-        if (r.enemy) return { model: r.enemy.model, rule: "enemy", detail: `敵まで ${nearest} マス（${radius} マス以内）` };
-      }
-      return null;
-    }
-    this.inRange = false;
-    if (r.calm && !this.calmApplied && this.lastInRangeTurn !== null && turn - this.lastInRangeTurn >= r.calm.afterTurns) {
-      this.calmApplied = true;
-      return { model: r.calm.model, rule: "calm", detail: `敵が ${radius} マスの外に出て ${turn - this.lastInRangeTurn} ターン` };
-    }
-    return null;
-  }
 }
 
 /** 画面・記録に出す1行 */
