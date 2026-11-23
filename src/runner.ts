@@ -116,6 +116,8 @@ export interface RunSummary {
   modelSwitches?: { turn: number; askedTurn?: number; phase: string; from: string; to: string; by: string[] }[];
   /** 当てた・当てられた（Webマップの P:・PD: が変わったターン） */
   hits?: HitEvent[];
+  /** 鳴ったが、LLM に渡す前に古くなって捨てたきっかけ（考え中は捨てない） */
+  droppedTriggers?: { turn: number; id: string; firedTurn: number }[];
   /** 試合の終わりに使っていたモデル */
   finalModel?: string;
   webMapDetected: boolean;
@@ -329,8 +331,17 @@ export async function runAgentMatch(
   /** 持ち越したきっかけが鳴ったターン（古くなったものは渡さない。知らないタイル・終盤は残す） */
   const pendingAt = new Map<string, number>();
   const PENDING_KEEP_TURNS = 5;
+  /** 古くなって渡さなかったきっかけ（記録・試合後の評価に出す） */
+  const droppedPending: { turn: number; id: string; firedTurn: number }[] = [];
   const dropStalePending = (turn: number) => {
-    pendingTriggers = pendingTriggers.filter((f) => f.id === "unknownTile" || f.id === "endgame" || turn - (pendingAt.get(f.id) ?? turn) <= PENDING_KEEP_TURNS);
+    // LLM が考え中の間は捨てない（返事は 8〜18 ターンかかるので、5 ターンで捨てると、考え中に鳴ったきっかけが全部消えていた。REVIEW 2026-11-23 room455 T105・T108）。
+    // 同じきっかけは新しい方だけ残すので、溜まりすぎない
+    if (mainAgent?.thinking) return;
+    pendingTriggers = pendingTriggers.filter((f) => {
+      const keep = f.id === "unknownTile" || f.id === "endgame" || turn - (pendingAt.get(f.id) ?? turn) <= PENDING_KEEP_TURNS;
+      if (!keep) droppedPending.push({ turn, id: f.id, firedTurn: pendingAt.get(f.id) ?? turn });
+      return keep;
+    });
   };
   uiBus.patchState({ matchModel: { id: policyModel, name: getStyle(policyModel).name, callMode: mainAgent ? callMode : null, switches: 0, names: modelNames } });
   if (mainAgent && matchPlan) {
@@ -487,6 +498,7 @@ export async function runAgentMatch(
                 action: res.source === "main" ? res.action : null,
                 ...(res.model ? { model: res.model } : {}),
                 ...(res.action === "plan" && mainAgent.currentPlan ? { target: mainAgent.currentPlan.target } : {}),
+                ...(res.planShift ? { shift: res.planShift } : {}),
                 ms: res.durationMs,
                 ...(res.llmNote ? { note: res.llmNote } : {}),
                 ...(res.llmText ? { text: res.llmText } : {}),
@@ -796,6 +808,7 @@ export async function runAgentMatch(
     modelSwitches,
     finalModel: activeModel,
     hits: hitEvents,
+    droppedTriggers: droppedPending,
     webMapDetected: webMap.available,
     webMapUrl: webMap.sourceUrl,
     turns: turnLogs.length,

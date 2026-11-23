@@ -49,6 +49,8 @@ export interface MainDecision {
   note: string;
   /** 作戦目標があった時、送る手が目標に向かっているか（followed）・目標へ経路が無い（no_route）・ソルバーが別の手を選んだ（other） */
   planStatus?: "followed" | "no_route" | "other";
+  /** 返答の作戦目標を、届いた時に直した・使わなかった（考えている間にワープで座標系が変わった） */
+  planShift?: { from: [number, number]; to: [number, number] | null; reason: string };
   /** LLM が選んだモデル（切り替える時だけ。知らない id は入らない） */
   model?: string;
   /** LLM の返答の note と、返答の文（JSON の前の考え。後から理由を追えるように turns.jsonl に残す。600 字まで） */
@@ -123,6 +125,14 @@ function readPrompt(name: string): string {
  * 引き継ぐのは、LLM 自身が書くメモ・ハーネスが作る直近の経過・現在の状況だけ。
  * 次の問い合わせ用のプロセスは裏で先に起動しておく。上限を超えた問い合わせは止めて捨てる。
  */
+/** 今の座標 → 絶対座標（Webマップの列・行）のずれ（位置合わせできていなければ null） */
+function globalDelta(wm: WorldMap): [number, number] | null {
+  const g = wm.getGlobalPosition();
+  if (!g) return null;
+  const [x, y] = wm.getPosition();
+  return [g[0] - x, g[1] - y];
+}
+
 export class MainAgent {
   private started = false;
   private plan: AgentPlan | null = null;
@@ -273,13 +283,28 @@ export class MainAgent {
     this.syncFrame(ctx.worldMap);
     const solverNow = ctx.solve(this.plan);
     const askedFrame = ctx.worldMap.frameVersion;
+    // 聞いた時の 座標 → 絶対座標（Webマップの列・行）のずれ。届いた時に座標系が変わっていたら、これで目標を今の座標に直す
+    const askedDelta = globalDelta(ctx.worldMap);
     const planBefore = this.plan;
     this.inflight = (async () => {
       try {
         const result = await this.ask(ctx, solverNow);
         if (ctx.worldMap.frameVersion !== askedFrame && this.plan !== planBefore && this.plan) {
-          this.notices.push(`T${ctx.turn} ${ctx.phase} の返答の作戦目標 (${this.plan.target.join(",")}) は、考えている間にワープして座標系が変わったので使わなかった`);
-          this.plan = null;
+          const from = this.plan.target;
+          const nowDelta = globalDelta(ctx.worldMap);
+          if (askedDelta && nowDelta) {
+            // 両方とも Webマップで位置合わせできている: 絶対座標を通して今の座標に直す（REVIEW 2026-11-23 room455 T41→T52）
+            const to: [number, number] = [from[0] + askedDelta[0] - nowDelta[0], from[1] + askedDelta[1] - nowDelta[1]];
+            this.plan = { ...this.plan, target: to };
+            const reason = "考えている間にワープして座標系が変わったので、絶対座標を通して今の座標に直した";
+            this.notices.push(`T${ctx.turn} ${ctx.phase} の返答の作戦目標 (${from.join(",")}) は、${reason}: (${to.join(",")})`);
+            result.planShift = { from, to, reason };
+          } else {
+            const reason = "考えている間にワープして座標系が変わり、Webマップで位置合わせできていないので使わなかった";
+            this.notices.push(`T${ctx.turn} ${ctx.phase} の返答の作戦目標 (${from.join(",")}) は、${reason}`);
+            this.plan = null;
+            result.planShift = { from, to: null, reason };
+          }
         }
         this.remember(ctx, result);
         this.publish();
@@ -533,7 +558,10 @@ export class MainAgent {
     const delta = this.lastEst === null ? "" : ` (${est - this.lastEst >= 0 ? "+" : ""}${est - this.lastEst})`;
     this.lastEst = est;
     const who = r.source === "main" ? `LLM/${r.action}${r.model ? ` モデル→${r.model}` : ""}${r.planStatus && r.planStatus !== "followed" ? ` ${PLAN_STATUS_LABEL[r.planStatus]}` : ""}` : `方策: ${r.note}`;
-    this.recent.push(`T${ctx.turn} ${ctx.phase} pos(${x},${y}) est=${est}${delta} → ${r.decision.command} [${who}]`);
+    // 聞いたターンと、届いた時点（pos・est はこちら）を分けて書く（REVIEW 2026-11-23: T41 の見出しに T52 の状態が混ざっていた）
+    const arrived = ctx.worldMap.getStats().turnsObserved;
+    const when = arrived > ctx.turn ? `T${ctx.turn} ${ctx.phase} に聞いた分（届いたのは T${arrived}。以下はその時点）` : `T${ctx.turn} ${ctx.phase}`;
+    this.recent.push(`${when} pos(${x},${y}) est=${est}${delta} → ${r.decision.command} [${who}]`);
     const keep = numSetting("AGENT_RECENT_PHASES", { min: 0, integer: true });
     if (this.recent.length > keep) this.recent.splice(0, this.recent.length - keep);
   }

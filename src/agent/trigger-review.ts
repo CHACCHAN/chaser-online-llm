@@ -54,6 +54,8 @@ export interface LlmReply {
   /** 返答の note・文（600 字まで） */
   note?: string;
   text?: string;
+  /** 目標を届いた時に直した（to）・使わなかった（to が null）。考えている間にワープで座標系が変わった */
+  shift?: { from: [number, number]; to: [number, number] | null; reason: string };
 }
 
 export interface AfterStat {

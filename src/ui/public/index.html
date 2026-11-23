@@ -1689,7 +1689,7 @@ function renderActLog() {
     const who = src === "main" ? ["LLM", "llm"] : reason.includes("指定の目標") ? ["LLMの目標", "llm"] : ["方策", ""];
     const chips = [
       ...(t.triggers || []).map((f) => `<span class="ev trig" title="${esc(f.detail || "")}">${esc(f.label || f.id)}</span>`),
-      ...(t.llmReplies || []).map((r) => `<span class="reply">LLM（T${r.asked} ${esc(r.phase)}${r.by?.length ? `・${esc(r.by.join(","))}` : ""}）: ${r.action === null ? "返答なし" : r.action === "plan" ? `目標${r.target ? ` (${r.target.join(",")})` : ""}` : "そのまま"}${r.model ? `・モデル→${esc(mname(r.model))}` : ""}</span>`),
+      ...(t.llmReplies || []).map((r) => `<span class="reply">LLM（T${r.asked} ${esc(r.phase)}${r.by?.length ? `・${esc(r.by.join(","))}` : ""}）: ${r.action === null ? "返答なし" : r.action === "plan" ? (r.shift ? (r.shift.to ? `目標 (${r.shift.from.join(",")})→ワープ後 (${r.shift.to.join(",")})` : `目標 (${r.shift.from.join(",")}) は使わなかった（ワープ）`) : `目標${r.target ? ` (${r.target.join(",")})` : ""}`) : "そのまま"}${r.model ? `・モデル→${esc(mname(r.model))}` : ""}</span>`),
       t.putChange?.put ? `<span class="ev hit-good" title="Webマップの P:（1ターンほど遅れて届く）">当てた +${fmt(t.putChange.put)}</span>` : "",
       t.putChange?.putDamage ? `<span class="ev hit-bad" title="Webマップの PD:（1ターンほど遅れて届く）">当てられた ${fmt(t.putChange.putDamage)}</span>` : "",
       /^p[udlr][23]/.test(t.cmd2 || "") ? `<span class="ev">置いた</span>` : "",

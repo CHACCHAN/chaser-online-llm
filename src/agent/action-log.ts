@@ -15,7 +15,7 @@ export interface ActionLogTurn {
   usedFallback?: boolean;
   estimatedScoreAfter: number;
   triggers?: { id: string; label?: string; phase?: string }[];
-  llmReplies?: { asked: number; phase: string; by: string[]; action: string | null; model?: string; target?: [number, number] }[];
+  llmReplies?: { asked: number; phase: string; by: string[]; action: string | null; model?: string; target?: [number, number]; shift?: { from: [number, number]; to: [number, number] | null; reason: string } }[];
   model?: string;
   gameOverReason?: string | null;
   /** Webマップで分かった、当てた（+）・当てられた（−）得点の増減 */
@@ -58,7 +58,16 @@ export function formatActionLine(t: ActionLogTurn, prevEst: number, modelName: (
   if (isPutCommand(t.cmd2)) extra.push(`置いた（${t.cmd2}）`);
   if (t.triggers?.length) extra.push(`きっかけ: ${t.triggers.map((f) => f.label ?? f.id).join("・")}`);
   for (const r of t.llmReplies ?? []) {
-    const what = r.action === null ? "返答なし" : r.action === "plan" ? `目標${r.target ? ` (${r.target.join(",")})` : ""}` : "そのまま";
+    const what =
+      r.action === null
+        ? "返答なし"
+        : r.action === "plan"
+          ? r.shift
+            ? r.shift.to
+              ? `目標 (${r.shift.from.join(",")}) → ワープ後の座標 (${r.shift.to.join(",")}) に直した`
+              : `目標 (${r.shift.from.join(",")}) は使わなかった（ワープで座標系が変わった）`
+            : `目標${r.target ? ` (${r.target.join(",")})` : ""}`
+          : "そのまま";
     extra.push(`LLM（T${r.asked} ${r.phase} に聞いた分${r.by.length ? `・${r.by.join(",")}` : ""}）: ${what}${r.model ? `・モデル→${modelName(r.model)}` : ""}`);
   }
   if (t.gameOverReason) extra.push(`終了: ${short(t.gameOverReason, 60)}`);
