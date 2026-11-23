@@ -34,6 +34,14 @@ export interface TriggerDef {
   param?: { name: string; default: number; min: number; max: number; integer?: boolean; unit: string };
 }
 
+/** 自分から見た向き（右下に 2・上に 1 など） */
+function dirText(dx: number, dy: number): string {
+  const parts: string[] = [];
+  if (dx) parts.push(`${dx > 0 ? "右" : "左"}に ${Math.abs(dx)}`);
+  if (dy) parts.push(`${dy > 0 ? "下" : "上"}に ${Math.abs(dy)}`);
+  return parts.join("・") || "同じマス";
+}
+
 export const TRIGGER_DEFS: TriggerDef[] = [
   { id: "modelSplit", label: "モデルの不一致", source: "model", doc: "特性ごとのモデル（バランス・ハンターなど）に同じ盤面で手を出させ、試合で使うモデルと違う手を出したモデルの数。学習していない（パラメータが同じ）モデルは数えない", param: { name: "違う手のモデルの数", default: 2, min: 1, max: 3, integer: true, unit: "個" } },
   { id: "valueDrop", label: "見込みの急落", source: "model", doc: "（今の推定得点 ＋ 予定の経路の見込み）が前のフェーズより下がった割合（予定の経路の見込みに対して）。罠が見えた・点を先に取られた・行けなくなった時に下がる", param: { name: "下がった割合", default: 0.5, min: 0.1, max: 1, unit: "" } },
@@ -213,13 +221,13 @@ export class TriggerMonitor {
 
     // 敵が近い
     const [x, y] = wm.getPosition();
-    let near: { d: number; e: { x: number; y: number; tileId: number } } | null = null;
+    let near: { d: number; e: { x: number; y: number; tileId: number; lastSeenTurn: number } } | null = null;
     for (const e of wm.getEnemySightings()) {
       if (e.lastSeenTurn < turn - 1) continue;
       const d = Math.abs(e.x - x) + Math.abs(e.y - y);
       if (!near || d < near.d) near = { d, e };
     }
-    if (near && near.d <= th.enemyNear) this.emit(out, turn, { id: "enemyNear", phase, value: near.d, detail: `敵 ${near.e.tileId} まで ${near.d} マス` });
+    if (near && near.d <= th.enemyNear) this.emit(out, turn, { id: "enemyNear", phase, value: near.d, detail: `敵 ${near.e.tileId} まで ${near.d} マス（${dirText(near.e.x - x, near.e.y - y)}、(${near.e.x},${near.e.y})、T${near.e.lastSeenTurn} に${near.e.lastSeenTurn < turn ? "見た（前のターン）" : "見た"}。Webマップの位置を合わせた敵は 3×3 の外でも出る）` });
     return { fired: out, votes };
   }
 
