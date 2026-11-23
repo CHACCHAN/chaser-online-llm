@@ -334,7 +334,9 @@ function nearestEnemyInfo(wm: WorldMap, turn: number, x: number, y: number): { c
     while (t.length > 4) t.shift();
     tracks.set(e.tileId, t);
     const recent = t.filter(([tt]) => tt >= turn - 3);
-    const chasing = recent.length >= 3 && recent.every(([, dd]) => dd <= 4) && recent[recent.length - 1]![1] <= recent[0]![1];
+    // 初めて見た敵が 2 歩以内なら、まだ追ってきているか分からなくても追われているとみる
+    // （REVIEW 2026-11-23 room460 T62: 初見の敵の隣で dangerUnsure 倍に軽く見て当てられた）
+    const chasing = (recent.length >= 3 && recent.every(([, dd]) => dd <= 4) && recent[recent.length - 1]![1] <= recent[0]![1]) || (recent.length < 3 && d <= 2);
     if (!best || d < best.d) best = { d, chasing };
   }
   return { chasing: best?.chasing ?? false };
@@ -510,6 +512,14 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
   /** 行き先の分からないワープ（取り尽くした時の出口の候補）: 入口と、そこまでの手間 */
   const exits: { i: number; d: number }[] = [];
   const exitsOk = exitsAllowed(wm, ctx.turn);
+  // 直近に見た敵の隣（上下左右）: 寄って当てる目標（評価関数の targetValue が enemyAdjacent に chaseGain を足す）
+  const enemyAdj = new Set<number>();
+  for (const e of enemies) {
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const j = board.idx(e.x + dx, e.y + dy);
+      if (j >= 0 && j !== self) enemyAdj.add(j);
+    }
+  }
   for (let i = 0; i < n; i++) {
     if (i === self || !board.known[i]) continue;
     const portal = ev.isPortalValue(board.value[i]!);
@@ -526,8 +536,9 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
     if (portal && exitsOk) exits.push({ i, d });
     const gain = ev.tileGain(board.value[i]!);
     const ua = unknownAround(i);
-    if (!portal && gain <= 0 && ua === 0) continue;
-    const value = ev.targetValue({ value: board.value[i]!, gain, cluster: gain > 0 ? clusterAround(i) : 0, unknownAround: ua, portal }, p);
+    const adj = !portal && enemyAdj.has(i);
+    if (!portal && gain <= 0 && ua === 0 && !adj) continue;
+    const value = ev.targetValue({ value: board.value[i]!, gain, cluster: gain > 0 ? clusterAround(i) : 0, unknownAround: ua, portal, ...(adj ? { enemyAdjacent: true } : {}) }, p);
     if (value <= 0) continue;
     scored.push({ c: { i, value, terminal: portal }, key: value - p.distWeight * d });
   }
