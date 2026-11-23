@@ -161,6 +161,9 @@ export interface RunSummary {
     /** 評価関数（src/solver/evaluator.ts）を改修したか・確かめて採用したか */
     evaluatorChanged?: boolean;
     evaluatorAccepted?: boolean;
+    /** 作戦スクリプト（src/solver/tactics.ts）を改修したか・確かめて採用したか */
+    tacticsChanged?: boolean;
+    tacticsAccepted?: boolean;
   };
   unknownTiles: number[];
   diagnosis?: DiagnosticReport;
