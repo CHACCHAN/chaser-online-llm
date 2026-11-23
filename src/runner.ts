@@ -93,7 +93,7 @@ export interface RunSummary {
   /** 準備の LLM が決めた試合の設定（最初のモデル・きっかけ・判断の目安） */
   matchPlan?: { model: string | null; triggers: unknown; guide: Record<string, string>; notes: string[] } | null;
   /** 試合中に LLM がモデルを切り替えた記録 */
-  modelSwitches?: { turn: number; phase: string; from: string; to: string; by: string[] }[];
+  modelSwitches?: { turn: number; askedTurn?: number; phase: string; from: string; to: string; by: string[] }[];
   /** 試合の終わりに使っていたモデル */
   finalModel?: string;
   webMapDetected: boolean;
@@ -262,11 +262,14 @@ export async function runAgentMatch(
   const modelNames = Object.fromEntries(models.map((m) => [m.id, m.name]));
   const modelNameOf = (id: string) => modelNames[id] ?? id;
   let planner: PolicyFn = models.find((m) => m.id === policyModel)?.policy ?? makePlannerPolicy(matchParams, evaluator);
-  const modelSwitches: { turn: number; phase: string; from: string; to: string; by: string[] }[] = [];
+  const modelSwitches: { turn: number; askedTurn?: number; phase: string; from: string; to: string; by: string[] }[] = [];
+  /** 今のターン（裏の問い合わせの返答が届いた時に、いつ効いたかを記録する） */
+  let nowTurn = 0;
   const switchModel = (to: string, turn: number, phase: string, by: string[]) => {
     const m = models.find((x) => x.id === to);
     if (!m || to === activeModel) return;
-    modelSwitches.push({ turn, phase, from: activeModel, to, by });
+    // turn = 切り替えが効いたターン（返答が届いたターン）、askedTurn = 聞いたターン（REVIEW 2026-11-23: 聞いたターンで記録していた）
+    modelSwitches.push({ turn: nowTurn, askedTurn: turn, phase, from: activeModel, to, by });
     activeModel = to;
     planner = m.policy;
     triggerMonitor.setVoters(votersFrom(models, to));
@@ -327,6 +330,7 @@ export async function runAgentMatch(
 
   try {
     for (let turn = 1; ; turn++) {
+      nowTurn = turn;
       if (uiBus.getState().stopRequested) {
         gameOverReason = "Stopped by user from WebUI";
         break;

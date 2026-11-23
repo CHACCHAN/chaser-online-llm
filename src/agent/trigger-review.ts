@@ -189,6 +189,9 @@ export function reviewRun(turns: ReviewTurn[], summary: Record<string, any>): Tr
     const keep = d.id === "unknownTile" || d.id === "endgame" ? Infinity : 5;
     const notCalled = firedAt.filter((f) => !calledAt.some((c) => c >= f && c - f <= keep));
     const mine = replies.filter((r) => r.by.includes(d.id));
+    // 呼んだ後の得点は、返答が届いて効き始めたターンから数える（返答は 8〜18 ターン後に届くので、呼んだターンからだと効く前を見ていた。REVIEW 2026-11-23）
+    const appliedAt: number[] = [];
+    for (const t of turns) if ((t.llmReplies ?? []).some((r) => r.by.includes(d.id) && r.action !== null)) appliedAt.push(t.turn);
     const switchTo: Record<string, number> = {};
     for (const r of mine) if (r.model) switchTo[r.model] = (switchTo[r.model] ?? 0) + 1;
     if (firedAt.length === 0 && calledAt.length === 0) continue;
@@ -202,7 +205,7 @@ export function reviewRun(turns: ReviewTurn[], summary: Record<string, any>): Tr
       switched: mine.filter((r) => r.model).length,
       noReply: mine.filter((r) => r.action === null).length,
       switchTo,
-      afterCalled: afterStat(turns, index, [...called]),
+      afterCalled: afterStat(turns, index, appliedAt),
       afterNotCalled: afterStat(turns, index, notCalled),
     });
   }
@@ -246,7 +249,7 @@ export function renderTriggerReview(r: TriggerReview): string {
   const lines = [
     "## 試合中の LLM を呼ぶきっかけの評価",
     "",
-    `呼んだ時: ${r.callMode === "trigger" ? "きっかけが鳴った時だけ" : r.callMode === "every" ? "毎回" : "LLM なし"} / LLM の返答 ${r.calls} 回 / 試合全体 ${r.perTurn ?? "-"} 点/ターン（推定）。「その後」は鳴った・呼んだターンから ${AFTER_TURNS} ターンの推定得点。`,
+    `呼んだ時: ${r.callMode === "trigger" ? "きっかけが鳴った時だけ" : r.callMode === "every" ? "毎回" : "LLM なし"} / LLM の返答 ${r.calls} 回 / 試合全体 ${r.perTurn ?? "-"} 点/ターン（推定）。「呼んだ後」は返答が届いたターンから、「呼ばなかった後」は鳴ったターンから ${AFTER_TURNS} ターンの推定得点。`,
   ];
   if (r.matchPlan) {
     const g = Object.entries(r.matchPlan.guide).map(([k, v]) => `${TRIGGER_DEFS.find((d) => d.id === k)?.label ?? k}「${v}」`);
@@ -381,7 +384,7 @@ export function roomTriggerHistoryText(room: number, limit = 10): string {
   const agg = aggregateReviews(reviews);
   const lines = [
     `## このルームのきっかけの成績（きっかけを記録した過去 ${reviews.length} 試合。各試合の trigger-review.json）`,
-    `「その後」は ${AFTER_TURNS} ターンの推定得点/ターン（当てられた得点は入らない。当てられた回数は Webマップの PD から）。呼んだ後が呼ばなかった後・試合平均より低いきっかけは、呼んでも役に立っていない（しきい値を変える・切る・目安を変える）。`,
+    `「呼んだ後」は返答が届いたターンから、「呼ばなかった後」は鳴ったターンから ${AFTER_TURNS} ターンの推定得点/ターン（当てられた得点は入らない。当てられた回数は Webマップの PD から）。呼んだ後が呼ばなかった後・試合平均より低いきっかけは、呼んでも役に立っていない（しきい値を変える・切る・目安を変える）。`,
     "| きっかけ | 試合 | 鳴った(100ターンあたり) | 呼んだ | 目標/そのまま/モデル切替 | 呼んだ後 | 呼ばなかった後 | 試合平均 |",
     "| :--- | ---: | ---: | ---: | :--- | :--- | :--- | ---: |",
     ...agg.map((a) => {

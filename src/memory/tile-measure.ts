@@ -72,15 +72,27 @@ function mode(values: number[]): number | null {
   return best;
 }
 
+/**
+ * `turn=` が1ターンにいくつ減るか。ルームによって 1（room720）だったり 2（room455、T1=286・T2=284）だったりする
+ * （REVIEW 2026-11-23: 2 ずつ減るルームで残りターンを約 2 倍に見積もっていた）。2 つの取得から測る。測れなければ 1
+ */
+export function webTurnStep(a: { ourTurn: number; webTurn: number | null } | null, b: { ourTurn: number; webTurn: number | null } | null): number {
+  if (!a || !b || a.webTurn === null || b.webTurn === null || b.ourTurn === a.ourTurn) return 1;
+  const s = (a.webTurn - b.webTurn) / (b.ourTurn - a.ourTurn);
+  return Number.isFinite(s) && s >= 1.5 ? Math.round(s) : 1;
+}
+
 function buildEquations(turns: MeasureTurn[], offset: number): Equation[] {
   const samples = turns.map((t) => t.webScore).filter((s): s is ScoreSample => !!s && s.webTurn > 0);
   if (samples.length < 2) return [];
-  const total = mode(samples.map((s) => s.ourTurn + s.webTurn - 1));
+  // `turn=` が1ターンにいくつ減るか（ルームで 1 か 2）。残りターンはそれで割る
+  const step = webTurnStep(samples[0]!, samples[samples.length - 1]!);
+  const total = mode(samples.map((s) => s.ourTurn - 1 + Math.ceil(s.webTurn / step)));
   if (total === null) return [];
   // 同じ画面（同じ残りターン）は最初の1つだけ使う
   const byServerTurn = new Map<number, number>();
   for (const s of samples) {
-    const serverTurn = total + 1 - s.webTurn;
+    const serverTurn = total + 1 - Math.ceil(s.webTurn / step);
     if (!byServerTurn.has(serverTurn)) byServerTurn.set(serverTurn, s.itemPoint);
   }
   const points = [...byServerTurn.entries()].sort((a, b) => a[0] - b[0]);

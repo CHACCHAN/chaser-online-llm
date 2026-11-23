@@ -3,7 +3,9 @@ import type { WorldMap } from "../memory/world-map";
 import { numSetting } from "../settings";
 import { logger } from "../tools";
 import { uiBus } from "../ui/event-bus";
-import type { ScoreSample } from "../memory/tile-measure";
+import { type ScoreSample, webTurnStep } from "../memory/tile-measure";
+
+export { webTurnStep };
 import { scrapeRoomWebMap, type WebMapScrapeResult } from "./web-map-scraper";
 
 /**
@@ -17,8 +19,10 @@ import { scrapeRoomWebMap, type WebMapScrapeResult } from "./web-map-scraper";
  * Webマップの `turn=` は残りターン数（このターンを含む）。取りに行った時のハーネスのターンと足して全ターン数を出す。
  * 実測（room719、全1579ターン）: ハーネス T31 → turn=1549、T253 → turn=1327（どれも足して 1580）。
  */
-export function totalTurnsFromWeb(t: { ourTurn: number; webTurn: number | null } | null): number | null {
-  return t && t.webTurn !== null && t.webTurn > 0 ? t.ourTurn + t.webTurn - 1 : null;
+export function totalTurnsFromWeb(t: { ourTurn: number; webTurn: number | null; step?: number } | null): number | null {
+  if (!t || t.webTurn === null || t.webTurn <= 0) return null;
+  const step = Math.max(1, t.step ?? 1);
+  return t.ourTurn - 1 + Math.ceil(t.webTurn / step);
 }
 
 export class WebMapRefresher {
@@ -28,6 +32,7 @@ export class WebMapRefresher {
   private lastStageName: string | null = null;
   private consecutiveFailures = 0;
   private lastSeenTurn: { ourTurn: number; webTurn: number | null } | null = null;
+  private firstSeenTurn: { ourTurn: number; webTurn: number | null } | null = null;
   private lastScoreSample: ScoreSample | null = null;
   private attempts = 0;
   /** 取得中にワープした時、終わったらすぐ取り直す */
@@ -53,8 +58,9 @@ export class WebMapRefresher {
   }
 
   /** 最後に取れた Webマップの `turn=` の値と、それを取りに行った時のハーネスのターン（意味の確認用に記録する） */
-  get lastTurn(): { ourTurn: number; webTurn: number | null } | null {
-    return this.lastSeenTurn;
+  /** 最後の取得のターン（step = `turn=` が1ターンにいくつ減るか。最初と最後の取得から測る） */
+  get lastTurn(): { ourTurn: number; webTurn: number | null; step: number } | null {
+    return this.lastSeenTurn ? { ...this.lastSeenTurn, step: webTurnStep(this.firstSeenTurn, this.lastSeenTurn) } : null;
   }
 
   /** 最後に取れた公式のアイテム得点（I:）と残りターン数。タイルの得点の実測に使う（取れるたびに新しいオブジェクトになる） */
@@ -126,6 +132,7 @@ export class WebMapRefresher {
         this.worldMap.setGlobalGrid(r.grid, r.playerPos, r.stageName, turn, r.selfTileId, capturePos);
         this.consecutiveFailures = 0;
         this.lastSeenTurn = { ourTurn: turn, webTurn: r.turn };
+        if (!this.firstSeenTurn && r.turn !== null) this.firstSeenTurn = this.lastSeenTurn;
         if (r.liveScore && r.turn !== null)
           this.lastScoreSample = {
             ourTurn: turn,

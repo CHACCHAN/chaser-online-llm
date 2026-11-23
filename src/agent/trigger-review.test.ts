@@ -26,17 +26,18 @@ test("きっかけの評価: 鳴った・呼んだ・モデルの切り替えと
   const rv = reviewRun(makeTurns(), { runId: "r1", room: 5, policyModel: "standard", callMode: "trigger", matchPlan: { model: null, guide: { enemyNear: "攻める" }, triggers: { enabled: { heartbeat: false } } } });
   const t = rv.triggers.find((x) => x.id === "enemyNear")!;
   expect(t).toMatchObject({ fired: 2, called: 1, cont: 1, switched: 1, switchTo: { hunter: 1 } });
-  expect(t.afterCalled).toEqual({ n: 1, perTurn: 30, hitAfter: 0 });
+  // 呼んだ後は返答が届いた T6 から 10 ターン（T6〜T14 は 30 点、T15 は 10 点）
+  expect(t.afterCalled).toEqual({ n: 1, perTurn: 28, hitAfter: 0 });
   expect(t.afterNotCalled).toEqual({ n: 1, perTurn: 10, hitAfter: 1 });
   expect(rv.calls).toBe(1);
   expect(rv.models.map((m) => [m.id, m.turns])).toEqual([["standard", 5], ["hunter", 25]]);
   expect(rv.matchPlan?.off).toEqual(["heartbeat"]);
   const md = renderTriggerReview(rv);
-  expect(md).toContain("| 敵が近い | 2 | 1 | 0 | 1 | ハンター 1 | 0 | 30点/ターン（1回） | 10点/ターン（1回・当てられた 1） |");
+  expect(md).toContain("| 敵が近い | 2 | 1 | 0 | 1 | ハンター 1 | 0 | 28点/ターン（1回） | 10点/ターン（1回・当てられた 1） |");
   expect(md).toContain("目安 敵が近い「攻める」");
   const agg = aggregateReviews([rv, rv]);
   expect(agg[0]).toMatchObject({ id: "enemyNear", runs: 2, fired: 4, called: 2, switchTo: { hunter: 2 } });
-  expect(agg[0]!.afterCalled).toEqual({ n: 2, perTurn: 30, hitAfter: 0 });
+  expect(agg[0]!.afterCalled).toEqual({ n: 2, perTurn: 28, hitAfter: 0 });
 });
 
 test("準備に見せる、このルームのきっかけの成績（過去の試合の trigger-review.json から）", () => {
@@ -48,7 +49,7 @@ test("準備に見せる、このルームのきっかけの成績（過去の�
   writeFileSync(path.join(dir, "trigger-review.json"), JSON.stringify(rv));
   const text = roomTriggerHistoryText(room);
   expect(text).toContain("過去 1 試合");
-  expect(text).toContain("| 敵が近い `enemyNear` | 1 | 2 (6.7) | 1 | 0/1/1（ハンター1） | 30点/ターン（1回） |");
+  expect(text).toContain("| 敵が近い `enemyNear` | 1 | 2 (6.7) | 1 | 0/1/1（ハンター1） | 28点/ターン（1回） |");
   expect(text).toContain("最初のモデル ガーディアン");
 });
 
