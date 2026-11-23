@@ -848,7 +848,7 @@ details.coach > summary .more { text-decoration: underline; }
     <button class="btn danger" id="ltStop" type="button" hidden>止める</button>
     <span class="sep" aria-hidden="true"></span>
     <div class="grp" role="group" aria-label="学習の LLM"><label class="chk" title="学習が終わるたびに、学習の LLM（試合中の LLM とは別）が結果を読み、評価関数・地図の作り方・学習のやり方を直す（.env の LAB_COACH）"><input type="checkbox" id="lcOn" />学習の LLM</label><input id="lcModel" list="dlModels" placeholder="試合の LLM と同じ" autocomplete="off" spellcheck="false" aria-label="学習の LLM のモデル" title="学習の LLM のモデル（空なら試合の LLM と同じ。.env の LAB_COACH_MODEL）" /><select id="lcEffort" aria-label="学習の LLM の思考の深さ" title="学習の LLM の思考の深さ（effort。.env の LAB_COACH_EFFORT）"></select></div>
-    <label class="chk" title="試合をしていない間、毎回新しい地図で学習を続ける。試合が始まると止まる（.env の TRAIN_IDLE に保存）"><input type="checkbox" id="ltIdle" />試合をしていない間も学習を続ける</label>
+    <label class="chk" title="ほかの学習をしていない間、毎回新しい地図で学習を続ける（.env の TRAIN_IDLE に保存）。試合中も続けるか止めるかは設定の TRAIN_DURING_MATCH（既定は続ける）"><input type="checkbox" id="ltIdle" />ずっと学習を続ける（試合中も）</label>
   </div>
   <div class="lab-status" id="labStatus" aria-live="polite"></div>
   <div class="lab-tabs" role="group" aria-label="表示">
@@ -1611,7 +1611,7 @@ function renderDecide() {
   }
   if (bp) why += `<div class="dline dim">${esc(bp)}</div>`;
   const mm = st.matchModel;
-  if (mm) why += `<div class="dline" title="方策のモデル（特性）。試合中の LLM がきっかけで呼ばれた時に切り替えられる"><span class="k">モデル</span><b>${esc(mm.name)}</b>${mm.switches ? ` <span class="faint">切り替え ${mm.switches} 回</span>` : ""}${mm.callMode ? ` <span class="faint">／ LLM を呼ぶ時: ${mm.callMode === "trigger" ? "きっかけが鳴った時" : "毎回"}</span>` : ""}</div>`;
+  if (mm) why += `<div class="dline" title="方策のモデル（特性）。試合中の LLM がきっかけで呼ばれた時に切り替えられる。準備で作戦方針から決めた切り替えの決まりがあれば、ハーネスがすぐ切り替える"><span class="k">モデル</span><b>${esc(mm.name)}</b>${mm.switches ? ` <span class="faint">切り替え ${mm.switches} 回</span>` : ""}${mm.callMode ? ` <span class="faint">／ LLM を呼ぶ時: ${mm.callMode === "trigger" ? "きっかけが鳴った時" : "毎回"}</span>` : ""}</div>`;
   if (p.triggers?.length) why += `<div class="dline" title="試合中の LLM を呼ぶきっかけ（鳴ると、LLM が空いていれば呼ぶ。考え中なら次に持ち越す）"><span class="k">きっかけ</span>${p.triggers.map((f) => `<span class="ev trig" title="${esc(f.detail)}">${esc(f.label)}</span>`).join(" ")}</div>`;
   const plan = curPlan(), hasMain = p.mainAction !== undefined || p.mainNote !== undefined || plan;
   const planLine = plan
