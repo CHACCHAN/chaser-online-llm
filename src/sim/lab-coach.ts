@@ -7,7 +7,7 @@ import { activePolicyPrompt } from "../agent/policy";
 import { appendReview } from "../agent/harness-review";
 import { OBJECTIVE_KEYS } from "../solver/models";
 import { PARAM_SPACE } from "../solver/evaluator";
-import { AGENT_DIR, AGENT_REVIEW_PATH, EVALUATOR_PATH, POLICY_STYLES_PATH, LAB_COACH_DIR, LAB_COACH_LOG_PATH, POLICY_TRAIN_LOG_PATH, PROJECT_ROOT, SIM_MAPS_DIR, SIM_PROFILES_PATH, TRAIN_CONFIG_PATH } from "../paths";
+import { AGENT_DIR, AGENT_REVIEW_PATH, EVALUATOR_PATH, POLICY_STYLES_PATH, LAB_COACH_DIR, LAB_COACH_LOG_PATH, POLICY_TRAIN_LOG_PATH, PROJECT_ROOT, RUNS_DIR, SIM_MAPS_DIR, SIM_PROFILES_PATH, TRAIN_CONFIG_PATH } from "../paths";
 import { getSetting, numSetting } from "../settings";
 import { logger } from "../tools/logger";
 import type { EpisodeResult } from "./episode";
@@ -319,6 +319,50 @@ function fmtHist(h: Map<number, number>, top = 10): string {
 }
 
 /** LLM に渡す統計（report.md）と再生の記録（traces.json）を書き出し、report の本文を返す */
+/** シミュレータの1回の当ての大きさ（sim-profiles の putHit） */
+function hitSize(room: number | null): number {
+  try {
+    const prof = JSON.parse(readFileSync(SIM_PROFILES_PATH, "utf-8")) as { default?: { putHit?: number }; rooms?: Record<string, { putHit?: number }> };
+    return (room !== null ? prof.rooms?.[String(room)]?.putHit : undefined) ?? prof.default?.putHit ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** 本物の試合の当てた・当てられた（直近 20 試合の summary.json の公式の結果と hits） */
+export function realHitStats(limit = 20): { matches: number; turns: number; hits: number; put: number; putDamage: number; sizes: number[] } {
+  const out = { matches: 0, turns: 0, hits: 0, put: 0, putDamage: 0, sizes: [] as number[] };
+  let dirs: string[] = [];
+  try {
+    dirs = readdirSync(RUNS_DIR).sort().reverse();
+  } catch {
+    return out;
+  }
+  for (const d of dirs) {
+    if (out.matches >= limit) break;
+    try {
+      const s = JSON.parse(readFileSync(path.join(RUNS_DIR, d, "summary.json"), "utf-8")) as { turns?: number; officialResult?: { putPoint?: number; putDamage?: number } | null; hits?: { put: number; putDamage: number }[] };
+      if (!s.officialResult || !s.turns || s.turns < 20) continue;
+      out.matches += 1;
+      out.turns += s.turns;
+      out.put += s.officialResult.putPoint ?? 0;
+      out.putDamage += s.officialResult.putDamage ?? 0;
+      const hs = s.hits ?? [];
+      if (hs.length) {
+        out.hits += hs.length;
+        for (const h of hs) out.sizes.push(Math.abs(h.putDamage || h.put));
+      } else if (s.officialResult.putPoint || s.officialResult.putDamage) {
+        out.hits += (s.officialResult.putPoint ? 1 : 0) + (s.officialResult.putDamage ? 1 : 0);
+        for (const v of [s.officialResult.putPoint, s.officialResult.putDamage]) if (v) out.sizes.push(Math.abs(v));
+      }
+    } catch {
+      // 読めない試合は数えない
+    }
+  }
+  out.sizes = out.sizes.slice(0, 6);
+  return out;
+}
+
 export function writeCoachReport(input: CoachInput, dir: string): string {
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "traces.json"), JSON.stringify(input.runs.map((r, i) => ({ index: i, scenario: r.scenario, score: r.score, totalTurns: r.totalTurns, trace: r.trace ?? null }))));
@@ -348,6 +392,13 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
     const won = withOpp.filter((r) => r.won).length;
     const pd = withOpp.reduce((a, r) => a + (r.putDamage ?? 0), 0);
     lines.push("", `相手のいる地図 ${withOpp.length} 枚: 勝ち ${won}、当てられた合計 ${pd}（相手の種類の重み oppGreedy/oppHunter/oppSelf と自己対戦の相手 var/policy/league.json。当てた時の得点は sim-profiles.json の putHit・仮の値）`);
+    // 本物の試合と比べる（シミュレータで当て合いが本物より多すぎると、方策は本物では起きない当て合いを狙うように学習する）
+    const turns = withOpp.reduce((a, r) => a + r.totalTurns, 0);
+    const hitsSim = withOpp.reduce((a, r) => a + Math.round(((r.put ?? 0) - (r.putDamage ?? 0)) / Math.max(1, hitSize(input.room))), 0);
+    const real = realHitStats();
+    lines.push(
+      `当て合いの多さ: シミュレータ ${r1((hitsSim / Math.max(1, turns)) * 100)} 回/100ターン（当てた＋当てられた。putHit で割った回数）／本物の試合 ${real.matches ? `${r1((real.hits / Math.max(1, real.turns)) * 100)} 回/100ターン（直近 ${real.matches} 試合・${real.turns} ターン、当てた ${real.put}・当てられた ${real.putDamage}。1回の大きさ ${real.sizes.join("・") || "-"}）` : "まだ記録が無い"}。シミュレータの方がずっと多ければ、相手の動き（train-config の opp*）・putHit（sim-profiles）を本物に近づける`,
+    );
   }
   const weak = input.runs.map((r, i) => [perTurnOf(r), i] as const).sort((a, b) => a[0] - b[0]).slice(0, 3);
   lines.push("", `弱い地図: ${weak.map(([, i]) => `#${i}`).join(", ")}（traces.json の index。各ターンの位置・得点・自分の当てた／当てられた得点の累計 hits（同じターンの当て合いは得点の差では見えない）・手・方策の理由・変わったマス）`);
