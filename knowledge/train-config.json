@@ -2,11 +2,13 @@
   "_doc": "方策のパラメータの学習のやり方（src/sim/train.ts）。popSize = 1世代で試す候補の数（偶数）、batch = 1世代で候補を打たせる地図の数、validation = 学習の後に確かめる地図の数（保存するかをこれで決める）、sigmaStart / sigmaEnd = 探す幅（0〜1 に直した値の上での標準偏差。始めは広く、終わりは細かく）。oppGreedy / oppHunter / oppSelf = シミュレータの相手の種類の重み（拾う＝一番近い点へ歩く、狙う＝近くのプレイヤーを追って置いて当てる、自分＝自分と同じ方策。今のパラメータか、前に採用したパラメータ var/policy/league.json）。leagueSize = 自己対戦の相手として残す前のパラメータの数。範囲の外の値は範囲に収める。学習の LLM が学習の結果を見て直してよい",
   "popSize": 16,
   "batch": 12,
-  "validation": 24,
+  "validation": 96,
   "sigmaStart": 0.15,
   "sigmaEnd": 0.04,
   "oppGreedy": 1,
   "oppHunter": 1,
   "oppSelf": 2,
-  "leagueSize": 6
+  "leagueSize": 6,
+  "hazardRatio": 0.3,
+  "hazardSlack": 5
 }

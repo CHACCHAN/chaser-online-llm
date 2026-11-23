@@ -6,10 +6,17 @@
     "features": {
         "ghcr.io/chacchan/devcontainer-features/my-assets:latest": {},
         "ghcr.io/shyim/devcontainers-features/bun:0": {},
-        "ghcr.io/devcontainers/features/python:1": { "version": "3.13", "installTools": false }
+        "ghcr.io/devcontainers/features/python:1": {
+            "version": "3.13",
+            "installTools": false
+        }
     },
     "workspaceFolder": "/${localWorkspaceFolderBasename}",
     "workspaceMount": "source=${localWorkspaceFolder},target=/${localWorkspaceFolderBasename},type=bind,consistency=cached",
+    "runArgs": [
+        "-p",
+        "0.0.0.0:3456:3456"
+    ],
     "customizations": {
         "vscode": {
             "extensions": [
