@@ -1,7 +1,7 @@
 # SELF_CHECK.md — 自己レビュー＆改善手順（エージェント専用）
 
 > SETUP で変更があったとき、またはコードを改修したときに実施する。**全項目合格まで「修正 → 再チェック」を繰り返す**。終わったらこのファイルと `SETUP.md` を更新する。
-> 最終更新: 2026-11-23 / v74（試合後の仕事を裏で行い、その間に次の試合を始める POST_MATCH_BACKGROUND）
+> 最終更新: 2026-11-23 / v75（作戦方針の切り替えの決まり modelRules・敵へ寄る chaseGain・当てられを推定得点と記録に・試合中も学習 TRAIN_DURING_MATCH・REVIEW 2 件）
 
 ## 1. 機械チェック（全て必須）
 - [ ] `bun run typecheck` エラー0
@@ -45,6 +45,7 @@
 - 1つでも ❌ → 修正して §1 からやり直す（同じ項目で3回失敗したら人間に相談）
 
 ## 6. 更新履歴
+- v75 (2026-11-23): ユーザーの指摘「put・プットダメージが行動ログに無い」「作戦方針が効いていない」と REVIEW.md の 2 件に対応。(1) Webマップの P:・PD: を推定得点に入れ（setPutScores）、turns.jsonl の putChange・summary.json の hits・行動ログ／画面の「当てた／当てられた／置いた」・diagnosis.md の PUT_DAMAGE_TAKEN。学習の得点には前から put・putDamage が入っていた（engine の totalScore）。(2) 作戦方針は試合中の LLM にしか効かず、返事は 40〜90 秒遅れるので、room460 T62 はコレクターのまま当てられていた。準備が方針から modelRules（敵が radius マス以内→enemy.model、離れて afterTurns→calm.model）を書き、ハーネスが毎フェーズ LLM を待たずに切り替える（ModelRuleWatcher。状態が変わった時だけ）。学習の LLM にも方針を渡す。(3) 方策は敵を目標にできなかった。評価関数に chaseGain（敵の隣を目標にする価値、init 0。コレクター・ガーディアンは 0 に固定）。シミュレータでハンターの chaseGain を 0→2000 にすると 285→1843 点/ターンだが、当て合いの回数が本物（14 試合で 1 回、0.02 回/100ターン）よりずっと多いためで、学習の LLM の統計に「当て合いの多さ」（シミュレータと本物）を出した。(4) 初めて見た敵が 2 歩以内なら追われているとみる（同じ地図 16 枚で前と同じ成績）。(5) 試合中も学習を止めない TRAIN_DURING_MATCH（既定 true）。振り返りの間は学習の LLM を動かさない。(6) REVIEW: bench --init と init が学習した値で上書きされる注意、ワープをまたいだ返答の目標を絶対座標で直す（shift）、直近の経過の聞いた／届いたを分ける、考え中のきっかけを捨てない（droppedTriggers）、時間切れは全体の秒数、verify の legend、HOLE_STEPS、内訳だけのアイテムの差は low、final-map の凡例を tiles.json から。開発中に学習の LLM の edit-guard がコミット前の 4 ファイルを戻したので、控えから戻してコミットした。models.test は sim-profiles の putHit を読むように直した。チェック: typecheck・bun test（149 件）・verify-policy 合格
 - v74 (2026-11-23): 試合後の仕事（振り返り・レビュー・方策の学習・学習の LLM）を裏の列（src/evolution/post-match-queue.ts、1つずつ）で行い、その間に次の試合を始める（POST_MATCH_BACKGROUND、既定 true）。評価関数を書き換えている間（runPostMatchEvolution・runLabCoach）に始まった試合は、書き換えを始めた時の写し var/current/evaluator-verified.ts（相対 import を絶対パスに）を読む。進み具合は state.background とヘッダの「裏で: …」、試合の status は上書きしない。裏に渡した MainAgent は detachFromUi で画面・MEMO.md を書かず、仕事の後に end。開発中に試合が終わり edit-guard がコミット前の 7 ファイルを戻したので、控えから戻してコミットした。テスト: post-match-queue.test（順に行う・background・写しを読み込める）。ハーネス全体（偽サーバ・WebUI の開始）は /api/control を叩くので通していない。チェック: typecheck 合格
 - v73 (2026-11-23): agent/REVIEW.md（11-23 07:38〜12:44 の 6 件）に対応。試合中の LLM: 返答が届くまでのターン数とそのころの予定の位置・上限秒数をメッセージに、ヘッジは返答時間の中央値の 1.3 倍から・捨てた方は calls に数えない、llmReplies に note・文、動かない手は作戦の判定をしない、振り返りの時間切れでも出た文を残す。記録: きっかけの「呼んだ後」は届いたターンから、Webマップの turn= の減り方（1 か 2）を測って残りターン、モデルの切り替えは効いたターン。方策: 端から始まった時の観測、目標が無い時に敵から離れる、動けなかった歩く手を使わない。シミュレータ: traces に当てた・当てられた累計 hits。未対応は REVIEW.md の各項（当て合いの上限は本物の記録が無いので見送り）。シミュレータ（24 枚・300 ターン）は差が 1 枚（seed 2、端から動けるようになって当て合いになった）だけ。チェック: typecheck、src/agent・memory・perception・solver・sim の該当テスト合格
 - v72 (2026-11-23): きっかけの評価は鳴ったきっかけしか見ず、何も鳴らなかった区間に気づけなかった。trigger-review に silentStretches（LLM の返答が無いまま推定得点がターンの 300 点しか増えない区間、30 ターン以上。多かった手・方策の理由・鳴ったきっかけ）を足し、diagnosis.md の節と準備に見せる成績（直近 3 試合）に出す。Webマップの公式のアイテム得点は数百ターン遅れることがあるので使わない。room720 の試合で T953〜T1043（91 ターン、grl→wr）を見つけた。prep.md に見直し方。テスト: trigger-review.test

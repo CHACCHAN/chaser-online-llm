@@ -8,10 +8,10 @@ CHaserOnline003 を、プロジェクト内の Claude Code CLI (`./node_modules/
 
 - **準備**: WebUI の「準備」ボタン（押すと準備中→終わると「開始」に変わる）。ルームに入らずに LLM が読むだけのツールでルール・過去の試合・作戦方針を調べ、最初のメモと試合の設定（最初のモデル・試合中の LLM を呼ぶきっかけとしきい値・きっかけごとの目安。`src/agent/match-plan.ts`）を作る。公式のバージョンも確認する（`agent/prompts/prep.md`、`AGENT_PREP`）。連続モードの次の試合は入室前に自動で準備し直す。
 - **試合中の手**: 経路探索の方策（`src/solver/planner.ts`＋評価関数 `evaluator.ts`＋学習したパラメータ `var/policy/params.json`、数ミリ秒）が毎フェーズすぐ出す。詳細は [docs/learning.md](docs/learning.md)。
-- **試合中の LLM（作戦係）**: 使い捨ての `claude -p`（前の会話なし・ツールなし）。きっかけ（`src/agent/triggers.ts`: モデルの不一致・敵が近い・当てられた など）が鳴った時だけ呼ばれ（`AGENT_CALL_MODE`）、手を待たせず裏で盤面を読み、届いた `plan`（目標）と `model`（特性ごとのモデル）を反映する（`agent/prompts/main.md`）。試合後にきっかけごとの効き目を評価し（`src/agent/trigger-review.ts`、`trigger-review.json`）、次の準備に渡す。引き継ぎはメモ・直近の経過・全体マップ。
+- **試合中の LLM（作戦係）**: 使い捨ての `claude -p`（前の会話なし・ツールなし）。きっかけ（`src/agent/triggers.ts`: モデルの不一致・敵が近い・当てられた など）が鳴った時だけ呼ばれ（`AGENT_CALL_MODE`）、手を待たせず裏で盤面を読み、届いた `plan`（目標）と `model`（特性ごとのモデル）を反映する（`agent/prompts/main.md`）。作戦方針のモデルの使い分けは、準備が試合の設定の `modelRules` にし、ハーネスが LLM を待たずに切り替える。試合後にきっかけごとの効き目を評価し（`src/agent/trigger-review.ts`、`trigger-review.json`）、次の準備に渡す。引き継ぎはメモ・直近の経過・全体マップ。
 - **試合後**: 試合中の LLM（ツールあり）が振り返り、`src/solver/evaluator.ts` を改修（試合の記録の盤面での確かめ `verify` と、シミュレータでの改修前との比較のどちらかに落ちたら戻す）。続けてシミュレータ（`src/sim/`、地図は毎回ランダム＋本物の地図）で方策を学習する（`TRAIN_AFTER_MATCH_MIN`）。その後、ハーネスの使い勝手をレビューし、`agent/REVIEW.md` に追記される。これらは裏で順に行い、その間に次の試合を始める（`POST_MATCH_BACKGROUND`、`src/evolution/post-match-queue.ts`。書き換え中に始まった試合は書き換える前の評価関数の写しを使う）。
 - **学習の LLM**: 試合中の LLM とは別のセッション。学習が終わるたびに統計（理論値の目安との差 `src/sim/oracle.ts` を含む）を読み、評価関数・地図の作り方（`knowledge/sim-profiles.json`）・学習のやり方（`knowledge/train-config.json`）・モデル（`knowledge/styles.json`）を直す。直したものは確かめて、弱ければ／本物の地図から遠ざかれば／範囲外なら戻す。ハーネスでしか直らないことは `agent/REVIEW.md` に要望として載る（`src/sim/lab-coach.ts`、`agent/prompts/lab-coach.md`、`LAB_COACH`）。
-- **起動**: `bun run start`（Web ダッシュボード。ヘッダで「試合」「学習」「統計」を切り替える。「学習」は地図を作って並べ（全部同時に再生）→ その地図で学習 → 地図ごとの学習前→後。試合の合間も学習を続けられる `TRAIN_IDLE`。「統計」はルーム・試合の成績、試合の記録、学習の推移、モデルの特性、試合中の LLM の費用と効き目）／ `bun run play --room N`（WebUI なしで1試合）。
+- **起動**: `bun run start`（Web ダッシュボード。ヘッダで「試合」「学習」「統計」を切り替える。「学習」は地図を作って並べ（全部同時に再生）→ その地図で学習 → 地図ごとの学習前→後。ずっと（試合中も）学習を続けられる `TRAIN_IDLE`・`TRAIN_DURING_MATCH`。「統計」はルーム・試合の成績、試合の記録、学習の推移、モデルの特性、試合中の LLM の費用と効き目）／ `bun run play --room N`（WebUI なしで1試合）。
 - 詳細仕様: [docs/README.md](docs/README.md)
 
 ## 開発のルール
