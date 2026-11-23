@@ -12,6 +12,8 @@ import { TRIGGER_DEFS, type TriggerId } from "./triggers";
  */
 
 export const AFTER_TURNS = 10;
+/** 「呼ばれないまま点が増えなかった区間」として出す長さ（ターン） */
+export const SILENT_MIN_TURNS = 30;
 
 /** turns.jsonl の1行のうち、ここで使うもの */
 export interface ReviewTurn {
@@ -21,7 +23,22 @@ export interface ReviewTurn {
   calledBy?: Partial<Record<"CMD1" | "CMD2", string[]>>;
   llmReplies?: LlmReply[];
   model?: string;
-  webScore?: { putDamage?: number };
+  webScore?: { putDamage?: number; itemPoint?: number };
+  cmd1?: string | null;
+  cmd2?: string | null;
+  cmd2Reason?: string | null;
+}
+
+/** LLM が呼ばれないまま、アイテムの得点が増えなかった区間 */
+export interface SilentStretch {
+  from: number;
+  to: number;
+  turns: number;
+  /** その間に鳴ったきっかけ（鳴ったが呼ばなかった。考え中・持ち越しを捨てた・切られていた） */
+  fired: string[];
+  /** その間に一番多かった手と方策の理由（何をしていたか） */
+  topCmds: string;
+  topReason: string;
 }
 
 /** 試合中の LLM の返答（聞いたターン・きっかけ・返答の中身） */
@@ -76,6 +93,50 @@ export interface TriggerReview {
   models: { id: string; name: string; turns: number; perTurn: number | null }[];
   startModel: string | null;
   matchPlan: { model: string | null; guide: Record<string, string>; off: string[]; thresholds: Record<string, number> } | null;
+  /** LLM が呼ばれないまま点が増えなかった区間（SILENT_MIN_TURNS ターン以上、長い順） */
+  silent?: SilentStretch[];
+}
+
+/**
+ * アイテムの得点が増えなかったターンが続き、その間に LLM の返答が1回も無かった区間。
+ * 得点はハーネスの推定の増え方（ターンの 300 点より多いか）で見る（Webマップの公式の値は数百ターン遅れることがある）。
+ * 鳴るはずのきっかけが無い・切られている・しきい値が合っていない、を次の準備で直すための材料。
+ */
+export function silentStretches(turns: ReviewTurn[], min = SILENT_MIN_TURNS): SilentStretch[] {
+  const out: SilentStretch[] = [];
+  let start = -1;
+  const close = (end: number) => {
+    if (start < 0) return;
+    const span = turns.slice(start, end + 1);
+    start = -1;
+    if (span.length < min) return;
+    if (span.some((t) => (t.llmReplies ?? []).some((r) => r.action !== null))) return;
+    const count = (f: (t: ReviewTurn) => string | undefined) => {
+      const m = new Map<string, number>();
+      for (const t of span) {
+        const k = f(t);
+        if (k) m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      const top = [...m].sort((a, b) => b[1] - a[1])[0];
+      return top ? `${top[0]}（${top[1]} ターン）` : "-";
+    };
+    out.push({
+      from: span[0]!.turn,
+      to: span[span.length - 1]!.turn,
+      turns: span.length,
+      fired: [...new Set(span.flatMap((t) => (t.triggers ?? []).map((f) => f.id)))],
+      topCmds: count((t) => (t.cmd1 && t.cmd2 ? `${t.cmd1}→${t.cmd2}` : undefined)),
+      topReason: count((t) => t.cmd2Reason ?? undefined ? (t.cmd2Reason as string).replace(/\s*\(.*$/, "").replace(/\s*見込み.*$/, "") : undefined),
+    });
+  };
+  for (let i = 0; i < turns.length; i++) {
+    const t = turns[i]!;
+    const gained = i > 0 && t.estimatedScoreAfter - turns[i - 1]!.estimatedScoreAfter > 300;
+    if (gained) close(i - 1);
+    else if (start < 0) start = i;
+  }
+  close(turns.length - 1);
+  return out.sort((a, b) => b.turns - a.turns);
 }
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
@@ -172,6 +233,7 @@ export function reviewRun(turns: ReviewTurn[], summary: Record<string, any>): Tr
           thresholds: mp.triggers?.thresholds ?? {},
         }
       : null,
+    silent: silentStretches(turns),
   };
 }
 
@@ -199,7 +261,20 @@ export function renderTriggerReview(r: TriggerReview): string {
   if (r.models.length > 0) {
     lines.push("", `モデル: ${r.models.map((m) => `${m.name} ${m.turns}ターン ${m.perTurn ?? "-"}点/ターン`).join(" / ")}`);
   }
+  lines.push(...renderSilent(r));
   return lines.join("\n");
+}
+
+/** 呼ばれないまま点が増えなかった区間の節（無ければ空） */
+export function renderSilent(r: TriggerReview, runLabel = false): string[] {
+  const s = r.silent ?? [];
+  if (s.length === 0) return [];
+  const label = (id: string) => TRIGGER_DEFS.find((d) => d.id === id)?.label ?? id;
+  return [
+    "",
+    `LLM が呼ばれないまま、アイテムの得点が増えなかった区間（${SILENT_MIN_TURNS} ターン以上）。ここで呼べていれば直せたかもしれない。鳴るはずのきっかけを切っていないか（定期など）・しきい値が合っているかを見直す。今あるきっかけでは拾えない様子なら、ハーネスへの要望（agent/REVIEW.md）に書く:`,
+    ...s.slice(0, 5).map((x) => `- ${runLabel ? `${r.runId} ` : ""}T${x.from}〜T${x.to}（${x.turns} ターン）: 多かった手 ${x.topCmds}・方策の理由 ${x.topReason}・鳴ったきっかけ ${x.fired.length ? x.fired.map(label).join("・") : "無し"}`),
+  ];
 }
 
 export function readTurns(runDir: string): ReviewTurn[] {
@@ -319,6 +394,9 @@ export function roomTriggerHistoryText(room: number, limit = 10): string {
     models.set(m.id, x);
   }
   if (models.size > 0) lines.push("", `モデルを使ったターンと推定得点/ターン: ${[...models].map(([id, m]) => `${getStyle(id).name} ${m.turns}ターン ${m.turns ? r1(m.gain / m.turns) : "-"}`).join(" / ")}`);
+  // 呼ばれないまま点が増えなかった区間（直近の試合から。古い評価には無いので turns.jsonl から作り直さない）
+  const silent = reviews.slice(0, 3).flatMap((r) => renderSilent(r, true).slice(2));
+  if (silent.length > 0) lines.push("", `LLM が呼ばれないまま点が増えなかった区間（直近 3 試合、${SILENT_MIN_TURNS} ターン以上）。切ったきっかけ・しきい値を見直す材料:`, ...silent);
   const plans = reviews.filter((r) => r.matchPlan).slice(0, 3);
   if (plans.length > 0) {
     lines.push("", "最近の準備の設定と結果:");

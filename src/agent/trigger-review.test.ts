@@ -51,3 +51,21 @@ test("準備に見せる、このルームのきっかけの成績（過去の�
   expect(text).toContain("| 敵が近い `enemyNear` | 1 | 2 (6.7) | 1 | 0/1/1（ハンター1） | 30点/ターン（1回） |");
   expect(text).toContain("最初のモデル ガーディアン");
 });
+
+test("LLM が呼ばれないまま点が増えなかった区間を出す（返答があった区間・短い区間は出さない）", async () => {
+  const { silentStretches, renderTriggerReview, reviewRun } = await import("./trigger-review");
+  const turns = Array.from({ length: 120 }, (_, i) => {
+    const t = i + 1;
+    // 1〜20: 点が増える / 21〜70: 増えない（呼ばれない）/ 71〜80: 増える / 81〜120: 増えないが T90 に返答あり
+    const gain = t <= 20 || (t > 70 && t <= 80) ? 800 : 290;
+    return { turn: t, gain, cmd1: "grl", cmd2: "wr", cmd2Reason: "出口のワープへ (0,10)300 見込み0", llmReplies: t === 90 ? [{ asked: 88, phase: "CMD1", by: ["noGain"], action: "plan" }] : [] };
+  });
+  let est = 0;
+  const rows = turns.map((t) => ({ ...t, estimatedScoreAfter: (est += t.gain) }));
+  const s = silentStretches(rows);
+  expect(s.map((x) => [x.from, x.to])).toEqual([[21, 70]]);
+  expect(s[0]!.topCmds).toContain("grl→wr");
+  expect(s[0]!.topReason).toContain("出口のワープへ");
+  const text = renderTriggerReview(reviewRun(rows, { runId: "r", room: 1, callMode: "trigger" }));
+  expect(text).toContain("T21〜T70（50 ターン）");
+});
