@@ -520,11 +520,15 @@ body.view-lab #labFlow { display: flex; }
 .lab-bar .sep { width: 1px; align-self: stretch; background: var(--line2); }
 .lab-bar > .chk { margin-left: auto; }
 #lcModel { width: 150px; } #lcEffort { width: auto; }
-.lab-status { padding: 10px var(--s4); border-bottom: 1px solid var(--line2); display: grid; gap: 6px; font-size: var(--t-s); }
+.lab-status { padding: 10px var(--s4); border-bottom: 1px solid var(--line2); display: grid; gap: 6px; font-size: var(--t-s); max-height: 34vh; overflow: auto; flex: none; }
 .lab-status:empty { display: none; }
 .lab-status .msg { color: var(--ink2); overflow-wrap: anywhere; }
 .coach { border-left: 3px solid var(--main); padding: 4px 0 4px 10px; display: grid; gap: 4px; }
 .coach .head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+details.coach > summary { list-style: none; cursor: pointer; }
+details.coach > summary::-webkit-details-marker { display: none; }
+details.coach > summary .more { text-decoration: underline; }
+.coach-body { display: grid; gap: 4px; max-height: 24vh; overflow: auto; padding-right: 6px; }
 .coach .say { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
 .coach ul { margin: 0; padding-left: 1.2em; display: grid; gap: 2px; }
 .coach .ok { color: var(--main); } .coach .ng { color: var(--ink2); }

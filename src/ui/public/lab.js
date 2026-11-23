@@ -216,8 +216,19 @@
     if (c.reverted?.length) items.push(`<li class="ng">範囲の外の変更を戻した: ${esc(c.reverted.join("、"))}</li>`);
     const g = c.gap;
     const gap = g ? `<div class="msg" title="同じ地図・同じ相手で、全部のワープの行き先を知っている・深く考える方策と比べた（src/sim/oracle.ts）">理論値の目安に届いている割合 <b>${Math.round(g.ratio * 100)}%</b>（今 ${fmt(g.policy)} / 目安 ${fmt(g.reference)} 点/ターン。差の内訳: 知らないこと +${fmt(g.knowledgeGap)}・考えが浅いこと +${fmt(g.searchGap)}）</div>` : "";
-    return `<div class="coach"><div class="head"><b>学習の LLM${esc(status)}</b><span class="dim">${esc(when)}・${esc(COACH_TRIGGER[c.trigger] || c.trigger)}の後・記録 ${esc(c.dir)}</span></div>${gap}${c.summary ? `<div class="say">${esc(c.summary)}</div>` : ""}${items.length ? `<ul>${items.join("")}</ul>` : `<div class="dim">直したものは無し</div>`}</div>`;
+    // 1行のまとめだけ見せ、LLM の言葉と直したものは開いた時だけ（地図が隠れないように。開き閉じは覚える）
+    const acc = c.changes.filter((x) => x.accepted && x.what !== "review").length, rej = c.changes.filter((x) => !x.accepted).length + (c.reverted?.length ? 1 : 0);
+    const req = c.changes.some((x) => x.what === "review");
+    const brief = [g ? `目安の <b>${Math.round(g.ratio * 100)}%</b>` : "", acc ? `採用 ${acc}` : "", rej ? `戻した ${rej}` : "", !acc && !rej ? "直したものは無し" : "", req ? "要望あり（agent/REVIEW.md）" : ""].filter(Boolean).join("・");
+    return `<details class="coach" id="coachBox" ${L.coachOpen ? "open" : ""}><summary class="head"><b>学習の LLM${esc(status)}</b><span>${brief}</span><span class="dim">${esc(when)}・${esc(COACH_TRIGGER[c.trigger] || c.trigger)}の後</span><span class="dim more">${L.coachOpen ? "閉じる" : "くわしく"}</span></summary>
+      <div class="coach-body">${gap}${c.summary ? `<div class="say">${esc(c.summary)}</div>` : ""}${items.length ? `<ul>${items.join("")}</ul>` : ""}<div class="dim">記録 ${esc(c.dir)}</div></div></details>`;
   }
+  L.coachOpen = load("chaser.labCoachOpen") === "1";
+  $("#labStatus").addEventListener("toggle", (e) => {
+    if (e.target.id !== "coachBox") return;
+    L.coachOpen = e.target.open; save("chaser.labCoachOpen", L.coachOpen ? "1" : "0");
+    const more = e.target.querySelector(".more"); if (more) more.textContent = L.coachOpen ? "閉じる" : "くわしく";
+  }, true);
 
   $("#lmMake").addEventListener("click", async () => {
     stopPlay();
