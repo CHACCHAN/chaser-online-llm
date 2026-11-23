@@ -348,7 +348,7 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
     lines.push("", `相手のいる地図 ${withOpp.length} 枚: 勝ち ${won}、当てられた合計 ${pd}（相手の種類の重み oppGreedy/oppHunter/oppSelf と自己対戦の相手 var/policy/league.json。当てた時の得点は sim-profiles.json の putHit・仮の値）`);
   }
   const weak = input.runs.map((r, i) => [perTurnOf(r), i] as const).sort((a, b) => a[0] - b[0]).slice(0, 3);
-  lines.push("", `弱い地図: ${weak.map(([, i]) => `#${i}`).join(", ")}（traces.json の index。各ターンの位置・得点・手・方策の理由・変わったマス）`);
+  lines.push("", `弱い地図: ${weak.map(([, i]) => `#${i}`).join(", ")}（traces.json の index。各ターンの位置・得点・自分の当てた／当てられた得点の累計 hits（同じターンの当て合いは得点の差では見えない）・手・方策の理由・変わったマス）`);
 
   // 弱点: 失っている点の見込み（1ターンあたり、大きい順）。どこから直すかの手がかり
   lines.push("", "## 弱点（失っている点の見込み、1ターンあたり・大きい順。上から直す）", "", ...weaknessLines(input));

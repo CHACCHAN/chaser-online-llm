@@ -340,6 +340,37 @@ function nearestEnemyInfo(wm: WorldMap, turn: number, x: number, y: number): { c
   return { chasing: best?.chasing ?? false };
 }
 
+/**
+ * 打っても位置が変わらなかった歩く手（CMD2 の w*）。同じマスで同じ手を 2 ターン続けて打って動けなかったら、そのマスにいる間は使わない。
+ * 壁・敵・観測のずれで動けない手を選び続けるのを防ぐ（学習の LLM の要望 2026-11-23 #7: 位置が動かないまま wr を打ち続け、33 回当てられた）
+ */
+const moveHistory = new WeakMap<WorldMap, { key: string; cmd: string; turn: number; fails: Map<string, number> }>();
+function failedMoves(wm: WorldMap, ctx: PlannerContext): Set<string> {
+  const [x, y] = wm.getPosition();
+  const key = `${wm.getSegmentId()}:${x},${y}`;
+  const h = moveHistory.get(wm);
+  if (ctx.phase !== "CMD2") {
+    const out = new Set<string>();
+    if (h && h.key === key) for (const [k, n] of h.fails) if (n >= 2 && k.startsWith(`${key}|`)) out.add(k.slice(key.length + 1));
+    return out;
+  }
+  const fails = h?.fails ?? new Map<string, number>();
+  if (h && h.turn < ctx.turn && /^w[udlr]$/.test(h.cmd)) {
+    const k = `${h.key}|${h.cmd}`;
+    if (h.key === key) fails.set(k, (fails.get(k) ?? 0) + 1);
+    else fails.delete(k);
+  }
+  const out = new Set<string>();
+  for (const [k, n] of fails) if (n >= 2 && k.startsWith(`${key}|`)) out.add(k.slice(key.length + 1));
+  moveHistory.set(wm, { key, cmd: "", turn: ctx.turn, fails });
+  return out;
+}
+/** CMD2 で選んだ手を覚える（次の CMD2 で、動けたかを見る） */
+function rememberMove(wm: WorldMap, ctx: PlannerContext, cmd: string): void {
+  const h = moveHistory.get(wm);
+  if (ctx.phase === "CMD2" && h) h.cmd = cmd;
+}
+
 /** ターンごとのアイテムの得点の見込み（試合ごとの WorldMap に付ける。出口のワープの周回を見つける用） */
 const itemHistory = new WeakMap<WorldMap, Map<number, number>>();
 
@@ -375,9 +406,9 @@ function exitsAllowed(wm: WorldMap, turn: number): boolean {
 /** 経路探索で手を決める（SolverDecision と同じ形で返す）。CMD2 で隣に敵がいれば、当てる価値と比べてアイテムを置いて当てる */
 export function planMove(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insight: PlanInsight } {
   const d = planRoute(wm, ctx);
-  if (ctx.phase !== "CMD2" || ctx.params.attackGain <= 0) return d;
-  const attack = pickAttack(wm, ctx, d);
-  return attack ?? d;
+  const out = ctx.phase !== "CMD2" || ctx.params.attackGain <= 0 ? d : (pickAttack(wm, ctx, d) ?? d);
+  rememberMove(wm, ctx, out.command);
+  return out;
 }
 
 /**
@@ -421,6 +452,7 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
   const t0 = performance.now();
   const { phase, params: p, evaluator: ev } = ctx;
   const [x, y] = wm.getPosition();
+  const banned = failedMoves(wm, ctx);
   const grid = wm.getLastGrid();
   const finish = (command: string, reason: string, insight: Partial<PlanInsight> = {}, extra: Partial<SolverDecision> = {}) => ({
     command: command as SolverDecision["command"],
@@ -671,10 +703,12 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
       options.push({ cmd, ...value(cmd, ev.tileGain(board.value[li]!), spec.estActionCost, rem === INF ? 1000 : rem, li), warp: false });
     }
   }
-  options.sort((a, b) => b.score - a.score);
-  const choice = options[0];
+  // 2 ターン続けて打っても位置が変わらなかった歩く手は使わない（動けない手を選び続けていた。学習の LLM の要望 2026-11-23 #7）
+  const usable = options.filter((o) => !banned.has(o.cmd));
+  usable.sort((a, b) => b.score - a.score);
+  const choice = usable[0];
   const insight = { route, score: Math.round(bestNode.score), candidates: picked.length };
-  if (!choice) return scanOrFallback(wm, ctx, board, finish);
+  if (!choice) return scanOrFallback(wm, ctx, board, finish, banned);
   const routeText = route.slice(0, 3).map((r) => `(${r.x},${r.y})${r.value}`).join("→");
   const viaWarp = choice.warp;
   const flee = enemyNow <= p.dangerDist + 1 && !choice.danger ? "（敵から離れる）" : "";
@@ -688,6 +722,7 @@ function scanOrFallback(
   ctx: PlannerContext,
   board: Board,
   finish: (command: string, reason: string, insight?: Partial<PlanInsight>, extra?: Partial<SolverDecision>) => SolverDecision & { insight: PlanInsight },
+  banned: Set<string> = new Set(),
 ): SolverDecision & { insight: PlanInsight } {
   const [x, y] = wm.getPosition();
   if (ctx.phase === "CMD1") return finish("gr", "行ける目標が無い: 観測する", {}, { confidence: 0.5 });
@@ -703,14 +738,23 @@ function scanOrFallback(
     if (unseen * ctx.params.scanValue > 40 && (!best || unseen > best.unseen)) best = { cmd, unseen };
   }
   if (best) return finish(best.cmd, `行ける目標が無い: ${best.cmd} で先を見る`, {}, { confidence: 0.5 });
-  // 分かっていて通れるマス（穴でもよい）へ一番安く動く。場外・未知のマスへは動かない（場外は -500）
+  // 分かっていて通れるマス（穴でもよい）へ一番安く動く。場外・未知のマスへは動かない（場外は -500）。
+  // 近くに敵がいれば離れる方を選び、直近に立ったマスは後回し（学習の LLM の要望 2026-11-23: 取り尽くした後、
+  // 狙う相手が並んで動いて毎ターン当て続けた）
+  const enemies = wm.getEnemySightings().filter((e) => e.lastSeenTurn >= ctx.turn - 1);
+  const trail = new Set(wm.getRecentTrail(6).map(([tx, ty]) => `${tx},${ty}`));
+  const near = enemies.some((e) => Math.abs(e.x - x) + Math.abs(e.y - y) <= ctx.params.dangerDist + 1);
   let safest: { cmd: string; cost: number } | null = null;
   for (const dir of DIRS) {
     const cmd = `w${dir}`;
+    if (banned.has(cmd)) continue;
     const [dx, dy] = DIR_DELTA[dir];
     const li = board.idx(x + dx, y + dy);
     if (li < 0 || !board.known[li] || board.cost[li] === INF) continue;
-    if (!safest || board.cost[li]! < safest.cost) safest = { cmd, cost: board.cost[li]! };
+    const ed = enemies.length ? Math.min(...enemies.map((e) => Math.abs(e.x - x - dx) + Math.abs(e.y - y - dy))) : Infinity;
+    if (ed === 0) continue;
+    const cost = board.cost[li]! + (trail.has(`${x + dx},${y + dy}`) ? 30 : 0) - (near ? Math.min(ed, 8) * 100 : 0);
+    if (!safest || cost < safest.cost) safest = { cmd, cost };
   }
   if (safest) return finish(safest.cmd, "行ける目標が無い: 分かっている安全なマスへ", {}, { confidence: 0.3, triggerHarness: true, triggerReason: "STUCK_IN_HOLES_NO_FRONTIER" });
   return finish(wm.pickSafeFallback("CMD2"), "行ける目標が無い: 安全な手", {}, { confidence: 0.3, triggerHarness: true, triggerReason: "STUCK_IN_HOLES_NO_FRONTIER" });

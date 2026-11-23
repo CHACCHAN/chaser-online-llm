@@ -384,6 +384,8 @@ export class WorldMap {
   private globalGridTurn = 0;
   /** 自機のタイル ID（観測の中心値 / Web マップの自機表示から判明。既定 1000） */
   private selfTileId = 1000;
+  /** 自機の番号を観測で確かめたか（端の観測しかまだ無い間は false） */
+  private selfTileKnown = false;
   /** 自前観測で見えた他プレイヤー（ローカル座標）。key = tileId */
   private enemySightings = new Map<number, { x: number; y: number; tileId: number; lastSeenTurn: number }>();
   /** ローカル座標系が変わった回数（ワープで新しい区画に入る・既知の区画に戻る）。変わったら古い座標は使えない */
@@ -585,7 +587,10 @@ export class WorldMap {
     if (!grid.length || !grid[0]?.length) return;
     this.globalGrid = grid.map((r) => [...r]);
     this.globalGridTurn = turn ?? this.lastTurn;
-    if (selfTileId) this.selfTileId = selfTileId;
+    if (selfTileId) {
+      this.selfTileId = selfTileId;
+      this.selfTileKnown = true;
+    }
     if (stageName !== undefined) this.stageName = stageName;
     this.webPlayerPosKnown = !!knownPlayerPos;
     if (knownPlayerPos) {
@@ -974,7 +979,9 @@ export class WorldMap {
 
     // 2) 中心が自機の番号になる並べ方が1つだけなら、それ
     if (centered) {
-      const withSelf = cands.filter((c) => c.values[4] !== undefined && c.values[4] >= 1000 && c.values[4] === this.selfTileId);
+      // 自機の番号がまだ分からない（試合の初め、全体マップなしで端から始まった）時は、中心がプレイヤーの番号になるもの
+      // （学習の LLM の要望 2026-11-23: 端から始まると観測を全部捨て、109 ターン動けなかった）
+      const withSelf = cands.filter((c) => c.values[4] !== undefined && c.values[4] >= 1000 && (!this.selfTileKnown || c.values[4] === this.selfTileId));
       if (withSelf.length === 1) return withSelf[0]!;
       if (withSelf.length > 1) cands.splice(0, cands.length, ...withSelf);
     }
@@ -1184,7 +1191,10 @@ export class WorldMap {
           const oy = Math.floor(i / 3) - 1;
 
           if (i === 4 && spec.obsOffset[0] === 0 && spec.obsOffset[1] === 0) {
-            if (val >= 1000) this.selfTileId = val;
+            if (val >= 1000) {
+              this.selfTileId = val;
+              this.selfTileKnown = true;
+            }
             this.setTile(cx, cy, 0, turn, hasMove && !blocked ? 1 : 0);
           } else if (val >= 1000 && val !== this.selfTileId) {
             // 他プレイヤーは動くのでタイルとしては保存せず、目撃情報として記録する

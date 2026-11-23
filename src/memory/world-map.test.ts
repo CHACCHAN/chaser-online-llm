@@ -192,3 +192,12 @@ describe("フィールドの端の観測（要素が減る）", () => {
     expect(m2.knownTileCount()).toBe(0);
   });
 });
+
+test("全体マップなしで端（上の辺）から始まっても、自機の番号がまだ分からない端の観測を並べ直して使う", () => {
+  const wm = new WorldMap();
+  // 上の辺: 上の行が場外で 6 つだけ返る。中心（自機）は 2000
+  wm.applyObservation("CMD1", "gr", [3, 2000, 5, 3, 3, 3], 1);
+  expect(wm.getTile(-1, 0)?.value).toBe(3);
+  expect(wm.getTile(1, 0)?.value).toBe(5);
+  expect(wm.getTile(0, 1)?.value).toBe(3);
+});

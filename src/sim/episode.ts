@@ -48,6 +48,11 @@ export interface EpisodeTrace {
     /** 各プレイヤーの位置（players と同じ順） */
     pos: [number, number][];
     scores: number[];
+    /**
+     * 自分の当てた・当てられた得点の累計 [put, putDamage]。同じターンに当て合うと scores の差では見えない
+     * （学習の LLM の要望 2026-11-23: report の当てた／当てられたと traces が合わないように見えた）
+     */
+    hits?: [number, number];
     /** 自分の CMD1・CMD2 */
     cmds: [string, string];
     /** 方策の判断の理由（CMD2） */
@@ -151,7 +156,7 @@ export function runEpisode(scn: Scenario, policy: PolicyFn, opts: EpisodeOptions
           }
         }
       }
-      trace.frames.push({ turn: game.turn, pos: game.players.map((p) => [p.x, p.y]), scores: game.players.map((p) => totalScore(p.score)), cmds, reason: lastReason.slice(0, 160), changed });
+      trace.frames.push({ turn: game.turn, pos: game.players.map((p) => [p.x, p.y]), scores: game.players.map((p) => totalScore(p.score)), hits: [me.score.put, me.score.putDamage], cmds, reason: lastReason.slice(0, 160), changed });
     }
     opts.onTurn?.(game.turn, game);
     game.nextTurn();
