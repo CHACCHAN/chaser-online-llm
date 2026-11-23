@@ -68,6 +68,7 @@ flowchart LR
 4. **試合**: `runner.ts` が `playPhase` を CMD1 → CMD2 の順に回す（後述）。
 4b. **試合中の障害**: 方策・LLM の処理が例外を投げても、そのフェーズは安全な手（`pickSafeFallback`）で続ける。通信の一時的な失敗は、まだ送っていないフェーズを安全な手で1回送り直す。それでも失敗したら試合を終え、画面に「試合がエラーで終わった」を出す。
 5. **試合後**: `summary.json` と `diagnosis.md` を書き、その試合の評価関数とパラメータを `evaluator-snapshot.ts`・`policy-params.json` に控える。`evolve.ts` が LLM に `postMatch` で振り返らせ（シミュレータでの成績を添える）、評価関数が変わっていたら、その試合の記録の盤面で方策を動かして確かめ（`verifyPolicyWithReplay`）、改修前と同じ地図で比べる（`gateEvaluatorChange`）。どちらかに落ちたら元に戻す。範囲外の編集は edit-guard が戻す。続けて方策を学習する（`TRAIN_AFTER_MATCH_MIN` 分。振り返りをしない時も）。学習が終わると学習の LLM が動く（`LAB_COACH`）。
+   - これらの試合後の仕事は既定で裏で行う（`POST_MATCH_BACKGROUND=true`、`src/evolution/post-match-queue.ts`）。仕事は1つずつ順に行い、その間に次の試合の準備・入室を始める。進み具合は画面のヘッダの「裏で: …」（状態の `background`）。評価関数を書き換えている間（振り返り・学習の LLM）に始まった試合は、書き換えを始めた時の評価関数の写し `var/current/evaluator-verified.ts` を使う（確かめていない改修を試合に使わない）。直したものは次の次の試合から効く。裏に渡した試合の LLM は画面のメモ・使用量を書かない。`false` なら前の動き（終わるまで次の試合を待つ）
 6. **終了**: `MainAgent.end()` で先行起動したプロセスを止める。自動継続なら数秒待って次の試合へ。
 
 `bun run play` は同じ流れを WebUI なしで 1 試合だけ行う（`src/play.ts`。`--no-llm` で LLM なし、`--evolve` で試合後の振り返りと学習まで）。
