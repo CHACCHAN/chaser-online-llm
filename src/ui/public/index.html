@@ -446,11 +446,11 @@ dialog::backdrop { background: rgba(10, 14, 13, .45); }
 .views { flex: none; }
 .views button { padding: 4px 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 .vdot { width: 7px; height: 7px; border-radius: 50%; background: var(--pos); animation: pulse 1.6s infinite; }
-/* 試合: 左にマップ、真ん中に思考ログ｜行動ログ（縦に長く、左右に並べる）、右にいまの判断とメモ */
-.work { grid-template-columns: minmax(0, 1fr) minmax(560px, 42vw) minmax(260px, 20vw); }
-.col.mid { border-left: 1px solid var(--line); background: var(--panel); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; }
-.col.mid .half { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.col.mid .half + .half { border-left: 1px solid var(--line); }
+/* 試合: 左にマップ、真ん中に思考ログと行動ログ（上下）、右にいまの判断とメモ */
+.work { grid-template-columns: minmax(0, 1fr) minmax(360px, 30vw) minmax(260px, 20vw); }
+.col.mid { border-left: 1px solid var(--line); background: var(--panel); display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+.col.mid .half { display: flex; flex-direction: column; min-height: 0; }
+.col.mid .half + .half { border-top: 1px solid var(--line); }
 .col.live .dec { flex: none; max-height: 48%; overflow-y: auto; border-bottom: 1px solid var(--line); }
 .col.mid .sec-h h2 .cnt, .col.live .sec-h h2 .cnt { font-weight: 400; color: var(--ink3); font-size: var(--t-xs); margin-left: 4px; }
 .col.live { display: flex; flex-direction: column; }
@@ -589,7 +589,7 @@ details.coach > summary .more { text-decoration: underline; }
   #inMain { width: 128px; }
 }
 @media (max-width: 1279px) {
-  .work { grid-template-columns: minmax(0, 1fr) 500px 240px; }
+  .work { grid-template-columns: minmax(0, 1fr) 340px 240px; }
   .bar { gap: var(--s3); }
   .flow li { padding: 0 12px 0 19px; }
   .grp + .grp { padding-left: 0; border-left: 0; }
@@ -629,7 +629,6 @@ details.coach > summary .more { text-decoration: underline; }
   .lab-play input[type="range"] { order: 5; flex-basis: 100%; }
   .col.center { order: 1; overflow: visible; }
   .col.mid { order: 2; border-left: 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; }
-  .col.mid .half + .half { border-left: 0; border-top: 1px solid var(--line); }
   .col.live .dec { max-height: none; }
   .col.live { order: 3; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
   .col.rail { order: 3; border-right: 0; border-top: 1px solid var(--line); }
@@ -737,7 +736,7 @@ details.coach > summary .more { text-decoration: underline; }
     </section>
   </main>
 
-  <!-- 真ん中: 左に思考ログ、右に行動ログ -->
+  <!-- 真ん中: 上に思考ログ、下に行動ログ -->
   <section class="col mid" aria-label="ログ">
     <section class="half" aria-labelledby="hLog">
       <div class="sec-h"><h2 id="hLog" title="LLM（準備・試合中・振り返り）の思考・ツール呼び出し・システムの知らせ">思考ログ <span class="cnt" id="logCount"></span></h2>
