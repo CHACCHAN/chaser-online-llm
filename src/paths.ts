@@ -52,6 +52,8 @@ export const POLICY_PARAMS_PATH = path.join(POLICY_DIR, "params.json");
 /** 学習の記録（1回ごとに1行） */
 /** 特性ごとのモデル（ハンター・コレクターなど）の定義 */
 export const POLICY_STYLES_PATH = path.join(KNOWLEDGE_DIR, "styles.json");
+/** 保存しなかった学習の続き（モデルごと）。次の学習はここから続ける。本番では使わない */
+export const POLICY_CANDIDATES_DIR = path.join(POLICY_DIR, "candidates");
 /** 特性ごとのモデルのパラメータ（標準のモデルは params.json） */
 export const POLICY_MODELS_DIR = path.join(POLICY_DIR, "models");
 /** モデルごとに同じ地図・同じ相手で測った特性（攻撃・被弾・回収・勝ち） */

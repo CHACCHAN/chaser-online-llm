@@ -93,3 +93,12 @@ test("空き時間の学習: 理論値の目安に直近 3 回とも 98% 以上�
   expect(roomSaturated(3, [c(3, 1), c(3, 0.9), c(3, 1)])).toBe(false);
   expect(roomSaturated(3, [c(3, 1), c(3, 1)])).toBe(false);
 });
+
+test("保存の厳しさ: 罠の増え方の許し（hazardRatio・hazardSlack）と標準誤差の何倍か（acceptZ）", async () => {
+  const { clearlyBetter } = await import("./train");
+  const c = { a: 300, b: 310, diff: 7.5, se: 4, wins: 50, n: 96, hazardsA: 29, hazardsB: 31 };
+  expect(clearlyBetter(c, 1.5)).toBe(false);
+  expect(clearlyBetter(c, 1.5, 0.1, 3)).toBe(true);
+  expect(clearlyBetter(c, 2, 0.1, 3)).toBe(false);
+  expect(clearlyBetter({ ...c, hazardsB: 40 }, 1.5, 0.1, 3)).toBe(false);
+});

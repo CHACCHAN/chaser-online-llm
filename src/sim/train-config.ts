@@ -18,8 +18,13 @@ export interface TrainConfig {
   oppSelf: number;
   /** 自己対戦の相手として残す、前に採用したパラメータの数（var/policy/league.json） */
   leagueSize: number;
+  /** 保存の厳しさ: 確かめの差が標準誤差の何倍より大きければ保存するか（小さいほど甘い。雑音で弱い設定が入りやすくなる） */
+  acceptZ: number;
+  /** 保存の厳しさ: 罠を踏んだ回数が、前の (1 + hazardRatio) 倍 + hazardSlack 回までなら増えてもよい（罠の減点は得点にも入っている） */
+  hazardRatio: number;
+  hazardSlack: number;
 }
-export const TRAIN_CONFIG_DEFAULT: TrainConfig = { popSize: 16, batch: 12, validation: 24, sigmaStart: 0.15, sigmaEnd: 0.04, oppGreedy: 1, oppHunter: 1, oppSelf: 2, leagueSize: 6 };
+export const TRAIN_CONFIG_DEFAULT: TrainConfig = { popSize: 16, batch: 12, validation: 24, sigmaStart: 0.15, sigmaEnd: 0.04, oppGreedy: 1, oppHunter: 1, oppSelf: 2, leagueSize: 6, acceptZ: 1.5, hazardRatio: 0.1, hazardSlack: 3 };
 export const TRAIN_CONFIG_BOUNDS: Record<keyof TrainConfig, [number, number]> = {
   popSize: [4, 64],
   batch: [2, 48],
@@ -30,6 +35,10 @@ export const TRAIN_CONFIG_BOUNDS: Record<keyof TrainConfig, [number, number]> = 
   oppHunter: [0, 10],
   oppSelf: [0, 10],
   leagueSize: [0, 20],
+  // 下限は、雑音だけで保存されないための底（1 未満にはさせない）
+  acceptZ: [1, 3],
+  hazardRatio: [0, 0.5],
+  hazardSlack: [0, 10],
 };
 
 /** 学習のやり方を読む。problems に範囲外・読めなかった項目を返す（学習の LLM の改修の確かめに使う） */

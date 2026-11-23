@@ -389,8 +389,10 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
   if (log) {
     const recent = log.trim().split("\n").slice(-8).map((l) => {
       try {
-        const o = JSON.parse(l) as { at: string; trigger: string | null; model?: string; generations: number; accepted: boolean; comparison: { a: number; b: number; diff: number; se: number } };
-        return `- ${o.at.slice(5, 16)} ${o.trigger ?? "-"} ${o.model ?? "standard"}: ${o.generations} 世代、${o.comparison.a}→${o.comparison.b}（差 ${o.comparison.diff}±${o.comparison.se}）${o.accepted ? " 保存" : ""}`;
+        const o = JSON.parse(l) as { at: string; trigger: string | null; model?: string; generations: number; accepted: boolean; continued?: boolean; comparison: { a: number; b: number; diff: number; se: number; hazardsA: number; hazardsB: number } };
+        const c = o.comparison;
+        const z = c.se > 0 ? (c.diff / c.se).toFixed(1) : "-";
+        return `- ${o.at.slice(5, 16)} ${o.trigger ?? "-"} ${o.model ?? "standard"}: ${o.generations} 世代${o.continued ? "（前の続きから）" : ""}、${c.a}→${c.b}（差 ${c.diff}±${c.se}、標準誤差の ${z} 倍、罠 ${c.hazardsA}→${c.hazardsB}）${o.accepted ? " 保存" : " 保存しない"}`;
       } catch {
         return null;
       }

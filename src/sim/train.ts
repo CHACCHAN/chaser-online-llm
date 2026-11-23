@@ -1,6 +1,6 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { POLICY_TRAIN_LOG_PATH } from "../paths";
+import { POLICY_CANDIDATES_DIR, POLICY_TRAIN_LOG_PATH } from "../paths";
 import { clampParams, PARAM_SPACE, type ParamName, type Params, type ParamSpec } from "../solver/evaluator";
 import { applyFixed, getStyle, loadModelParams, loadModelParamsFile, saveModelParams, STANDARD_MODEL, type StyleDef } from "../solver/models";
 import type { EpisodeResult } from "./episode";
@@ -147,7 +147,8 @@ export function rankFitness(scores: number[][]): number[] {
 }
 
 /** b が a よりはっきり良いか（差が標準誤差の z 倍より大きく、罠を踏む回数が増えていない） */
-export const clearlyBetter = (c: Comparison, z = 1.5) => c.diff > 0 && c.diff > z * c.se && c.hazardsB <= c.hazardsA;
+export const clearlyBetter = (c: Comparison, z = 1.5, hazardRatio = 0, hazardSlack = 0) =>
+  c.diff > 0 && c.diff > z * c.se && c.hazardsB <= c.hazardsA * (1 + hazardRatio) + hazardSlack;
 /** b が a より弱くないか（差が −z×標準誤差 より上、罠も増えていない）。エージェントの改修の採否に使う */
 export const notWorse = (c: Comparison, z = 1) => c.diff > -z * Math.max(c.se, 0.5) && c.hazardsB <= c.hazardsA + Math.max(2, Math.ceil(c.hazardsA * 0.1));
 
@@ -202,7 +203,39 @@ export interface TrainResult {
   after: Params;
   comparison: Comparison;
   accepted: boolean;
+  /** 前に保存しなかった学習の続きから始めたか */
+  continued?: boolean;
   ms: number;
+}
+
+/** 保存しなかった学習の続き。base（その時の保存してあったパラメータ）が今と同じ時だけ続ける */
+interface Candidate {
+  at: string;
+  base: Params;
+  params: Params;
+  diff: number;
+  runs: number;
+}
+const candidatePath = (id: string) => path.join(POLICY_CANDIDATES_DIR, `${id}.json`);
+export function loadCandidate(id: string, base: Params): Candidate | null {
+  try {
+    const c = JSON.parse(readFileSync(candidatePath(id), "utf-8")) as Candidate;
+    return JSON.stringify(c.base) === JSON.stringify(base) ? c : null;
+  } catch {
+    return null;
+  }
+}
+function saveCandidate(id: string, c: Candidate | null): void {
+  try {
+    if (!c) {
+      rmSync(candidatePath(id), { force: true });
+      return;
+    }
+    mkdirSync(POLICY_CANDIDATES_DIR, { recursive: true });
+    writeFileSync(candidatePath(id), `${JSON.stringify(c, null, 2)}\n`);
+  } catch {
+    // 続きを残せなくても学習の結果は返す
+  }
 }
 
 export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
@@ -222,7 +255,10 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
   const before = loadModelParams(style.id);
   // 相手（自己対戦の「自分」は学習を始めた時のパラメータ＝before と、前に採用したもの）。学習の間は変えない
   const opponents = loadOpponentPlan(style.id);
-  let m = toUnit(before);
+  // 前に保存しなかった学習の続きがあれば、そこから続ける（少しずつの良さを捨てずに積み上げる。比べる相手は保存してある before のまま）
+  const cand = opts.dryRun ? null : loadCandidate(style.id, before);
+  let m = toUnit(cand ? fixed(cand.params) : before);
+  if (cand) log(`前に保存しなかった学習の続きから始める（${cand.runs} 回目の続き、前の確かめの差 ${cand.diff}）`);
   let sigma = cfg.sigmaStart;
   const d = m.length;
   const mu = Math.floor(popSize / 2);
@@ -272,7 +308,11 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
     comparison = await comparePolicies(opts.pool, { kind: "planner", params: before }, { kind: "planner", params: after }, val, opponents, fit);
     episodes += valN * 2;
   }
-  const accepted = gen > 0 && clearlyBetter(comparison);
+  const accepted = gen > 0 && clearlyBetter(comparison, cfg.acceptZ, cfg.hazardRatio, cfg.hazardSlack);
+  // 保存しなかったが前より良さそうなら、続きとして残す。保存した・悪くなった時は消す
+  if (gen > 0 && !opts.dryRun) {
+    saveCandidate(style.id, !accepted && comparison.diff > 0 ? { at: new Date().toISOString(), base: before, params: after, diff: comparison.diff, runs: (cand?.runs ?? 0) + 1 } : null);
+  }
   if (gen > 0) log(`検証（学習に使っていない ${valN} 地図）: ${style.name}: 前 ${comparison.a} → 後 ${comparison.b} ${unit}（差 ${comparison.diff}±${comparison.se}、勝ち ${comparison.wins}/${comparison.n}）→ ${accepted ? "採用" : "見送り"}`);
   if (accepted && !opts.dryRun) {
     const prev = loadModelParamsFile(style.id);
@@ -286,12 +326,12 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
       previousSource: prev?.source ?? "default",
     });
   }
-  const result: TrainResult = { model: style.id, modelName: style.name, generations: gen, episodes, before, after, comparison, accepted, ms: Date.now() - t0 };
+  const result: TrainResult = { model: style.id, modelName: style.name, generations: gen, episodes, before, after, comparison, accepted, continued: !!cand, ms: Date.now() - t0 };
   try {
     mkdirSync(path.dirname(POLICY_TRAIN_LOG_PATH), { recursive: true });
     appendFileSync(
       POLICY_TRAIN_LOG_PATH,
-      `${JSON.stringify({ at: new Date().toISOString(), room: opts.room, generations: gen, episodes, accepted, dryRun: !!opts.dryRun, trigger: opts.trigger ?? null, model: style.id, ms: Date.now() - t0, comparison, before, after })}\n`,
+      `${JSON.stringify({ at: new Date().toISOString(), room: opts.room, generations: gen, episodes, accepted, continued: !!cand, dryRun: !!opts.dryRun, trigger: opts.trigger ?? null, model: style.id, ms: Date.now() - t0, comparison, before, after })}\n`,
     );
   } catch {
     // 記録に失敗しても学習の結果は返す
