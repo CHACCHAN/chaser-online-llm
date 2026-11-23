@@ -359,17 +359,29 @@ export function writeCoachReport(input: CoachInput, dir: string): string {
     if (prev.length) lines.push(`- これまで: ${prev.join("、")}`);
   }
 
-  // 地図の作り方と本物の地図の違い
-  const rooms = [...new Set([...(input.room !== null ? [input.room] : []), ...roomsWithRealMaps()])];
-  lines.push("", "## 作った地図と本物の地図の違い（タイルの割合。knowledge/sim-profiles.json を直す手がかり）", "");
-  let any = false;
-  for (const room of rooms) {
-    const g = generatedVsReal(room);
-    if (!g) continue;
-    any = true;
+  // 地図の作り方と本物の地図の違い。学習したルームを先に、ほかのルームは参考として分けて出す
+  // （学習の LLM の要望 2026-11-23: ルーム 3 の学習なのに、ルーム 720 の本物と比べているように見えた）
+  lines.push("", "## 作った地図と本物の地図の違い（タイルの割合と形。knowledge/sim-profiles.json を直す手がかり）", "");
+  const show = (room: number, g: NonNullable<ReturnType<typeof generatedVsReal>>) =>
     lines.push(`- ルーム ${room}（本物 ${g.realMaps} 枚）: 違い ${g.distance.toFixed(3)}（0 = 同じ）`, `  - 本物: ${fmtHist(g.real)}`, `  - 作った: ${fmtHist(g.gen)}`, `  - 形 本物: ${fmtStructure(g.realShape)} / 作った: ${fmtStructure(g.genShape)}（partitions・enclosures で合わせる）`);
+  if (input.room !== null) {
+    lines.push(`### 学習したルーム ${input.room}`);
+    const g = generatedVsReal(input.room);
+    if (g) show(input.room, g);
+    else lines.push(`- ルーム ${input.room} の本物の地図はまだ無い（試合で全体マップが取れると var/maps/room${input.room}/ に保存される）。このルームの地図の作り方は var/room-profiles.json の実測（大きさ・ターン数・人数）と sim-profiles.json の rooms.${input.room} に合わせる。下のほかのルームの本物は形の参考にだけ使う`);
+  } else {
+    lines.push("### いろいろな地図（ルームに似せていない）で学習した。下のルームの本物は sim-profiles.json の default の参考");
   }
-  if (!any) lines.push("- 本物の地図はまだ保存されていない（試合で全体マップが取れると var/maps/ に保存される）。地図の作り方は var/room-profiles.json の実測（大きさ・ターン数）と knowledge/tiles.json に合わせる");
+  const others = roomsWithRealMaps().filter((r) => r !== input.room);
+  if (others.length) {
+    lines.push("", "### ほかのルーム（参考。地図の作り方を変えると、本物から遠ざかっていないかはこれらのルームでも確かめる）");
+    for (const room of others) {
+      const g = generatedVsReal(room);
+      if (g) show(room, g);
+    }
+  } else if (input.room === null || !generatedVsReal(input.room)) {
+    lines.push("- 本物の地図はまだどのルームにも無い。地図の作り方は var/room-profiles.json の実測（大きさ・ターン数）と knowledge/tiles.json に合わせる");
+  }
 
   // 最近の学習の記録
   const log = read(POLICY_TRAIN_LOG_PATH);

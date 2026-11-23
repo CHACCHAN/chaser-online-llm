@@ -6,6 +6,7 @@
   "scripts": {
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit",
+    "typecheck:tools": "tsc --noEmit -p tsconfig.tools.json",
     "test": "bun test",
     "cli": "bun src/cli.ts",
     "verify-policy": "bun src/verify.ts",

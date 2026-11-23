@@ -418,12 +418,15 @@ export class LearningLab {
   private tickIdle(): void {
     if (!this.idleOn() || this.matchActive || this.job) return;
     // モデルを順番に育てる（試合で使うモデルは2回に1回、残りはほかのモデルを順に）
-    const styles = loadStyles();
-    const play = playModelId();
+    // 相手が出ないルーム（人数が自分だけ）では、相手に向けたモデル（目的に当てた・当てられた得点があるもの）は育てない
+    // （学習の LLM の要望 2026-11-23: 1人のルームでハンターを 25 世代育てて、罠が増えただけだった）
+    const room = this.roomForIdle();
+    const styles = idleStyles(loadStyles(), room);
+    const play = styles.some((s) => s.id === playModelId()) ? playModelId() : STANDARD_MODEL;
     const others = styles.filter((s) => s.id !== play);
     const turn = this.idleTurn++;
     const model = turn % 2 === 0 || others.length === 0 ? play : others[Math.floor(turn / 2) % others.length]!.id;
-    void this.train({ room: this.roomForIdle(), minutes: numSetting("TRAIN_IDLE_CHUNK_MIN", { min: 1 }), trigger: "idle", model });
+    void this.train({ room, minutes: numSetting("TRAIN_IDLE_CHUNK_MIN", { min: 1 }), trigger: "idle", model });
   }
 
   /** 全部のモデルの特性を測る（同じ地図・同じ相手） */
@@ -506,3 +509,14 @@ function lastTrainByModel(): Record<string, ModelsInfo["models"][number]["lastTr
 }
 
 export const lab = new LearningLab();
+
+/** 空き時間に育てるモデル。相手が出ないルームでは、相手に向けたモデルを外す（標準はいつも残す） */
+export function idleStyles(styles: StyleDef[], room: number | null, players?: [number, number]): StyleDef[] {
+  try {
+    players ??= loadProfile(room).players;
+  } catch {
+    return styles;
+  }
+  if (players[1] > 1) return styles;
+  return styles.filter((s) => s.id === STANDARD_MODEL || !((s.objective.put ?? 0) !== 0 || (s.objective.putDamage ?? 0) !== 0));
+}

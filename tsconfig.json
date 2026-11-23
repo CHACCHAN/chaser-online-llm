@@ -27,5 +27,6 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "exclude": ["node_modules", "var"]
+  // agent/tools はエージェントが作るツール。型の厳しさを緩めて別に確かめる（bun run typecheck:tools、tsconfig.tools.json）
+  "exclude": ["node_modules", "var", "agent/tools"]
 }

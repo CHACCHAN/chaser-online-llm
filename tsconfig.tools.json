@@ -1,0 +1,7 @@
+{
+  // エージェントが作るツール（agent/tools）の型の確かめ。ハーネスの typecheck とは分ける（ツールの型エラーで本体のチェックが埋もれないように）
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noUncheckedIndexedAccess": false },
+  "include": ["agent/tools/**/*.ts"],
+  "exclude": ["node_modules", "var"]
+}

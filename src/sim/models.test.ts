@@ -50,3 +50,15 @@ describe("特性ごとのモデル", () => {
     expect(traitTags("collector", profiles)).toEqual(expect.arrayContaining(["当てない", "回収が多い"]));
   });
 });
+
+test("空き時間の学習: 相手が出ないルームでは、相手に向けたモデル（当てた・当てられた得点が目的）を育てない", async () => {
+  const { idleStyles } = await import("./lab");
+  const styles = [
+    { id: "standard", name: "バランス", trait: "", description: "", objective: {} },
+    { id: "hunter", name: "ハンター", trait: "", description: "", objective: { put: 1 } },
+    { id: "guardian", name: "ガーディアン", trait: "", description: "", objective: { putDamage: 1, hazard: -500 } },
+    { id: "collector", name: "コレクター", trait: "", description: "", objective: { item: 0.5 } },
+  ];
+  expect(idleStyles(styles, 3, [1, 1]).map((s) => s.id)).toEqual(["standard", "collector"]);
+  expect(idleStyles(styles, 720, [2, 4]).map((s) => s.id)).toEqual(["standard", "hunter", "guardian", "collector"]);
+});

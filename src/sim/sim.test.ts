@@ -88,6 +88,30 @@ describe("経路探索（planner）", () => {
     expect(d.insight.route[0]).toMatchObject({ value: expect.any(Number) });
   });
 
+  test("取り尽くしたら、離れた出口のワープへ近づく（隣でなくても残りの手間を測る。学習の LLM の要望: 上下に行き来していた）", () => {
+    // 全部穴。自分(0,2)、行き先の分からないワープ (4,2)。敵(3人目)が近くにいても目標へ向かう
+    const g = grid5(0);
+    g[2]![4] = 32;
+    const game = new SimGame(g, [{ id: 1000, x: 0, y: 2 }, { id: 2000, x: 0, y: 0 }], 50);
+    const wm = new WorldMap();
+    wm.setGlobalGrid(game.webGrid(), [0, 2], "t", 1, 1000, wm.getPosition());
+    for (const phase of ["CMD1", "CMD2"] as const) {
+      const d = planMove(wm, { phase, turn: 1, remainingTurns: 50, params: defaultParams(), evaluator });
+      expect(phase === "CMD1" ? "grr" : "wr").toBe(d.command);
+      expect(d.reason).toContain("出口のワープ");
+    }
+  });
+
+  test("隣の敵に当てるのは、自分の観測で見えた時だけ（Webマップの位置だけでは当てない）", () => {
+    const g = grid5(2);
+    const game = new SimGame(g, [{ id: 1000, x: 2, y: 2 }, { id: 2000, x: 3, y: 2 }], 50);
+    const wm = new WorldMap();
+    wm.setGlobalGrid(game.webGrid(), [2, 2], "t", 1, 1000, wm.getPosition());
+    expect(wm.getEnemySightings().some((e) => e.tileId === 2000)).toBe(true);
+    const d = planMove(wm, { phase: "CMD2", turn: 1, remainingTurns: 50, params: defaultParams(), evaluator });
+    expect(d.command.startsWith("p")).toBe(false);
+  });
+
   test("シミュレータで1試合を最後まで打てる（合法手だけ・例外なし）", () => {
     const scn = makeScenario(makeRng(3), { room: null });
     const r = runEpisode(scn, makePlannerPolicy(defaultParams()), { maxTurns: 40 });

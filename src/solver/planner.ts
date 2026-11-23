@@ -237,13 +237,17 @@ class Board {
     return { dist, steps };
   }
 
-  /** 全マスから dst までの最安の手間（ワープは一方通行なので、逆向きにたどる） */
-  dijkstraTo(dst: number): Float64Array {
+  /** 全マスから dst（複数なら一番近いもの）までの最安の手間（ワープは一方通行なので、逆向きにたどる） */
+  dijkstraTo(dsts: number | number[]): Float64Array {
     const n = this.w * this.h;
     const dist = new Float64Array(n).fill(INF);
-    dist[dst] = 0;
     const heap = new MinHeap();
-    heap.push(0, dst);
+    const list = typeof dsts === "number" ? [dsts] : dsts;
+    for (const d of list) {
+      dist[d] = 0;
+      heap.push(0, d);
+    }
+    const dst = list.length === 1 ? list[0]! : -1;
     while (heap.size > 0) {
       const [d, u] = heap.pop();
       if (d > dist[u]!) continue;
@@ -288,6 +292,16 @@ class Board {
   }
 }
 
+/** 全マスから、ワープ（入ると飛ぶマス）の隣までの最安の手間（隣が 0）。隣が無ければ全部 INF */
+function toPortal(board: Board, portal: number): Float64Array {
+  const nbs: number[] = [];
+  for (let k = 0; k < 4; k++) {
+    const nb = board.nb[portal * 4 + k]!;
+    if (nb >= 0 && board.cost[nb] !== INF) nbs.push(nb);
+  }
+  return nbs.length ? board.dijkstraTo(nbs) : new Float64Array(board.w * board.h).fill(INF);
+}
+
 /** ワープに入る1歩の手間（歩く1歩と同じ） */
 const PORTAL_STEP_COST = 10;
 /** 桂馬の動き（CMD2 の keilu・keiru・keild・keird）。歩く手より 10 多くかかる（-20） */
@@ -326,6 +340,27 @@ function nearestEnemyInfo(wm: WorldMap, turn: number, x: number, y: number): { c
   return { chasing: best?.chasing ?? false };
 }
 
+/** ターンごとのアイテムの得点の見込み（試合ごとの WorldMap に付ける。出口のワープの周回を見つける用） */
+const itemHistory = new WeakMap<WorldMap, Map<number, number>>();
+
+/**
+ * 出口のワープ（行き先の分からないワープ）を目標にしてよいか。直近 40 ターンに 3 回以上ワープしたのに、
+ * 最初のワープの時からアイテムの得点が増えていなければ、ワープを回っているだけなので使わない
+ * （学習の LLM の要望 2026-11-23: 4 ターンごとに同じ所へ戻り、そのたびに狙う相手に当てられた）。
+ */
+function exitsAllowed(wm: WorldMap, turn: number): boolean {
+  const hist = itemHistory.get(wm) ?? new Map<number, number>();
+  itemHistory.set(wm, hist);
+  const item = wm.getStats().estimatedItemScore;
+  if (!hist.has(turn)) hist.set(turn, item);
+  for (const t of hist.keys()) if (t < turn - 60) hist.delete(t);
+  const warps = wm.getWarpLinks().filter((l) => l.observedTurn >= turn - 40).map((l) => l.observedTurn);
+  if (warps.length < 3) return true;
+  const first = Math.min(...warps);
+  const then = [...hist.entries()].filter(([t]) => t <= first).sort((a, b) => b[0] - a[0])[0]?.[1];
+  return then === undefined || item > then;
+}
+
 /** 経路探索で手を決める（SolverDecision と同じ形で返す）。CMD2 で隣に敵がいれば、当てる価値と比べてアイテムを置いて当てる */
 export function planMove(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insight: PlanInsight } {
   const d = planRoute(wm, ctx);
@@ -335,7 +370,8 @@ export function planMove(wm: WorldMap, ctx: PlannerContext): SolverDecision & { 
 }
 
 /**
- * 隣（上下左右）に今のターンに見えた敵がいれば、その向きにアイテムを置く手（p*3s*。-30、置いた後に横へ1マス動く）。
+ * 隣（上下左右）に今のターンに自分の観測で見えた敵がいれば（Webマップの位置は使わない。ワープの後に位置合わせがずれると、斜め隣の敵を隣と思って
+ * 当たらない手を出し続けたことがある。学習の LLM の要望 2026-11-23）、その向きにアイテムを置く手（p*3s*。-30、置いた後に横へ1マス動く）。
  * 動いた先が分かっていて通れる（罠・ワープでない）時だけ。当てる手と予定の一歩を評価関数の moveValue で比べ（当てる手の得点は attackGain。
  * 予定の一歩は着地が敵の近くなら dangerCost を引く）、当てる手が 30 より大きく上回る時に選ぶ。
  */
@@ -354,7 +390,7 @@ function pickAttack(wm: WorldMap, ctx: PlannerContext, planned: SolverDecision &
   const plannedScore = plannedSpec
     ? moveValue({ phase: "CMD2", cmd: planned.command, gain: plannedGain, actionCost: plannedSpec.estActionCost, remaining: 0, enemyDist: enemyDist(x + plannedSpec.move[0], y + plannedSpec.move[1]), enemyNow, chasing }, p)
     : plannedGain;
-  for (const e of wm.getEnemySightings()) {
+  for (const e of wm.getLocalEnemySightings()) {
     if (e.lastSeenTurn < ctx.turn || Math.abs(e.x - x) + Math.abs(e.y - y) !== 1) continue;
     const dir = DIRS.find((k) => DIR_DELTA[k][0] === e.x - x && DIR_DELTA[k][1] === e.y - y)!;
     const cmd = (Object.keys(CMD2_SPECS) as Cmd2Command[]).find((c) => CMD2_SPECS[c].put3Dir === dir && CMD2_SPECS[c].obsShape === "ray");
@@ -430,6 +466,7 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
   const scored: { c: Candidate; key: number }[] = [];
   /** 行き先の分からないワープ（取り尽くした時の出口の候補）: 入口と、そこまでの手間 */
   const exits: { i: number; d: number }[] = [];
+  const exitsOk = exitsAllowed(wm, ctx.turn);
   for (let i = 0; i < n; i++) {
     if (i === self || !board.known[i]) continue;
     const portal = ev.isPortalValue(board.value[i]!);
@@ -443,7 +480,7 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
       }
     }
     if (d === INF) continue;
-    if (portal) exits.push({ i, d });
+    if (portal && exitsOk) exits.push({ i, d });
     const gain = ev.tileGain(board.value[i]!);
     const ua = unknownAround(i);
     if (!portal && gain <= 0 && ua === 0) continue;
@@ -542,7 +579,8 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
   }
 
   const first = picked[bestNode.seq[0]!]!;
-  const toFirst = first.terminal ? null : board.dijkstraTo(first.i);
+  // 目標までの残りの手間（逆向きの探索）。目標がワープ（入ると飛ぶ）なら、その隣までの手間 + 1歩
+  const toFirst = first.terminal ? toPortal(board, first.i) : board.dijkstraTo(first.i);
   const route = bestNode.seq.map((j) => {
     const [cx, cy] = board.xy(picked[j]!.i);
     return { x: cx, y: cy, value: Math.round(picked[j]!.value), steps: 0 };
@@ -559,9 +597,9 @@ function planRoute(wm: WorldMap, ctx: PlannerContext): SolverDecision & { insigh
   const [fx, fy] = board.xy(first.i);
   const remainingFrom = (li: number): number => {
     if (li === first.i) return 0;
-    if (toFirst) return toFirst[li]!;
-    // 目標がワープ: 隣のマスまでの距離
-    return Math.abs(board.xy(li)[0] - fx) + Math.abs(board.xy(li)[1] - fy) === 1 ? 0 : INF;
+    // 目標がワープ: 隣のマスなら 0
+    if (first.terminal && Math.abs(board.xy(li)[0] - fx) + Math.abs(board.xy(li)[1] - fy) === 1) return 0;
+    return toFirst[li]!;
   };
   const options: { cmd: string; score: number; warp: boolean; danger: boolean }[] = [];
   const specs = phase === "CMD1" ? CMD1_SPECS : CMD2_SPECS;

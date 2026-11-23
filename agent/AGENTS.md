@@ -48,4 +48,4 @@ CHaserOnline003 を自動でプレイするハーネス。フェーズ: 準備�
 
 `cells`・`cell-note` の座標は `var/current/snapshot.json` の `position` と同じ座標（今の区画）。ハーネスが絶対座標（Webマップの列・行）に直して保存するので、試合をまたいで使える。過去の試合のログ（`turns.jsonl` の `globalPositionAfter` など）の絶対座標を使う時は `--abs`。Webマップで位置合わせできていない時は記録できない。
 
-チェック: `bun run typecheck`、`bun test`、`bun run verify-policy`。
+チェック: `bun run typecheck`、`bun test`、`bun run verify-policy`。`agent/tools/` の自分のツールは `bun run typecheck:tools`（本体の typecheck からは外してある。型の厳しさも少し緩い）。

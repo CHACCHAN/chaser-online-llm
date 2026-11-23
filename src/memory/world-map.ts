@@ -685,6 +685,11 @@ export class WorldMap {
   }
 
   /** 自前の観測で見えた他プレイヤー（ローカル座標・最後に見たターン） */
+  /** 自分の観測で見た敵だけ（Webマップから位置合わせしたものは含めない。位置合わせがずれていても確か） */
+  public getLocalEnemySightings(): { x: number; y: number; tileId: number; lastSeenTurn: number }[] {
+    return [...this.enemySightings.values()].map((e) => ({ ...e }));
+  }
+
   public getEnemySightings(): { x: number; y: number; tileId: number; lastSeenTurn: number }[] {
     const byId = new Map([...this.enemySightings.values()].map((e) => [e.tileId, { ...e }]));
     // Web マップに載っている敵も（位置合わせ済みならローカル座標に直して）含める。新しい方を採用
