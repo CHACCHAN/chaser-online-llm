@@ -64,9 +64,15 @@ export interface Comparison {
   /** 1ターンあたりの得点の平均 */
   a: number;
   b: number;
-  /** b − a の平均と標準誤差（同じ地図どうしの差） */
+  /**
+   * b − a の差（同じ地図どうし）と標準誤差。外れ値に強いよう、地図ごとの差の上下 TRIM ずつを除いた平均（刈り込み平均）と、
+   * その標準誤差（ウィンザー化した標準偏差から）。相手に当てる・当てられる得点（putHit）は1回で数十ターン分の点になり、
+   * 数枚の地図の当て合いで平均が大きく揺れて、良くなったかが分からなくなるため。
+   */
   diff: number;
   se: number;
+  /** 除かない、ふつうの平均の差（参考） */
+  meanDiff?: number;
   /** b が勝った地図の数 / 全体 */
   wins: number;
   n: number;
@@ -74,15 +80,34 @@ export interface Comparison {
   hazardsB: number;
 }
 
+/** 地図ごとの差の上下から除く割合（刈り込み平均） */
+export const TRIM = 0.1;
+
+/** 刈り込み平均と、その標準誤差（ウィンザー化した標準偏差 / ((1 − 2g)√n)） */
+export function trimmedStats(d: number[], g = TRIM): { mean: number; se: number } {
+  const n = d.length;
+  if (n === 0) return { mean: 0, se: 0 };
+  const s = [...d].sort((a, b) => a - b);
+  const k = Math.floor(n * g);
+  const kept = s.slice(k, n - k);
+  const tm = mean(kept);
+  const lo = s[k]!;
+  const hi = s[n - 1 - k]!;
+  const w = s.map((x) => Math.min(hi, Math.max(lo, x)));
+  const wm = mean(w);
+  const sw = Math.sqrt(mean(w.map((x) => (x - wm) ** 2)) * (n / Math.max(1, n - 1)));
+  return { mean: tm, se: sw / ((1 - (2 * k) / n) * Math.sqrt(n)) };
+}
+
 export function compareResults(ra: EpisodeResult[], rb: EpisodeResult[], fit: (r: EpisodeResult) => number = perTurn): Comparison {
   const d = ra.map((r, i) => fit(rb[i]!) - fit(r));
-  const m = mean(d);
-  const sd = Math.sqrt(mean(d.map((x) => (x - m) ** 2)) * (d.length / Math.max(1, d.length - 1)));
+  const t = trimmedStats(d);
   return {
     a: Math.round(mean(ra.map(fit)) * 10) / 10,
     b: Math.round(mean(rb.map(fit)) * 10) / 10,
-    diff: Math.round(m * 10) / 10,
-    se: Math.round((sd / Math.sqrt(Math.max(1, d.length))) * 10) / 10,
+    diff: Math.round(t.mean * 10) / 10,
+    se: Math.round(t.se * 10) / 10,
+    meanDiff: Math.round(mean(d) * 10) / 10,
     wins: d.filter((x) => x > 0).length,
     n: d.length,
     hazardsA: ra.reduce((s, r) => s + r.hazardHits, 0),
@@ -101,6 +126,24 @@ export async function comparePolicies(
   // 比べる両方が同じ相手と戦う（相手の決め方を1回だけ読む）
   const [ra, rb] = await Promise.all([evaluatePolicy(pool, a, set, opponents), evaluatePolicy(pool, b, set, opponents)]);
   return compareResults(ra, rb, fit);
+}
+
+/** 候補ごとの、地図ごとの順位（0〜1、高いほど良い。同点は平均の順位）の平均。scores[候補][地図] */
+export function rankFitness(scores: number[][]): number[] {
+  const n = scores.length;
+  const maps = scores[0]?.length ?? 0;
+  const out = new Array<number>(n).fill(0);
+  for (let j = 0; j < maps; j++) {
+    const col = scores.map((s, i) => [s[j]!, i] as const).sort((a, b) => a[0] - b[0]);
+    for (let r = 0; r < n; ) {
+      let e = r;
+      while (e + 1 < n && col[e + 1]![0] === col[r]![0]) e++;
+      const rank = (r + e) / 2 / Math.max(1, n - 1);
+      for (let k = r; k <= e; k++) out[col[k]![1]]! += rank / Math.max(1, maps);
+      r = e + 1;
+    }
+  }
+  return out;
 }
 
 /** b が a よりはっきり良いか（差が標準誤差の z 倍より大きく、罠を踏む回数が増えていない） */
@@ -207,15 +250,18 @@ export async function trainPolicy(opts: TrainOptions): Promise<TrainResult> {
     const results = await Promise.all(cands.map((params) => evaluatePolicy(opts.pool, { kind: "planner", params }, set, opponents)));
     episodes += popSize * batch;
     const fitness = results.map((rs) => mean(rs.map(fit)));
-    const order = fitness.map((f, i) => [f, i] as const).sort((a, b) => b[0] - a[0]);
+    // 候補の順位は、地図ごとの順位の平均で決める（1枚の当て合いの大きな点で順位が決まらないように）
+    const rankFit = rankFitness(results.map((rs) => rs.map(fit)));
+    const order = rankFit.map((f, i) => [f, i] as const).sort((a, b) => b[0] - a[0]);
     const next = m.map((v, j) => v + sigma * order.slice(0, mu).reduce((s, [, i], r) => s + (w[r]! / wsum) * eps[i]![j]!, 0));
     m = next.map((v) => Math.min(1, Math.max(0, v)));
     // 探す幅は時間とともに狭める（最初は広く、最後は細かく）
     sigma = cfg.sigmaStart - (cfg.sigmaStart - cfg.sigmaEnd) * Math.min(1, (Date.now() - t0) / Math.max(1, opts.budgetMs));
     genMs = Date.now() - g0;
     gen += 1;
-    opts.onGeneration?.({ gen, best: Math.round(order[0]![0] * 10) / 10, mean: Math.round(mean(fitness) * 10) / 10, sigma, ms: genMs, episodes });
-    log(`世代${gen}: 最良 ${order[0]![0].toFixed(1)} / 平均 ${mean(fitness).toFixed(1)} ${unit}（σ=${sigma.toFixed(3)}、${(genMs / 1000).toFixed(1)}秒）`);
+    const bestRaw = fitness[order[0]![1]]!;
+    opts.onGeneration?.({ gen, best: Math.round(bestRaw * 10) / 10, mean: Math.round(mean(fitness) * 10) / 10, sigma, ms: genMs, episodes });
+    log(`世代${gen}: 順位が一番の候補 ${bestRaw.toFixed(1)} / 平均 ${mean(fitness).toFixed(1)} ${unit}（σ=${sigma.toFixed(3)}、${(genMs / 1000).toFixed(1)}秒）`);
   }
 
   const after = fixed(fromUnit(m));

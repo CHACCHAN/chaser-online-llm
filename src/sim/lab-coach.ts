@@ -48,8 +48,9 @@ export interface CoachResult {
   finishedAt: string;
   trigger: string;
   dir: string;
-  /** 学習したモデルと、理論値の目安との差（統計の推移に出す） */
+  /** 学習したモデル・ルームと、理論値の目安との差（統計の推移に出す） */
   model?: string;
+  room?: number | null;
   gap?: { policy: number; reference: number; ratio: number; knowledgeGap: number; searchGap: number } | null;
 }
 
@@ -552,6 +553,7 @@ export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Prom
     trigger: input.trigger,
     dir: rel(dir),
     ...(input.model ? { model: input.model } : {}),
+    room: input.room,
     gap: input.gap ? { policy: input.gap.policy, reference: input.gap.reference, ratio: input.gap.ratio, knowledgeGap: input.gap.knowledgeGap, searchGap: input.gap.searchGap } : null,
   };
   try {

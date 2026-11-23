@@ -1,3 +1,5 @@
 [test]
 # テストは試合中の実ファイルに触れない（src/test-setup.ts）
 preload = ["./src/test-setup.ts"]
+# テストは src/ だけ（var/edit-guard-backup/ に控えたテストの写しを拾わない）
+root = "./src"

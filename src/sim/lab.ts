@@ -420,7 +420,10 @@ export class LearningLab {
     // モデルを順番に育てる（試合で使うモデルは2回に1回、残りはほかのモデルを順に）
     // 相手が出ないルーム（人数が自分だけ）では、相手に向けたモデル（目的に当てた・当てられた得点があるもの）は育てない
     // （学習の LLM の要望 2026-11-23: 1人のルームでハンターを 25 世代育てて、罠が増えただけだった）
-    const room = this.roomForIdle();
+    // 目安に届ききっていて弱点も無いルーム（直近 3 回とも 98% 以上）は、いろいろな地図で学習する
+    // （学習の LLM の要望 2026-11-23: ルーム 3 は 100% で直すものが無いのに、空き時間の学習が何度も回っていた）
+    const wanted = this.roomForIdle();
+    const room = wanted !== null && roomSaturated(wanted) ? null : wanted;
     const styles = idleStyles(loadStyles(), room);
     const play = styles.some((s) => s.id === playModelId()) ? playModelId() : STANDARD_MODEL;
     const others = styles.filter((s) => s.id !== play);
@@ -519,4 +522,10 @@ export function idleStyles(styles: StyleDef[], room: number | null, players?: [n
   }
   if (players[1] > 1) return styles;
   return styles.filter((s) => s.id === STANDARD_MODEL || !((s.objective.put ?? 0) !== 0 || (s.objective.putDamage ?? 0) !== 0));
+}
+
+/** 直近 3 回の学習の LLM の記録で、そのルームが理論値の目安に 98% 以上届いていたか */
+export function roomSaturated(room: number, log = readCoachLog(30)): boolean {
+  const recent = log.filter((c) => c.room === room && c.gap).slice(-3);
+  return recent.length >= 3 && recent.every((c) => c.gap!.ratio >= 0.98);
 }

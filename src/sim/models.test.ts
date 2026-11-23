@@ -62,3 +62,34 @@ test("空き時間の学習: 相手が出ないルームでは、相手に向け
   expect(idleStyles(styles, 3, [1, 1]).map((s) => s.id)).toEqual(["standard", "collector"]);
   expect(idleStyles(styles, 720, [2, 4]).map((s) => s.id)).toEqual(["standard", "hunter", "guardian", "collector"]);
 });
+
+test("比べ方: 当て合いの大きな点（外れ値）では揺れない刈り込み平均で差を出す", async () => {
+  const { trimmedStats, compareResults } = await import("./train");
+  const d = [10, 12, 9, 11, 10, 8, 12, 11, 9, 10, 5000, -4000];
+  const t = trimmedStats(d);
+  expect(t.mean).toBeGreaterThan(9);
+  expect(t.mean).toBeLessThan(12);
+  expect(t.se).toBeLessThan(5);
+  const r = (score: number) => ({ score, totalTurns: 1, hazardHits: 0 }) as EpisodeResult;
+  const c = compareResults(d.map(() => r(0)), d.map(r));
+  expect(c.diff).toBeCloseTo(t.mean, 1);
+  expect(c.meanDiff).toBeCloseTo(d.reduce((a, b) => a + b, 0) / d.length, 1);
+});
+
+test("学習の候補の順位: 地図ごとの順位の平均（1枚の大きな点で決まらない）", async () => {
+  const { rankFitness } = await import("./train");
+  // 候補0: 1枚だけ大勝ち、ほかは負け。候補1: ほとんどの地図で少し勝つ
+  const f = rankFitness([
+    [100000, 1, 1, 1],
+    [2, 2, 2, 2],
+  ]);
+  expect(f[1]!).toBeGreaterThan(f[0]!);
+});
+
+test("空き時間の学習: 理論値の目安に直近 3 回とも 98% 以上届いたルームは、いろいろな地図に回す", async () => {
+  const { roomSaturated } = await import("./lab");
+  const c = (room: number, ratio: number) => ({ room, gap: { ratio } }) as never;
+  expect(roomSaturated(3, [c(3, 1), c(720, 0.4), c(3, 0.99), c(3, 1)])).toBe(true);
+  expect(roomSaturated(3, [c(3, 1), c(3, 0.9), c(3, 1)])).toBe(false);
+  expect(roomSaturated(3, [c(3, 1), c(3, 1)])).toBe(false);
+});

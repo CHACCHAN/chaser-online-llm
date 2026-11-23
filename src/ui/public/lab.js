@@ -173,7 +173,7 @@
       const s = [`<span>並べた地図 ${set.maps.length} 枚</span>`];
       if (set.after != null) {
         s.push(`<span>学習前 <b>${num(set.before)}</b> → 学習後 <b>${num(set.after)}</b> 点/ターン <span class="${set.after >= set.before ? "up" : "down"}">${sign(set.after - set.before)}</span></span>`);
-        if (v && v.n) s.push(`<span title="学習に使っていない地図で確かめた結果。保存するかはこれで決める">確かめ用の地図 ${v.n} 枚: ${num(v.a)} → ${num(v.b)}（差 ${sign(v.diff)}±${num(v.se)}・勝ち ${v.wins}/${v.n}）</span>`);
+        if (v && v.n) s.push(`<span title="学習に使っていない地図で確かめた結果。保存するかはこれで決める（差が標準誤差の 1.5 倍より大きく、罠が増えていない）。差は地図ごとの差の上下 1 割ずつを除いた平均（当て合いの大きな点で揺れないように）">確かめ用の地図 ${v.n} 枚: ${num(v.a)} → ${num(v.b)}（差 ${sign(v.diff)}±${num(v.se)}${v.meanDiff !== undefined ? `・外れ値も入れた平均の差 ${sign(v.meanDiff)}` : ""}・勝ち ${v.wins}/${v.n}）</span>`);
         s.push(set.accepted ? `<span class="badge b-continue">保存した（次の試合から使う）</span>` : `<span class="badge b-wait">保存しない（はっきり良くなっていない）</span>`);
       } else s.push(`<span>今の方策 <b>${num(set.before)}</b> 点/ターン</span>`);
       parts.push(`<div class="stats">${s.join("")}</div>`);
