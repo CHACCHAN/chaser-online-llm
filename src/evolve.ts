@@ -8,8 +8,8 @@ import { logger } from "./tools";
 import { uiBus } from "./ui/event-bus";
 
 import { EVALUATOR_PATH, TACTICS_PATH } from "./paths";
-import { backupEvaluator, backupTactics, benchRoom, clearEvaluatorBackup, EVALUATOR_BACKUP_PATH, gateEvaluatorChange, gateTacticsChange, type GateResult, TACTICS_BACKUP_PATH } from "./sim/post-match";
-import { checkTacticsFile } from "./sim/tactics-check";
+import { backupEvaluator, backupTactics, benchRoom, clearEvaluatorBackup, EVALUATOR_BACKUP_PATH, gateEvaluatorChange, type GateResult, TACTICS_BACKUP_PATH } from "./sim/post-match";
+import { judgeTacticsChange } from "./sim/tactics-check";
 import { lab } from "./sim/lab";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "./evolution/edit-guard";
 import { appendReview } from "./agent/harness-review";
@@ -219,17 +219,7 @@ export interface TacticsOutcome {
  * 落ちたら改修前に戻す
  */
 export async function gateTactics(before: string, room: number | null): Promise<TacticsOutcome> {
-  const check = await checkTacticsFile();
-  let accepted = check.ok;
-  let detail = check.ok ? "" : `短い試合での確かめに落ちた: ${check.problem}${check.lastError ? `（${check.lastError}）` : ""}`;
-  if (check.ok) {
-    const g = await gateTacticsChange(before, room);
-    const c = g.comparison;
-    accepted = g.ok;
-    detail = c
-      ? `改修前 ${c.a} → 改修後 ${c.b} 点/ターン（差 ${c.diff}±${c.se}、勝ち ${c.wins}/${c.n}）、モデルの切り替え ${g.switches.before} → ${g.switches.after} 回${g.error ? `。${g.error}` : ""}`
-      : `比べられなかった: ${g.error}`;
-  }
+  const { accepted, detail } = await judgeTacticsChange(before, room);
   if (!accepted) writeFileSync(TACTICS_PATH, before, "utf-8");
   uiBus.pushClaudeEvent({ context: "evolution", kind: accepted ? "system" : "error", title: accepted ? "作戦スクリプトの改修を採用（シミュレータで弱くなっていない）" : "作戦スクリプトの改修を元に戻した", content: detail });
   return { accepted, detail };

@@ -6,6 +6,7 @@ import { makeTacticalPolicy, type TacticsModule } from "../solver/tactics-runtim
 import { runEpisode } from "./episode";
 import { makeScenario } from "./mapgen";
 import { assignOpponents, loadOpponentPlan } from "./opponents";
+import { gateTacticsChange } from "./post-match";
 import { makeRng } from "./rng";
 
 /**
@@ -66,4 +67,20 @@ export async function checkTacticsFile(file: string = TACTICS_PATH, timeoutMs = 
     // 下で不合格
   }
   return { ok: false, phases: 0, errors: 0, lastError: null, switches: 0, maxMs: 0, problem: proc.killed || code === null ? `${Math.round(timeoutMs / 1000)} 秒で終わらなかった（止まらない処理がある）` : `確かめられなかった（終了コード ${code}）` };
+}
+
+/**
+ * 改修した作戦スクリプトの判定（戻すのは呼ぶ側）: 別プロセスで短い試合（例外・時間）→ シミュレータで改修前と同じ地図・同じ相手で比べる
+ */
+export async function judgeTacticsChange(before: string, room: number | null): Promise<{ accepted: boolean; detail: string }> {
+  const check = await checkTacticsFile();
+  if (!check.ok) return { accepted: false, detail: `短い試合での確かめに落ちた: ${check.problem}${check.lastError ? `（${check.lastError}）` : ""}` };
+  const g = await gateTacticsChange(before, room);
+  const c = g.comparison;
+  return {
+    accepted: g.ok,
+    detail: c
+      ? `改修前 ${c.a} → 改修後 ${c.b} 点/ターン（差 ${c.diff}±${c.se}、勝ち ${c.wins}/${c.n}）、モデルの切り替え ${g.switches.before} → ${g.switches.after} 回${g.error ? `。${g.error}` : ""}`
+      : `比べられなかった: ${g.error}`,
+  };
 }

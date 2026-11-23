@@ -7,7 +7,7 @@ import { activePolicyPrompt } from "../agent/policy";
 import { appendReview } from "../agent/harness-review";
 import { OBJECTIVE_KEYS } from "../solver/models";
 import { PARAM_SPACE } from "../solver/evaluator";
-import { AGENT_DIR, AGENT_REVIEW_PATH, EVALUATOR_PATH, POLICY_STYLES_PATH, LAB_COACH_DIR, LAB_COACH_LOG_PATH, POLICY_TRAIN_LOG_PATH, PROJECT_ROOT, RUNS_DIR, SIM_MAPS_DIR, SIM_PROFILES_PATH, TRAIN_CONFIG_PATH } from "../paths";
+import { AGENT_DIR, AGENT_REVIEW_PATH, EVALUATOR_PATH, POLICY_STYLES_PATH, LAB_COACH_DIR, LAB_COACH_LOG_PATH, POLICY_TRAIN_LOG_PATH, PROJECT_ROOT, RUNS_DIR, SIM_MAPS_DIR, SIM_PROFILES_PATH, TACTICS_PATH, TRAIN_CONFIG_PATH } from "../paths";
 import { getSetting, numSetting } from "../settings";
 import { logger } from "../tools/logger";
 import type { EpisodeResult } from "./episode";
@@ -15,6 +15,7 @@ import { getTileInfo } from "../memory/world-map";
 import { isPortalTile } from "./engine";
 import { loadRealMaps, makeScenario } from "./mapgen";
 import { gateEvaluatorChange, type GateResult } from "./post-match";
+import { judgeTacticsChange } from "./tactics-check";
 import { type OracleGap, renderGap } from "./oracle";
 import { makeRng } from "./rng";
 import { loadTrainConfig, type TrainResult } from "./train";
@@ -34,7 +35,7 @@ import { loadTrainConfig, type TrainResult } from "./train";
  */
 
 export interface CoachChange {
-  what: "evaluator" | "profiles" | "trainConfig" | "styles" | "review";
+  what: "evaluator" | "tactics" | "profiles" | "trainConfig" | "styles" | "review";
   accepted: boolean;
   detail: string;
 }
@@ -76,7 +77,8 @@ export interface CoachDeps {
   /** 止める（試合が始まった等）。true になったら LLM を止め、改修は全部戻す */
   shouldStop?: () => boolean;
   gateEvaluator?: (baselineCode: string, room: number | null) => Promise<GateResult>;
-  paths?: { evaluator?: string; profiles?: string; trainConfig?: string; styles?: string; review?: string; dir?: string; log?: string };
+  gateTactics?: (baselineCode: string, room: number | null) => Promise<{ accepted: boolean; detail: string }>;
+  paths?: { evaluator?: string; tactics?: string; profiles?: string; trainConfig?: string; styles?: string; review?: string; dir?: string; log?: string };
   /** 守る範囲（src/ など）の変更を戻すか（テストでは戻さない） */
   guard?: boolean;
 }
@@ -493,6 +495,7 @@ async function runLabCoachInner(input: CoachInput, deps: CoachDeps): Promise<Coa
   const startedAt = new Date().toISOString();
   const files = {
     evaluator: deps.paths?.evaluator ?? EVALUATOR_PATH,
+    tactics: deps.paths?.tactics ?? TACTICS_PATH,
     profiles: deps.paths?.profiles ?? SIM_PROFILES_PATH,
     trainConfig: deps.paths?.trainConfig ?? TRAIN_CONFIG_PATH,
     styles: deps.paths?.styles ?? POLICY_STYLES_PATH,
@@ -500,7 +503,7 @@ async function runLabCoachInner(input: CoachInput, deps: CoachDeps): Promise<Coa
   };
   const dir = deps.paths?.dir ?? path.join(LAB_COACH_DIR, startedAt.replace(/[:.]/g, "-"));
   const report = writeCoachReport(input, dir);
-  const before = { evaluator: read(files.evaluator), profiles: read(files.profiles), trainConfig: read(files.trainConfig), styles: read(files.styles) };
+  const before = { evaluator: read(files.evaluator), tactics: read(files.tactics), profiles: read(files.profiles), trainConfig: read(files.trainConfig), styles: read(files.styles) };
   const stop = deps.shouldStop ?? (() => false);
   const guard = deps.guard === false ? null : snapshotProtectedFiles();
   const rel = (f: string) => path.relative(PROJECT_ROOT, f);
@@ -514,6 +517,7 @@ async function runLabCoachInner(input: CoachInput, deps: CoachDeps): Promise<Coa
     "",
     "## 直してよいもの",
     `- 評価関数 \`${rel(files.evaluator)}\`（方策が何を狙い、どれだけ遠回りするか。新しい特徴は PARAM_SPACE に重みを足す）。比べ方: \`bun src/cli.ts bench --room <n> --evaluator <改修前の写し>\`（両方とも学習したパラメータで打つので、init だけの改修は差が出ない。init を比べるなら --init）`,
+    `- 作戦スクリプト \`${rel(files.tactics)}\`（試合中に毎フェーズ、モデルの切り替え・目標・LLM を呼ぶかを決める。作戦方針をここに書き表す。シミュレータでもモデルを切り替えて動く。比べ方: \`bun src/cli.ts bench --room <n> --tactics <改修前の写し>\`、確かめ: \`bun src/cli.ts tactics-check\`）`,
     `- 地図の作り方 \`${rel(files.profiles)}\`（本物の地図・実測に似せる。易しくするための変更はしない）`,
     `- 学習のやり方 \`${rel(files.trainConfig)}\`（候補・地図・確かめの数、探す幅）`,
     `- モデル \`${rel(files.styles)}\`（特性ごとのモデルを足す・目的を直す。前からあるモデルは消さない。${MAX_STYLES} 個まで）`,
@@ -540,7 +544,7 @@ async function runLabCoachInner(input: CoachInput, deps: CoachDeps): Promise<Coa
 
   if (stopped) {
     // 試合が始まった等: 確かめていない改修は全部戻す
-    for (const k of ["evaluator", "profiles", "trainConfig", "styles"] as const) if (read(files[k]) !== before[k]) restore(files[k], before[k]);
+    for (const k of ["evaluator", "tactics", "profiles", "trainConfig", "styles"] as const) if (read(files[k]) !== before[k]) restore(files[k], before[k]);
   } else {
     // モデル（特性）: 足す・目的を直す。前からあるモデルは消さない。新しいモデルは次の学習（合間の学習が順に育てる）から
     if (read(files.styles) !== before.styles) {
@@ -597,6 +601,12 @@ async function runLabCoachInner(input: CoachInput, deps: CoachDeps): Promise<Coa
       const detail = c ? `改修前 ${c.a} → 改修後 ${c.b} 点/ターン（差 ${c.diff}±${c.se}、勝ち ${c.wins}/${c.n}、罠 ${c.hazardsA}→${c.hazardsB}）` : `比べられなかった: ${gate.error}`;
       if (!gate.ok) restore(files.evaluator, before.evaluator);
       changes.push({ what: "evaluator", accepted: gate.ok, detail: gate.ok ? `採用: ${detail}` : `戻した: ${detail}` });
+    }
+    // 作戦スクリプト（評価関数の後に、今の評価関数で比べる）
+    if (before.tactics !== null && read(files.tactics) !== before.tactics) {
+      const j = await (deps.gateTactics ?? judgeTacticsChange)(before.tactics, input.room);
+      if (!j.accepted) restore(files.tactics, before.tactics);
+      changes.push({ what: "tactics", accepted: j.accepted, detail: j.accepted ? `採用: ${j.detail}` : `戻した: ${j.detail}` });
     }
   }
 
