@@ -55,17 +55,39 @@ test("止める: 回っている世代が終わったところで止まる。仕
   expect(lab.state().last!.stopped).toBe(true);
 }, 60_000);
 
-test("試合をしていない間の学習は、試合が始まると止まる", async () => {
+test("空いている間の学習は、TRAIN_DURING_MATCH=false なら試合が始まると止まる", async () => {
+  const prev = Bun.env.TRAIN_DURING_MATCH;
+  Bun.env.TRAIN_DURING_MATCH = "false";
+  try {
+    const lab = new LearningLab();
+    lab.setIdle(true);
+    await Bun.sleep(50);
+    expect(lab.state().job?.trigger).toBe("idle");
+    lab.setMatchActive(true);
+    expect(lab.state().idle.reason).toContain("試合中");
+    while (lab.busy) await Bun.sleep(50);
+    lab.setIdle(false);
+    lab.setMatchActive(false);
+    expect(lab.busy).toBe(false);
+  } finally {
+    if (prev === undefined) delete Bun.env.TRAIN_DURING_MATCH;
+    else Bun.env.TRAIN_DURING_MATCH = prev;
+  }
+}, 60_000);
+
+test("空いている間の学習は、TRAIN_DURING_MATCH（既定）なら試合中も続ける", async () => {
   const lab = new LearningLab();
   lab.setIdle(true);
   await Bun.sleep(50);
   expect(lab.state().job?.trigger).toBe("idle");
   lab.setMatchActive(true);
-  expect(lab.state().idle.reason).toContain("試合中");
-  while (lab.busy) await Bun.sleep(50);
+  // 止めていない（止める時は stop() がすぐ「止めています」にする）
+  expect(lab.state().job?.trigger).toBe("idle");
+  expect(lab.state().job?.message ?? "").not.toContain("止めて");
+  expect(lab.state().idle.reason).toBeNull();
   lab.setIdle(false);
+  while (lab.busy) await Bun.sleep(50);
   lab.setMatchActive(false);
-  expect(lab.busy).toBe(false);
 }, 60_000);
 
 test("API: 状態を返し、地図を作る前の学習は断る", async () => {

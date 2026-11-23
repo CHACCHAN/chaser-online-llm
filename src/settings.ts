@@ -245,8 +245,15 @@ export const SETTINGS = {
   TRAIN_IDLE: {
     label: "試合をしていない間も学習する",
     group: "other",
-    description: "試合をしていない間もシミュレータで学習を続ける（WebUI の「学習」画面でも切り替えられる）。試合が始まると止まる",
+    description: "空いている間もシミュレータで学習を続ける（WebUI の「学習」画面でも切り替えられる）。試合中も続けるかは TRAIN_DURING_MATCH",
     defaultValue: "false",
+  },
+  TRAIN_DURING_MATCH: {
+    label: "試合中も学習を止めない",
+    group: "other",
+    description:
+      "試合中も、空き時間の学習（TRAIN_IDLE）を止めずに続ける（シミュレータは別のスレッドで動き、試合の手は数ミリ秒なので響きにくい）。学習の LLM も動く（評価関数を書き換えている間に始まった試合は、書き換える前の評価関数を使う）。試合後の振り返りが動いている間は、学習の LLM だけ動かさない（評価関数を同時に書き換えない）。false なら試合が始まると止める",
+    defaultValue: "true",
   },
   TRAIN_IDLE_CHUNK_MIN: {
     label: "空き時間の学習1回の時間（分）",
@@ -312,7 +319,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "match", title: "試合の進行", keys: ["CHASER_MAX_TURNS", "CHASER_MAX_MATCHES", "CHASER_PLAYER_WAIT_MIN", "CHASER_LOGIN_WAIT_MIN", "CHASER_LOGIN_RETRY_SEC"] },
   { id: "webmap", title: "Webマップ", keys: ["CHASER_WEB_MAP_URL", "CHASER_WEB_MAP_REFRESH", "CHASER_WEB_MAP_RETRY_TURNS", "CHASER_WEB_MAP_TIMEOUT_SEC", "CHASER_WARP_ALIGN_WAIT_SEC"] },
   { id: "model", title: "LLM のつなぎ方・モデル", keys: ["LLM_AUTH_MODE", "LLM_API_URL", "LLM_API_KEY", "LLM_API_HEADERS", "LLM_OAUTH_TOKEN", "LLM_MODEL_NAME", "LLM_MODEL_EFFORT", "LLM_CONTEXT_WINDOW", "LLM_AUTO_COMPACT", "LLM_AUTO_COMPACT_PCT", "LLM_MAX_OUTPUT_TOKENS", "LLM_MODELS_TIMEOUT_SEC"] },
-  { id: "learn", title: "方策・学習", keys: ["POLICY_MODEL", "TRAIN_AFTER_MATCH_MIN", "TRAIN_IDLE", "TRAIN_IDLE_CHUNK_MIN", "SIM_MAX_TURNS", "SIM_WORKERS"] },
+  { id: "learn", title: "方策・学習", keys: ["POLICY_MODEL", "TRAIN_AFTER_MATCH_MIN", "TRAIN_IDLE", "TRAIN_DURING_MATCH", "TRAIN_IDLE_CHUNK_MIN", "SIM_MAX_TURNS", "SIM_WORKERS"] },
   { id: "coach", title: "学習の LLM", keys: ["LAB_COACH", "LAB_COACH_MODEL", "LAB_COACH_EFFORT", "LAB_COACH_TIMEOUT_MIN"] },
   { id: "main", title: "LLM（試合中）", keys: ["AGENT_USE_MAIN", "AGENT_CALL_MODE", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },

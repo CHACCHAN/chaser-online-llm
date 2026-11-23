@@ -1,3 +1,4 @@
+import { postMatchBusy } from "../evolution/post-match-queue";
 import { measureGap } from "./oracle";
 import { numSetting, boolSetting, getSetting } from "../settings";
 import type { Params } from "../solver/evaluator";
@@ -25,7 +26,8 @@ import { loadTrainConfig } from "./train-config";
  * 保存するかは、学習に使っていない地図で確かめて決める（train.ts）。
  *
  * - 同時に動かす仕事は1つ（CPU を取り合わないため）。
- * - 試合をしていない間の学習（TRAIN_IDLE）は毎回新しい地図で行い、試合が始まると止める。
+ * - 空いている間の学習（TRAIN_IDLE）は毎回新しい地図で行う。試合中も続ける（TRAIN_DURING_MATCH。false なら試合が始まると止める）。
+ *   試合後の振り返りが動いている間は、学習の LLM（評価関数を書き換える）だけ動かさない。
  */
 
 export type LabTrigger = "manual" | "idle" | "post-match";
@@ -186,7 +188,7 @@ export class LearningLab {
 
   private idleReason(): string | null {
     if (!this.idleOn()) return null;
-    if (this.matchActive) return "試合中なので止めています（試合が終わるとまた始めます）";
+    if (this.matchActive && !boolSetting("TRAIN_DURING_MATCH")) return "試合中なので止めています（試合が終わるとまた始めます）";
     if (this.job && this.job.trigger !== "idle") return "空き時間の学習は、いまの仕事が終わったら始めます";
     return null;
   }
@@ -330,7 +332,10 @@ export class LearningLab {
       }
       // 学習の LLM: 結果を読んで学習環境（評価関数・地図の作り方・学習のやり方）を直す。
       // 試合中は動かさない（試合後の学習は、次の試合の前なので動かす）。試すだけ・止めた時も動かさない
-      const inMatch = () => this.matchActive && opts.trigger !== "post-match";
+      // 試合中も学習を続ける時（TRAIN_DURING_MATCH）は学習の LLM も動かす。ただし試合後の振り返りが動いている間は、
+      // 評価関数を同時に書き換えないように動かさない（試合後の学習は、振り返りの後に同じ列の中で動くので動かす）
+      const inMatch = () =>
+        opts.trigger !== "post-match" && ((this.matchActive && !boolSetting("TRAIN_DURING_MATCH")) || postMatchBusy());
       if (boolSetting("LAB_COACH") && r.generations > 0 && !opts.dryRun && !this.stopFlag && !inMatch()) {
         job.message = "学習の LLM が結果を読んで、学習環境を直しています";
         job.coach = { state: "running", startedAt: new Date().toISOString(), result: null };
@@ -405,7 +410,7 @@ export class LearningLab {
   /** 試合の始まり・終わり（index.ts から）。試合中は、試合をしていない間の学習を止める */
   setMatchActive(active: boolean): void {
     this.matchActive = active;
-    if (active && this.job?.trigger === "idle") this.stop();
+    if (active && this.job?.trigger === "idle" && !boolSetting("TRAIN_DURING_MATCH")) this.stop();
     this.emit(true);
   }
 
@@ -416,7 +421,7 @@ export class LearningLab {
   }
 
   private tickIdle(): void {
-    if (!this.idleOn() || this.matchActive || this.job) return;
+    if (!this.idleOn() || (this.matchActive && !boolSetting("TRAIN_DURING_MATCH")) || this.job) return;
     // モデルを順番に育てる（試合で使うモデルは2回に1回、残りはほかのモデルを順に）
     // 相手が出ないルーム（人数が自分だけ）では、相手に向けたモデル（目的に当てた・当てられた得点があるもの）は育てない
     // （学習の LLM の要望 2026-11-23: 1人のルームでハンターを 25 世代育てて、罠が増えただけだった）

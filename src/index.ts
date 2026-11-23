@@ -301,6 +301,9 @@ async function main() {
 
       const thisMatch = matchIndex;
       const postWork = async (say?: Say) => {
+        // 空いている間の学習の LLM が評価関数を書き換えている最中なら、止まる（確かめていない改修を戻す）のを待つ。
+        // 振り返りと学習の LLM が同時に評価関数を書き換えないため（lab.ts の inMatch が postMatchBusy を見て止める）
+        for (let i = 0; i < 240 && lab.state().job?.trigger === "idle" && lab.state().job?.coach?.state === "running"; i++) await Bun.sleep(500);
         if (!uiBus.getState().stopRequested && boolSetting("AGENT_EVOLVE")) {
           const evo = await runPostMatchEvolution(summary, mainAgent, say);
           logger.info(
