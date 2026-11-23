@@ -44,7 +44,14 @@ export interface MapProfile {
    * 実測: room455 で6ターンのうちにプットダメージ -44990。分かったら合わせる
    */
   putHit?: number;
+  /**
+   * ターン数のばらつき（割合）。ルームの実測のターン数・本物の地図のターン数を、毎回 ±この割合でずらす（既定 DEFAULT_TURNS_JITTER）。
+   * 残りターンで変わる判断（終盤・出口のワープ）を、決まったターン数だけに合わせないため。0 でずらさない
+   */
+  turnsJitter?: number;
 }
+
+export const DEFAULT_TURNS_JITTER = 0.3;
 
 export const DEFAULT_PARTITIONS: NonNullable<MapProfile["partitions"]> = { chance: 0.3, tiles: [12], count: [1, 2], width: [1, 1], portals: [1, 2] };
 export const DEFAULT_ENCLOSURES: NonNullable<MapProfile["enclosures"]> = { count: [0, 3], tiles: [4], inner: [0, 1] };
@@ -60,6 +67,17 @@ export interface Scenario {
   webMap: boolean;
   /** 置いて当てた時の得点（MapProfile.putHit） */
   putHit?: number;
+  /** 打ち切り（SIM_MAX_TURNS）より長い時に、打ち切りの何割で終えるか（0.5〜1。毎回同じターン数にならないように） */
+  capFrac?: number;
+}
+
+/**
+ * シミュレータで実際に打つターン数。打ち切り（SIM_MAX_TURNS）より長い地図は、打ち切りちょうどではなく打ち切りの 5〜10 割のどこか
+ * （ユーザーの指摘 2026-11-23: 学習の地図のターン数がほとんど同じだった。既定の 100〜400 が 200 で打ち切られていた）
+ */
+export function simTurns(scn: Pick<Scenario, "totalTurns" | "capFrac">, maxTurns: number | null | undefined): number {
+  if (!maxTurns || scn.totalTurns <= maxTurns) return scn.totalTurns;
+  return Math.max(1, Math.round(maxTurns * (scn.capFrac ?? 1)));
 }
 
 /** 保存した本物の地図（試合中の Webマップの最初の1枚。プレイヤーは除いてある） */
@@ -75,7 +93,7 @@ export interface SavedMap {
 export function loadProfile(room?: number | null): MapProfile {
   const file = JSON.parse(readFileSync(SIM_PROFILES_PATH, "utf-8")) as { default: MapProfile; rooms?: Record<string, Partial<MapProfile>> };
   const base: MapProfile = { ...file.default };
-  if (room === undefined || room === null) return base;
+  if (room === undefined || room === null) return jitterTurns(base);
   const over = file.rooms?.[String(room)] ?? {};
   const merged: MapProfile = { ...base, ...over, fill: over.fill ? { ...base.fill, ...over.fill } : base.fill };
   // ルームの実測（大きさ・ターン数・Webマップの有無）があればそれに合わせる（sim-profiles.json に書いてあればそちらが優先）
@@ -84,7 +102,15 @@ export function loadProfile(room?: number | null): MapProfile {
   const total = rp.totalTurns ?? knownTotalTurns(room);
   if (!over.turns && total) merged.turns = [total, total];
   if (over.webMap === undefined && rp.webMapAvailable !== null) merged.webMap = rp.webMapAvailable ? 1 : 0;
-  return merged;
+  return jitterTurns(merged);
+}
+
+/** ターン数が1つに決まっている（実測・[143,143] など）時は ±turnsJitter の幅にする */
+function jitterTurns(p: MapProfile): MapProfile {
+  const [lo, hi] = p.turns;
+  if (lo !== hi) return p;
+  const j = Math.max(0, Math.min(0.9, p.turnsJitter ?? DEFAULT_TURNS_JITTER));
+  return { ...p, turns: [Math.max(10, Math.round(lo * (1 - j))), Math.round(hi * (1 + j))] };
 }
 
 /** 本物の地図を保存する（試合中に最初に取れた Webマップ。プレイヤーの番号は土に置き換える） */
@@ -335,7 +361,10 @@ export function makeScenario(rng: Rng, opts: { room?: number | null; profile?: M
     grid = perturb(rng, m.grid);
     name = `real:${m.room}/${m.runId}`;
     players = Math.max(1, m.players);
-    if (m.totalTurns) totalTurns = m.totalTurns;
+    if (m.totalTurns) {
+      const j = Math.max(0, Math.min(0.9, profile.turnsJitter ?? DEFAULT_TURNS_JITTER));
+      totalTurns = randInt(rng, Math.max(10, Math.round(m.totalTurns * (1 - j))), Math.round(m.totalTurns * (1 + j)));
+    }
   } else {
     const w = randInt(rng, profile.size[0], profile.size[1]);
     const h = rng() < 0.7 ? w : randInt(rng, profile.size[0], profile.size[1]);
@@ -343,5 +372,9 @@ export function makeScenario(rng: Rng, opts: { room?: number | null; profile?: M
     name = `gen:${w}x${h}`;
   }
   const starts = placeStarts(rng, grid, players);
-  return { name, grid, starts, self: randInt(rng, 0, starts.length - 1), totalTurns, webMap: rng() < profile.webMap, putHit: profile.putHit ?? 0 };
+  const self = randInt(rng, 0, starts.length - 1);
+  const webMap = rng() < profile.webMap;
+  // 最後に引く（ここより前の乱数の順番を変えないので、同じ種なら地図は前と同じ）
+  const capFrac = 0.5 + 0.5 * rng();
+  return { name, grid, starts, self, totalTurns, webMap, putHit: profile.putHit ?? 0, capFrac };
 }

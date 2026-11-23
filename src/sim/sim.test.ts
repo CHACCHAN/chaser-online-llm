@@ -6,7 +6,7 @@ import { planMove } from "../solver/planner";
 import { makePlannerPolicy } from "../solver/policy";
 import { SimGame, totalScore, warpDelta } from "./engine";
 import { runEpisode } from "./episode";
-import { makeScenario } from "./mapgen";
+import { makeScenario, simTurns } from "./mapgen";
 import { makeRng } from "./rng";
 
 const grid5 = (fill = 2) => Array.from({ length: 5 }, () => Array.from({ length: 5 }, () => fill));
@@ -115,7 +115,7 @@ describe("経路探索（planner）", () => {
   test("シミュレータで1試合を最後まで打てる（合法手だけ・例外なし）", () => {
     const scn = makeScenario(makeRng(3), { room: null });
     const r = runEpisode(scn, makePlannerPolicy(defaultParams()), { maxTurns: 40 });
-    expect(r.totalTurns).toBe(Math.min(40, scn.totalTurns));
+    expect(r.totalTurns).toBe(simTurns(scn, 40));
     expect(r.policyErrors).toBe(0);
     expect(r.score).toBeGreaterThan(0);
   });
@@ -128,4 +128,10 @@ test("地図には tiles.json の他のタイル（fill に無いもの）も混
   expect(ids).toContain(9); // tiles.json にある得点アイテム
   expect(ids.some((v) => v >= 1000 || (v >= 60 && v <= 63) || (v >= 20 && v <= 53))).toBe(false); // ワープ・ブラックスターは別に置く
   expect(fillWeights({ ...p, otherTiles: 0 }).length).toBe(1);
+});
+
+test("学習の地図のターン数はばらつく（決まったルームでも、打ち切りより長い地図でも）", () => {
+  const turns = (room: number | null) => new Set(Array.from({ length: 12 }, (_, i) => simTurns(makeScenario(makeRng(500 + i), { room }), 200)));
+  expect(turns(null).size).toBeGreaterThan(6);
+  expect(turns(455).size).toBeGreaterThan(6);
 });

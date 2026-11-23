@@ -10,7 +10,7 @@ import type { EpisodeResult } from "./episode";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { POLICY_TRAIN_LOG_PATH, SIM_MAPS_DIR, SIM_PROFILES_PATH } from "../paths";
 import { loadRoomProfiles } from "../memory/knowledge-store";
-import { loadProfile, loadRealMaps, makeScenario } from "./mapgen";
+import { loadProfile, loadRealMaps, makeScenario, simTurns } from "./mapgen";
 import { SimPool } from "./pool";
 import { makeRng } from "./rng";
 import { type CoachDeps, type CoachResult, readCoachLog, runLabCoach } from "./lab-coach";
@@ -256,7 +256,7 @@ export class LearningLab {
     this.evalSet = { seeds: Array.from({ length: opts.n }, (_, i) => base + i), rooms: Array.from({ length: opts.n }, () => opts.room), maxTurns: maxTurns() };
     const maps = this.evalSet.seeds.map((seed) => {
       const scn = makeScenario(makeRng(seed), { room: opts.room });
-      return { seed, room: opts.room, name: scn.name, width: scn.grid[0]?.length ?? 0, height: scn.grid.length, webMap: scn.webMap, turns: Math.min(scn.totalTurns, maxTurns()) };
+      return { seed, room: opts.room, name: scn.name, width: scn.grid[0]?.length ?? 0, height: scn.grid.length, webMap: scn.webMap, turns: simTurns(scn, maxTurns()) };
     });
     const model = getStyle(opts.model ?? playModelId());
     this.set = { id: this.nextId, room: opts.room, createdAt: new Date().toISOString(), maps, model: model.id, before: null, after: null, validation: null, accepted: null };

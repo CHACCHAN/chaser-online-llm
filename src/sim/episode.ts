@@ -3,7 +3,7 @@ import type { EvaluatorModule } from "../solver/planner";
 import { makePlannerPolicy, type PolicyFn } from "../solver/policy";
 import { runBotTurn, runHunterTurn } from "./bots";
 import { DEFAULT_RULES, SimGame, totalScore, type SimPlayer } from "./engine";
-import type { Scenario } from "./mapgen";
+import { type Scenario, simTurns } from "./mapgen";
 import { opponentLabel, type OpponentSetup } from "./opponents";
 
 /**
@@ -85,7 +85,7 @@ interface PolicyOpponent {
 export function runEpisode(scn: Scenario, policy: PolicyFn, opts: EpisodeOptions = {}): EpisodeResult {
   const putHit = scn.putHit ?? 0;
   const rules = { ...DEFAULT_RULES, putHitItem: putHit, putHitSoil: putHit };
-  const game = new SimGame(scn.grid, scn.starts, opts.maxTurns ? Math.min(opts.maxTurns, scn.totalTurns) : scn.totalTurns, rules);
+  const game = new SimGame(scn.grid, scn.starts, simTurns(scn, opts.maxTurns), rules);
   const me = game.players[scn.self]!;
   const others = game.players.filter((p) => p !== me);
   const setups = new Map<SimPlayer, OpponentSetup>(others.map((p, i) => [p, opts.opponents?.[i] ?? { kind: "greedy" }]));
