@@ -33,9 +33,10 @@ export const PARAM_SPACE = {
   discount: { init: 0.985, min: 0.85, max: 1, doc: "先の目標ほど価値を割り引く率（1歩あたり）" },
   scanValue: { init: 4, min: 0, max: 40, doc: "観測で新しく見えるマス1つの価値（gr・dig を選ぶ判断）" },
   knightWeight: { init: 1, min: 0, max: 1, doc: "桂馬（CMD2、-20で2マス先）を使うか（0.5未満なら使わない）" },
+  chaseGain: { init: 0, min: 0, max: 5000, doc: "直近に見た敵の隣（上下左右）のマスを目標にする価値（敵へ寄って、次の CMD2 で置いて当てる。0 なら寄らない。enemyRadius が 1 以上だと敵の隣は通れないので寄れない）" },
   attackGain: { init: 2000, min: 0, max: 10000, doc: "隣（上下左右）の敵にアイテムを置いて当てる価値の見込み（CMD2。予定の一歩の得点＋30 より大きければ当てる。0 なら当てない）" },
-  dangerCost: { init: 5000, min: 0, max: 20000, doc: "ターンの終わりに敵の近く（dangerDist マス以内）にいる見込みの損（狙ってくる相手は、隣に来ると置いて当てる）。moveValue が引く" },
-  dangerUnsure: { init: 0.2, min: 0, max: 1, doc: "追ってきていない敵（たまたま近くを通っただけ）の近くにいる損を dangerCost の何倍に見るか（拾う相手は当て返さない）" },
+  dangerCost: { init: 8000, min: 0, max: 40000, doc: "ターンの終わりに敵の近く（dangerDist マス以内）にいる見込みの損（狙ってくる相手は、隣に来ると置いて当てる）。moveValue が引く" },
+  dangerUnsure: { init: 0.5, min: 0, max: 1, doc: "追ってきていない敵（たまたま近くを通っただけ）の近くにいる損を dangerCost の何倍に見るか（拾う相手は当て返さない）" },
   dangerDist: { init: 2, min: 0, max: 4, integer: true, doc: "ターンの終わりに敵からこのマス数（上下左右の歩数）以内なら危ない（相手は次のターンに1歩動いてから当てるので 2）" },
 } satisfies Record<string, ParamSpec>;
 
@@ -106,9 +107,11 @@ export function moveValue(m: MoveFeatures, p: Params): number {
   return m.gain + m.actionCost - p.distWeight * m.remaining - danger;
 }
 
-export function targetValue(cell: { value: number; gain: number; cluster: number; unknownAround: number; portal: boolean; exhausted?: boolean }, p: Params): number {
+export function targetValue(cell: { value: number; gain: number; cluster: number; unknownAround: number; portal: boolean; exhausted?: boolean; enemyAdjacent?: boolean }, p: Params): number {
   if (cell.portal) return cell.exhausted ? p.exitValue : p.portalValue;
   let v = cell.gain > 0 ? cell.gain + p.clusterWeight * cell.cluster : 0;
   if (cell.unknownAround > 0) v += p.unknownValue * cell.unknownAround;
+  // 敵の隣（寄って当てる。ハンター向け）
+  if (cell.enemyAdjacent) v += p.chaseGain ?? 0;
   return v;
 }
