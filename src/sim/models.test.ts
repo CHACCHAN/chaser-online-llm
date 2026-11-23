@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { defaultParams } from "../solver/evaluator";
 import { applyFixed, getStyle, loadModelParams, loadStyles, saveModelParams, STANDARD_MODEL } from "../solver/models";
 import type { EpisodeResult } from "./episode";
+import { loadProfile } from "./mapgen";
 import { profileOf, traitTags, type ModelProfile } from "./model-traits";
 import { objectiveOf, perTurn } from "./train";
 
@@ -41,8 +42,10 @@ describe("特性ごとのモデル", () => {
   });
 
   test("特性: 測った結果から当てた・当てられた回数を出し、ほかのモデルと比べて札を付ける", () => {
-    const p = profileOf("hunter", [run({ put: 50000, putDamage: -5000 })]);
-    expect(p.hitsPer100).toBe(10); // putHit 5000 で 10 回 / 100 ターン
+    // 1回の大きさは knowledge/sim-profiles.json の putHit（学習の LLM が直すので、読んだ値で数える）
+    const hit = Math.max(1, loadProfile(null).putHit ?? 1);
+    const p = profileOf("hunter", [run({ put: hit * 10, putDamage: -hit })]);
+    expect(p.hitsPer100).toBe(10); // 100 ターンで 10 回
     expect(p.hitByPer100).toBe(1);
     const base: ModelProfile = { ...p, id: "standard", hitsPer100: 2, hitByPer100: 4, itemPerTurn: 40, perTurn: 300, winRate: 0.5 };
     const profiles = { standard: base, hunter: { ...p, perTurn: 280, winRate: 0.6 }, collector: { ...base, id: "collector", hitsPer100: 0, itemPerTurn: 60 } };
