@@ -85,6 +85,8 @@ export interface UiScoresState {
 export interface UiDashboardState {
   status: AgentRunStatus;
   statusMessage: string;
+  /** 裏で進めている試合後の仕事（POST_MATCH_BACKGROUND。src/evolution/post-match-queue.ts） */
+  background: { runId: string; message: string; startedAt: string; pending: number } | null;
   room: number;
   model: string;
   effort: string;
@@ -203,6 +205,7 @@ class UiEventBus {
   private state: UiDashboardState = {
     status: "idle",
     statusMessage: "ダッシュボード待機中 — ルームを選択して「開始」を押してください",
+    background: null,
     room: 3,
     model: "",
     effort: "",

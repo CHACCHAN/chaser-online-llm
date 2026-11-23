@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "no
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { EVALUATOR_PATH, RUNS_DIR } from "./paths";
+import { evaluatorPathForMatch } from "./evolution/post-match-queue";
 import { Client, fetchLatestResult, type OfficialResult } from "./client";
 import { isResultForRun } from "./client/result";
 import type { AgentConfig } from "./config";
@@ -142,14 +143,16 @@ function makeRunId(room: number): string {
 }
 
 /** 評価関数（エージェントが試合後に改修する）を試合開始時に読み込む。読めなければ同梱の版 */
-let evaluatorCache: { mtimeMs: number; mod: EvaluatorModule } | null = null;
+let evaluatorCache: { file: string; mtimeMs: number; mod: EvaluatorModule } | null = null;
 async function loadEvaluator(): Promise<EvaluatorModule> {
   try {
-    const mtimeMs = statSync(EVALUATOR_PATH).mtimeMs;
-    if (evaluatorCache && evaluatorCache.mtimeMs === mtimeMs) return evaluatorCache.mod;
-    const mod = (await import(`${EVALUATOR_PATH}?t=${mtimeMs}`)) as EvaluatorModule;
+    // 裏の振り返り・学習の LLM が評価関数を書き換えている間は、書き換える前の写し（確かめ済み）を使う
+    const file = evaluatorPathForMatch();
+    const mtimeMs = statSync(file).mtimeMs;
+    if (evaluatorCache && evaluatorCache.file === file && evaluatorCache.mtimeMs === mtimeMs) return evaluatorCache.mod;
+    const mod = (await import(`${file}?t=${mtimeMs}`)) as EvaluatorModule;
     if (typeof mod.stepCost === "function" && typeof mod.targetValue === "function") {
-      evaluatorCache = { mtimeMs, mod };
+      evaluatorCache = { file, mtimeMs, mod };
       return mod;
     }
   } catch (err) {

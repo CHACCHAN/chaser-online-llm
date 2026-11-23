@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, write
 import path from "node:path";
 import { AGENT_WORK_TOOLS, type AskResult, ClaudeSession } from "../agent/claude-session";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "../evolution/edit-guard";
+import { beginEvaluatorEdit, endEvaluatorEdit } from "../evolution/post-match-queue";
 import { appendReview } from "../agent/harness-review";
 import { OBJECTIVE_KEYS } from "../solver/models";
 import { PARAM_SPACE } from "../solver/evaluator";
@@ -426,6 +427,17 @@ function defaultAsk(prompt: string, timeoutMs: number, stop: () => boolean): Pro
 
 /** 学習の LLM を1回動かす（lab.ts から。学習の仕事の続きとして同じ枠で動く） */
 export async function runLabCoach(input: CoachInput, deps: CoachDeps = {}): Promise<CoachResult> {
+  // 評価関数を書き換えている間に始まった試合は、書き換える前の評価関数を使う（post-match-queue.ts）
+  const real = !deps.paths?.evaluator || deps.paths.evaluator === EVALUATOR_PATH;
+  if (real) beginEvaluatorEdit();
+  try {
+    return await runLabCoachInner(input, deps);
+  } finally {
+    if (real) endEvaluatorEdit();
+  }
+}
+
+async function runLabCoachInner(input: CoachInput, deps: CoachDeps): Promise<CoachResult> {
   const startedAt = new Date().toISOString();
   const files = {
     evaluator: deps.paths?.evaluator ?? EVALUATOR_PATH,

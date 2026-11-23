@@ -12,6 +12,7 @@ import { backupEvaluator, benchRoom, clearEvaluatorBackup, EVALUATOR_BACKUP_PATH
 import { lab } from "./sim/lab";
 import { restoreProtectedFiles, snapshotProtectedFiles } from "./evolution/edit-guard";
 import { appendReview } from "./agent/harness-review";
+import { beginEvaluatorEdit, endEvaluatorEdit } from "./evolution/post-match-queue";
 
 export interface EvolutionOutcome {
   invoked: boolean;
@@ -27,17 +28,25 @@ export interface EvolutionOutcome {
  * 試合後の振り返り。試合中の LLM（ツールありの新しいセッションに、試合中のメモ・経過を渡す）に振り返りと改修をさせる。
  * 評価関数を改修していたら、試合の記録の盤面で確かめ（例外・罠へ動く手が増えていないか）、シミュレータで改修前と比べ、どちらかに落ちたら元に戻す。
  */
-export async function runPostMatchEvolution(summary: RunSummary, mainAgent: MainAgent | null): Promise<EvolutionOutcome> {
+/** 進み具合の知らせ方（裏で行う時は試合の状態を上書きしない。post-match-queue.ts） */
+export type Say = (message: string) => void;
+const sayStatus: Say = (message) => uiBus.patchState({ status: "evolving", statusMessage: message });
+
+export async function runPostMatchEvolution(summary: RunSummary, mainAgent: MainAgent | null, say: Say = sayStatus): Promise<EvolutionOutcome> {
+  // 書き換えている間に始まった試合は、書き換える前の評価関数を使う
+  beginEvaluatorEdit();
   try {
-    return await evolveOnce(summary, mainAgent);
+    return await evolveOnce(summary, mainAgent, say);
   } catch (err) {
     // 途中の例外でも、確かめていない評価関数を次の試合に使わない
     await recoverInterruptedEvolution().catch(() => undefined);
     throw err;
+  } finally {
+    endEvaluatorEdit();
   }
 }
 
-async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Promise<EvolutionOutcome> {
+async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null, say: Say): Promise<EvolutionOutcome> {
   if (!mainAgent || !mainAgent.alive) {
     return { invoked: false, ok: false, replayVerified: true, rolledBack: false, summaryText: "main agent not running" };
   }
@@ -48,7 +57,7 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
     uiBus.pushClaudeEvent({ context: "evolution", kind: "system", title: "振り返りを省略", content: why });
     return { invoked: false, ok: true, replayVerified: true, rolledBack: false, summaryText: why };
   }
-  uiBus.patchState({ status: "evolving", statusMessage: `Run ${summary.runId} の振り返りを LLM が実行中...` });
+  say(`Run ${summary.runId} の振り返りを LLM が実行中...`);
 
   const evaluatorBefore = existsSync(EVALUATOR_PATH) ? readFileSync(EVALUATOR_PATH, "utf-8") : null;
   // 振り返りの途中でハーネスが止まっても、次の起動で改修前に戻せるように控えておく（recoverInterruptedEvolution）
@@ -100,7 +109,7 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
   let evaluatorGate: GateResult | null = null;
   let rolledBack = false;
   if (evaluatorChanged) {
-    uiBus.patchState({ statusMessage: `Run ${summary.runId}: 改修した評価関数を試合の記録とシミュレータで確かめています...` });
+    say(`Run ${summary.runId}: 改修した評価関数を試合の記録とシミュレータで確かめています...`);
     verification = await verifyPolicyWithReplay(summary.runDir, { baselineEvaluatorCode: evaluatorBefore });
     if (verification.ok) evaluatorGate = await gateEvaluatorChange(evaluatorBefore!, summary.room);
     const c = evaluatorGate?.comparison;
@@ -146,7 +155,7 @@ async function evolveOnce(summary: RunSummary, mainAgent: MainAgent | null): Pro
 
   // ハーネスへのレビュー（使い勝手・不具合・欲しい機能）→ agent/REVIEW.md（開発者が読む）
   if (boolSetting("AGENT_REVIEW")) {
-    uiBus.patchState({ statusMessage: `Run ${summary.runId}: LLM がハーネスをレビュー中...` });
+    say(`Run ${summary.runId}: LLM がハーネスをレビュー中...`);
     // レビュー中の編集は認めない（確かめ済みの評価関数も含めて元に戻す）。途中で止まっても戻せるよう控える
     backupEvaluator(existsSync(EVALUATOR_PATH) ? readFileSync(EVALUATOR_PATH, "utf-8") : null);
     const guard = snapshotProtectedFiles({ includeEvaluator: true });
@@ -185,11 +194,11 @@ export async function recoverInterruptedEvolution(): Promise<void> {
  * 試合後の学習（index.ts・play.ts）。シミュレータで方策のパラメータを TRAIN_AFTER_MATCH_MIN 分だけ学習し、
  * 学習に使っていない地図ではっきり良くなった時だけ var/policy/params.json に保存する。結果は evolution-report.md と UI に残す。
  */
-export async function runPostMatchTraining(summary: RunSummary): Promise<void> {
+export async function runPostMatchTraining(summary: RunSummary, say: Say = sayStatus): Promise<void> {
   const minTurns = numSetting("AGENT_EVOLVE_MIN_TURNS", { min: 0, integer: true });
   const minutes = numSetting("TRAIN_AFTER_MATCH_MIN", { min: 0 });
   if (summary.turns < minTurns || minutes <= 0) return;
-  uiBus.patchState({ status: "evolving", statusMessage: `Run ${summary.runId}: シミュレータで方策を学習中（WebUI の「学習」で進み具合が見える）...` });
+  say(`Run ${summary.runId}: シミュレータで方策を学習中（WebUI の「学習」で進み具合が見える）...`);
   // 停止ボタンで学習も止める
   const watch = setInterval(() => {
     if (uiBus.getState().stopRequested) lab.stop();

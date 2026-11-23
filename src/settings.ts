@@ -285,6 +285,12 @@ export const SETTINGS = {
     description: "試合後に LLM が試合の記録を読んで振り返り、評価関数（src/solver/evaluator.ts）を直す。直したものは試合の記録とシミュレータで確かめ、だめなら戻す（bun run play は --evolve 指定時のみ）",
     defaultValue: "true",
   },
+  POST_MATCH_BACKGROUND: {
+    label: "試合後の仕事を裏で行う（次の試合を待たせない）",
+    group: "llm",
+    description: "試合後の振り返り・ハーネスのレビュー・方策の学習・学習の LLM を裏で順に行い、その間に次の試合（自動で次へ）を始める。書き換え中に始まった試合は、書き換える前の評価関数を使う。直したものは次の次の試合から効く。false なら終わるまで次の試合を待つ（前の動き）",
+    defaultValue: "true",
+  },
   LLM_MODELS_TIMEOUT_SEC: { label: "モデル一覧取得の待ち時間（秒）", group: "llm", description: "ゲートウェイ /models 取得のタイムアウト（秒）", defaultValue: "10", advanced: true },
 
   // --- その他 ---
@@ -310,7 +316,7 @@ export const SETTING_SECTIONS: { id: string; title: string; keys: SettingKey[] }
   { id: "coach", title: "学習の LLM", keys: ["LAB_COACH", "LAB_COACH_MODEL", "LAB_COACH_EFFORT", "LAB_COACH_TIMEOUT_MIN"] },
   { id: "main", title: "LLM（試合中）", keys: ["AGENT_USE_MAIN", "AGENT_CALL_MODE", "AGENT_POLICY", "AGENT_TURN_BUDGET_SEC", "AGENT_HEDGE_SEC", "AGENT_MEMO_MAX_CHARS", "AGENT_RECENT_PHASES", "AGENT_KNOWN_CELLS_RADIUS", "AGENT_MATCH_TOKEN_LIMIT"] },
   { id: "prep", title: "準備フェーズ", keys: ["AGENT_PREP", "AGENT_PREP_TIMEOUT_SEC", "AGENT_PREP_RETRY_MIN", "AGENT_PREP_PAST_RUNS"] },
-  { id: "post", title: "試合後（進化・レビュー）", keys: ["AGENT_EVOLVE", "AGENT_EVOLVE_MIN_TURNS", "AGENT_POST_MATCH_TIMEOUT_MIN", "AGENT_REVIEW", "AGENT_REVIEW_TIMEOUT_SEC", "AGENT_REVIEW_KEEP"] },
+  { id: "post", title: "試合後（進化・レビュー）", keys: ["AGENT_EVOLVE", "POST_MATCH_BACKGROUND", "AGENT_EVOLVE_MIN_TURNS", "AGENT_POST_MATCH_TIMEOUT_MIN", "AGENT_REVIEW", "AGENT_REVIEW_TIMEOUT_SEC", "AGENT_REVIEW_KEEP"] },
   { id: "other", title: "その他", keys: ["PORT", "WEBUI_BIND"] },
   /** .env に残っている、使われなくなった設定（OBSOLETE_SETTINGS） */
   { id: "obsolete", title: "使われなくなった項目", keys: [] },

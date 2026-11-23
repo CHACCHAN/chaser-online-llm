@@ -1,7 +1,8 @@
 import "./env-files"; // .env.local より .env を優先（最初に読む）
 import { Client, loginWithRetry } from "./client";
 import { loadAgentConfig } from "./config";
-import { recoverInterruptedEvolution, runPostMatchEvolution, runPostMatchTraining } from "./evolve";
+import { recoverInterruptedEvolution, runPostMatchEvolution, runPostMatchTraining, type Say } from "./evolve";
+import { enqueuePostMatch } from "./evolution/post-match-queue";
 import { waitAwareClientConfig } from "./client/wait-status";
 import { boolSetting, getSetting, numSetting } from "./settings";
 import { getRoomProfile, knownTotalTurns, loadRoomProfiles } from "./memory/knowledge-store";
@@ -273,6 +274,8 @@ async function main() {
     const prep = prepRequired() ? (preparedNow?.result ?? null) : null;
     matchIndex += 1;
 
+    /** 試合後の仕事を裏に渡したか（渡したら、試合中の LLM は仕事が終わってから閉じる） */
+    let handedOff = false;
     const runMatchCycle = async (client: Client, mainAgent: MainAgent | null) => {
       const summary = await runAgentMatch(client, config, matchIndex, mainAgent);
       const roomProfile = getRoomProfile(config.room);
@@ -296,20 +299,37 @@ async function main() {
         "Match finished; starting Claude Code self-evolution",
       );
 
-      if (!uiBus.getState().stopRequested && boolSetting("AGENT_EVOLVE")) {
-        const evo = await runPostMatchEvolution(summary, mainAgent);
-        logger.info(
-          {
-            matchIndex,
-            invoked: evo.invoked,
-            replayVerified: evo.replayVerified,
-            rolledBack: evo.rolledBack,
-          },
-          "Claude Code self-evolution completed",
-        );
+      const thisMatch = matchIndex;
+      const postWork = async (say?: Say) => {
+        if (!uiBus.getState().stopRequested && boolSetting("AGENT_EVOLVE")) {
+          const evo = await runPostMatchEvolution(summary, mainAgent, say);
+          logger.info(
+            {
+              matchIndex: thisMatch,
+              invoked: evo.invoked,
+              replayVerified: evo.replayVerified,
+              rolledBack: evo.rolledBack,
+            },
+            "Claude Code self-evolution completed",
+          );
+        }
+        // シミュレータで方策を学習する（LLM の振り返りとは別。振り返りを切っていても行う）
+        if (!uiBus.getState().stopRequested) await runPostMatchTraining(summary, say);
+      };
+      // 試合後の仕事を裏で行い、すぐ次の試合へ（POST_MATCH_BACKGROUND）。仕事は1つずつ順に行う
+      const background = boolSetting("POST_MATCH_BACKGROUND") && !uiBus.getState().stopRequested;
+      if (background) {
+        handedOff = true;
+        enqueuePostMatch(summary.runId, async (say) => {
+          try {
+            await postWork(say);
+          } finally {
+            await mainAgent?.end();
+          }
+        });
+      } else {
+        await postWork();
       }
-      // シミュレータで方策を学習する（LLM の振り返りとは別。振り返りを切っていても行う）
-      if (!uiBus.getState().stopRequested) await runPostMatchTraining(summary);
 
       // 順に回るルーム: 次の試合は並びの次のルーム（ループの頭で切り替わり、準備もそのルームでやり直す）
       const nextRoom = nextQueuedRoom(roomQueue, config.room);
@@ -322,7 +342,7 @@ async function main() {
 
       uiBus.patchState({
         status: "cooldown",
-        statusMessage: `Match #${matchIndex} 完了。4秒後に Room ${pendingRoom ?? config.room} の次戦を開始します...${roomQueue.length > 1 ? `（ルーム ${roomQueue.join(",")} を順に）` : ""}`,
+        statusMessage: `Match #${matchIndex} 完了。4秒後に Room ${pendingRoom ?? config.room} の次戦を開始します...${roomQueue.length > 1 ? `（ルーム ${roomQueue.join(",")} を順に）` : ""}${handedOff ? "（試合後の仕事は裏で続ける）" : ""}`,
       });
       await Bun.sleep(4000);
     };
@@ -377,7 +397,7 @@ async function main() {
         resetPrep();
         await runMatchCycle(client, mainAgent);
       } finally {
-        await mainAgent?.end();
+        if (!handedOff) await mainAgent?.end();
       }
     } catch (err) {
       inMatch = false; // エラー停止中はルーム変更をすぐ反映してよい
