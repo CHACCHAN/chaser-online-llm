@@ -69,4 +69,15 @@ describe("試合中の LLM を呼ぶきっかけ", () => {
     }
     expect(ids).toEqual(expect.arrayContaining(["stuck", "hit", "scoreGap", "endgame", "heartbeat"]));
   });
+
+  test("得点が増えない: 切られていても鳴る安全網。ワープで区画が毎回変わって「行ったり来たり」が鳴らない時も拾う", () => {
+    const cfg = normalizeTriggerConfig({ enabled: { noGain: false, heartbeat: false, stuck: false } });
+    const m = new TriggerMonitor([], cfg);
+    const at: number[] = [];
+    for (let t = 1; t <= 75; t++) {
+      const item = t <= 10 ? t * 100 : 1000;
+      if (m.turnEnd({ wm: fakeMap({ pos: [t, 0], item }), turn: t, totalTurns: null }).some((f) => f.id === "noGain")) at.push(t);
+    }
+    expect(at).toEqual([40, 70]);
+  });
 });

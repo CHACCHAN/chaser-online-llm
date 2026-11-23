@@ -348,14 +348,25 @@ const itemHistory = new WeakMap<WorldMap, Map<number, number>>();
  * 最初のワープの時からアイテムの得点が増えていなければ、ワープを回っているだけなので使わない
  * （学習の LLM の要望 2026-11-23: 4 ターンごとに同じ所へ戻り、そのたびに狙う相手に当てられた）。
  */
+const warpTurns = new WeakMap<WorldMap, { seg: unknown; turns: number[] }>();
 function exitsAllowed(wm: WorldMap, turn: number): boolean {
   const hist = itemHistory.get(wm) ?? new Map<number, number>();
   itemHistory.set(wm, hist);
   const item = wm.getStats().estimatedItemScore;
   if (!hist.has(turn)) hist.set(turn, item);
   for (const t of hist.keys()) if (t < turn - 60) hist.delete(t);
-  const warps = wm.getWarpLinks().filter((l) => l.observedTurn >= turn - 40).map((l) => l.observedTurn);
-  if (warps.length < 3) return true;
+  // ワープした回数は区画が変わった回数で数える（同じワープを何度も通ると、ワープのつながりは1本のままで数が増えない。
+  // 2026-11-23 room720 の試合で T733〜 ずっと同じワープを出入りしていた）
+  const w = warpTurns.get(wm) ?? { seg: wm.getSegmentId(), turns: [] as number[] };
+  warpTurns.set(wm, w);
+  const seg = wm.getSegmentId();
+  if (seg !== w.seg) {
+    w.seg = seg;
+    if (w.turns[w.turns.length - 1] !== turn) w.turns.push(turn);
+  }
+  while (w.turns.length && w.turns[0]! < turn - 40) w.turns.shift();
+  const warps = [...w.turns, ...wm.getWarpLinks().filter((l) => l.observedTurn >= turn - 40).map((l) => l.observedTurn)];
+  if (new Set(warps).size < 3) return true;
   const first = Math.min(...warps);
   const then = [...hist.entries()].filter(([t]) => t <= first).sort((a, b) => b[0] - a[0])[0]?.[1];
   return then === undefined || item > then;

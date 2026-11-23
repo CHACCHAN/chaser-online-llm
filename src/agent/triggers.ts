@@ -21,7 +21,8 @@ export type TriggerId =
   | "scoreGap"
   | "warpMiss"
   | "endgame"
-  | "heartbeat";
+  | "heartbeat"
+  | "noGain";
 
 export interface TriggerDef {
   id: TriggerId;
@@ -44,6 +45,7 @@ export const TRIGGER_DEFS: TriggerDef[] = [
   { id: "scoreGap", label: "得点のずれ", source: "observation", doc: "Webマップの公式の合計（T、無ければアイテム得点 I）とハーネスの推定の差が、前に鳴った時から動いた量", param: { name: "ずれ", default: 2000, min: 100, max: 100000, integer: true, unit: "点" } },
   { id: "warpMiss", label: "ワープ後の位置合わせ失敗", source: "observation", doc: "ワープの後、Webマップで位置を合わせられないまま次の手を選んだ" },
   { id: "endgame", label: "終盤", source: "time", doc: "残りターンが全体のこの割合を切った（1試合に1回）", param: { name: "残りの割合", default: 0.1, min: 0.01, max: 0.5, unit: "" } },
+  { id: "noGain", label: "得点が増えない", source: "observation", doc: "推定のアイテム得点がこのターン数のあいだ増えていない（同じワープを出入りしている・取れる点が無いのに回っているなど）。切れない安全網（準備の LLM はしきい値だけ変えられる）。続く間はこのターン数ごとに鳴る", param: { name: "増えないターン", default: 30, min: 10, max: 60, integer: true, unit: "ターン" } },
   { id: "heartbeat", label: "定期", source: "time", doc: "何も起きなくても、このターンごとに鳴る", param: { name: "間隔", default: 50, min: 5, max: 1000, integer: true, unit: "ターン" } },
 ];
 
@@ -134,6 +136,7 @@ export class TriggerMonitor {
   private lastPutDamage: number | null = null;
   private lastGapFired = 0;
   private endgameDone = false;
+  private noGainAt: number | null = null;
 
   constructor(voters: ModelVoter[], config: TriggerConfig = defaultTriggerConfig()) {
     this.voters = voters;
@@ -151,7 +154,8 @@ export class TriggerMonitor {
   }
 
   private emit(out: FiredTrigger[], turn: number, f: FiredTrigger): void {
-    if (!this.config.enabled[f.id]) return;
+    // 得点が増えないは切れない安全網（準備で切られていても鳴る）
+    if (!this.config.enabled[f.id] && f.id !== "noGain") return;
     this.raw[f.id] = (this.raw[f.id] ?? 0) + 1;
     const prev = this.last.get(f.id);
     const cool = f.id === "unknownTile" || f.id === "endgame" || f.id === "heartbeat" || f.id === "hit" ? 0 : this.config.cooldownTurns;
@@ -266,6 +270,13 @@ export class TriggerMonitor {
     if (total && !this.endgameDone && total - turn <= Math.ceil(total * th.endgame)) {
       this.endgameDone = true;
       this.emit(out, turn, { id: "endgame", value: total - turn, detail: `残り ${total - turn} / ${total} ターン` });
+    }
+    // 得点が増えない（直近 N ターン、推定のアイテム得点が同じか減った）
+    const n = th.noGain;
+    const then = this.estByTurn.get(turn - n);
+    if (then !== undefined && stats.estimatedItemScore <= then.item && (this.noGainAt === null || turn - this.noGainAt >= n)) {
+      this.noGainAt = turn;
+      this.emit(out, turn, { id: "noGain", value: n, detail: `${n} ターン、アイテム得点が ${then.item} から増えていない` });
     }
     if (th.heartbeat > 0 && turn % th.heartbeat === 0) this.emit(out, turn, { id: "heartbeat", value: turn, detail: `${turn} ターン目` });
     return out;
